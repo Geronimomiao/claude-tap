@@ -146,6 +146,27 @@ def test_viewer_renders_codex_responses_messages_usage_and_response(responses_pa
     assert "unknown" not in tools_text.lower()
 
 
+def test_viewer_maps_responses_cached_tokens_to_cache_read(responses_page) -> None:
+    result = responses_page.evaluate(
+        """() => getUsage({
+          response: {
+            body: {
+              usage: {
+                input_tokens: 11767,
+                input_tokens_details: { cached_tokens: 11648 },
+                output_tokens: 6,
+                total_tokens: 11773
+              }
+            }
+          }
+        })"""
+    )
+
+    assert result["input_tokens"] == 11767
+    assert result["output_tokens"] == 6
+    assert result["cache_read_input_tokens"] == 11648
+
+
 def test_viewer_renders_chat_completions_system_and_history_tool_calls(chat_completions_history_page) -> None:
     chat_completions_history_page.locator(".sidebar-item").first.click()
     chat_completions_history_page.wait_for_selector("#detail .section", timeout=5000)

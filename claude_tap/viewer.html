@@ -3159,15 +3159,39 @@ function shouldRenderRequestContext(entry, body, msgs, respOutput) {
   return true;
 }
 
+function normalizeUsage(usage) {
+  if (!usage || typeof usage !== 'object') return null;
+  const normalized = { ...usage };
+  if (normalized.input_tokens === undefined && usage.prompt_tokens !== undefined) {
+    normalized.input_tokens = usage.prompt_tokens;
+  }
+  if (normalized.output_tokens === undefined && usage.completion_tokens !== undefined) {
+    normalized.output_tokens = usage.completion_tokens;
+  }
+  if (normalized.cache_read_input_tokens === undefined) {
+    let cached = usage.cached_tokens;
+    if (cached === undefined && usage.input_tokens_details && typeof usage.input_tokens_details === 'object') {
+      cached = usage.input_tokens_details.cached_tokens;
+    }
+    if (cached === undefined && usage.prompt_tokens_details && typeof usage.prompt_tokens_details === 'object') {
+      cached = usage.prompt_tokens_details.cached_tokens;
+    }
+    if (cached !== undefined && cached !== null) {
+      normalized.cache_read_input_tokens = cached;
+    }
+  }
+  return normalized;
+}
+
 // Extract token usage from response.body.usage or SSE response.completed event
 function getUsage(entry) {
   const u = getResponsePayload(entry)?.usage;
-  if (u) return u;
+  if (u) return normalizeUsage(u);
   const events = getResponseEvents(entry);
   for (let i = events.length - 1; i >= 0; i--) {
     if (getEventType(events[i]) !== 'response.completed') continue;
     const data = getEventData(events[i]);
-    if (data?.response?.usage) return data.response.usage;
+    if (data?.response?.usage) return normalizeUsage(data.response.usage);
   }
   return null;
 }
