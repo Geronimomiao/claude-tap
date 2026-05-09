@@ -1215,16 +1215,54 @@ function mergeWebSocketResponseGroups(groups) {
   return { responseId: groups.map(group => group.responseId).filter(Boolean).join('+'), events };
 }
 
-function normalizeWebSocketDerivedInput(input) {
-  if (!Array.isArray(input)) return input;
-  return input.map(item => {
-    if (!item || typeof item !== 'object' || item.type !== 'function_call_output') return item;
+function parseResponseToolArguments(args) {
+  if (args === undefined || args === null || args === '') return {};
+  if (typeof args !== 'string') return args;
+  try { return JSON.parse(args); } catch(e) { return args; }
+}
+
+function toolSearchOutputContent(item) {
+  const names = [];
+  if (Array.isArray(item?.tools)) {
+    for (const namespace of item.tools) {
+      if (!namespace || typeof namespace !== 'object') continue;
+      const namespaceName = typeof namespace.name === 'string' ? namespace.name : '';
+      if (namespaceName) names.push(namespaceName);
+      if (!Array.isArray(namespace.tools)) continue;
+      for (const tool of namespace.tools) {
+        if (!tool || typeof tool !== 'object' || typeof tool.name !== 'string' || !tool.name) continue;
+        names.push(namespaceName ? `${namespaceName}.${tool.name}` : tool.name);
+      }
+    }
+  }
+  if (names.length) return ['tool_search_output', ...names].join('\n');
+  if (Array.isArray(item?.tools)) return JSON.stringify(item.tools, null, 2);
+  if (item?.output !== undefined) return typeof item.output === 'string' ? item.output : JSON.stringify(item.output, null, 2);
+  return JSON.stringify(item || {}, null, 2);
+}
+
+function responseInputItemToMessage(item) {
+  if (!item || typeof item !== 'object') return item;
+  if (item.type === 'function_call_output') {
     return {
       type: 'message',
       role: 'tool',
       content: [{ type: 'tool_result', tool_use_id: item.call_id || '', content: item.output || '' }]
     };
-  });
+  }
+  if (item.type === 'tool_search_output') {
+    return {
+      type: 'message',
+      role: 'tool',
+      content: [{ type: 'tool_result', tool_use_id: item.call_id || '', content: toolSearchOutputContent(item) }]
+    };
+  }
+  return item;
+}
+
+function normalizeWebSocketDerivedInput(input) {
+  if (!Array.isArray(input)) return input;
+  return input.map(responseInputItemToMessage);
 }
 
 function webSocketOutputMessages(events) {
@@ -1237,15 +1275,16 @@ function webSocketOutputMessages(events) {
   }
   items.sort((a, b) => a.outputIndex - b.outputIndex);
   for (const { item } of items) {
-    if (item.type === 'function_call') {
-      let input = item.arguments || {};
-      if (typeof input === 'string') {
-        try { input = JSON.parse(input); } catch(e) {}
-      }
+    if (item.type === 'function_call' || item.type === 'tool_search_call') {
       messages.push({
         type: 'message',
         role: 'assistant',
-        content: [{ type: 'tool_use', id: item.call_id || item.id || '', name: item.name || '', input }]
+        content: [{
+          type: 'tool_use',
+          id: item.call_id || item.id || '',
+          name: item.type === 'tool_search_call' ? 'tool_search' : (item.name || ''),
+          input: parseResponseToolArguments(item.arguments)
+        }]
       });
     } else if (item.type === 'message') {
       messages.push({
@@ -1261,6 +1300,7 @@ function webSocketOutputMessages(events) {
 function isToolResultInputItem(item) {
   if (!item || typeof item !== 'object') return false;
   if (item.type === 'function_call_output') return true;
+  if (item.type === 'tool_search_output') return true;
   if (item.role !== 'tool') return false;
   const content = Array.isArray(item.content) ? item.content : [];
   return content.some(block => block?.type === 'tool_result');
@@ -1326,7 +1366,7 @@ function requestBodyForWebSocketGroup(entry, groups, idx) {
 
 function bodyWithoutToolResultOnlyInput(body) {
   const next = cloneJson(body || {}) || {};
-  if (Array.isArray(next.input) && next.input.every(item => item?.type === 'function_call_output')) {
+  if (Array.isArray(next.input) && next.input.every(isToolResultInputItem)) {
     next.input = [];
   }
   return next;
@@ -3183,7 +3223,9 @@ function normalizeResponseOutput(output) {
         else content.push(c);
       }
     } else if (item.type === 'function_call') {
-      content.push({ type: 'tool_use', name: item.name, input: item.arguments ? (typeof item.arguments === 'string' ? (() => { try { return JSON.parse(item.arguments); } catch(e) { return item.arguments; } })() : item.arguments) : {} });
+      content.push({ type: 'tool_use', name: item.name, input: parseResponseToolArguments(item.arguments) });
+    } else if (item.type === 'tool_search_call') {
+      content.push({ type: 'tool_use', name: 'tool_search', input: parseResponseToolArguments(item.arguments) });
     } else if (item.type === 'reasoning') {
       if (!item.summary) continue;
       const summaryText = Array.isArray(item.summary) ? item.summary.map(s => s?.text || '').join('\n') : (item.summary.text || JSON.stringify(item.summary));
