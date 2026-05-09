@@ -8,6 +8,7 @@ from importlib.metadata import version as _pkg_version
 from pathlib import Path
 
 from claude_tap.sse import SSEReassembler
+from claude_tap.usage import normalize_usage
 
 try:
     CLAUDE_TAP_VERSION = _pkg_version("claude-tap")
@@ -236,6 +237,7 @@ def _extract_metadata(record_json: str) -> dict | None:
                 usage = (data.get("response") or {}).get("usage") or {}
                 if usage:
                     break
+    usage = normalize_usage(usage)
 
     # System prompt hint (first 200 chars)
     sys_text = ""

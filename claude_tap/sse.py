@@ -5,6 +5,8 @@ from __future__ import annotations
 import copy
 import json
 
+from claude_tap.usage import normalize_usage
+
 
 class SSEReassembler:
     """Parse raw SSE bytes and reconstruct the full API response object
@@ -262,19 +264,7 @@ class SSEReassembler:
     def _merge_chat_completion_usage(self, usage: dict) -> None:
         """Merge an OpenAI-shape usage dict into the snapshot, exposing both
         prompt/completion and input/output token names for downstream code."""
-        merged = dict(usage)
-        if "prompt_tokens" in usage and "input_tokens" not in usage:
-            merged["input_tokens"] = usage["prompt_tokens"]
-        if "completion_tokens" in usage and "output_tokens" not in usage:
-            merged["output_tokens"] = usage["completion_tokens"]
-        if "cached_tokens" in usage and "cache_read_input_tokens" not in usage:
-            merged["cache_read_input_tokens"] = usage["cached_tokens"]
-        details = usage.get("prompt_tokens_details")
-        if isinstance(details, dict) and "cache_read_input_tokens" not in usage:
-            cached = details.get("cached_tokens")
-            if cached is not None:
-                merged["cache_read_input_tokens"] = cached
-        self._snapshot["usage"] = merged
+        self._snapshot["usage"] = normalize_usage(usage)
 
     def reconstruct(self) -> dict | None:
         if self._snapshot is None:

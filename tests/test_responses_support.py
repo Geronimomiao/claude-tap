@@ -42,6 +42,35 @@ def test_extract_metadata_supports_responses_input_roles_and_ws_usage() -> None:
     assert "web_search" in meta["tool_names"]
 
 
+def test_extract_metadata_maps_responses_cached_tokens_to_cache_read() -> None:
+    record = {
+        "turn": 1,
+        "request": {
+            "method": "POST",
+            "path": "/responses",
+            "body": {"model": "gpt-5.4", "input": [{"role": "user", "content": "hi"}]},
+        },
+        "response": {
+            "status": 200,
+            "body": {
+                "usage": {
+                    "input_tokens": 11767,
+                    "input_tokens_details": {"cached_tokens": 11648},
+                    "output_tokens": 6,
+                    "total_tokens": 11773,
+                }
+            },
+        },
+    }
+
+    meta = _extract_metadata(json.dumps(record))
+
+    assert meta is not None
+    assert meta["input_tokens"] == 11767
+    assert meta["output_tokens"] == 6
+    assert meta["cache_read_input_tokens"] == 11648
+
+
 def test_extract_metadata_falls_back_to_tool_type_and_nested_function_name() -> None:
     record = {
         "turn": 1,
