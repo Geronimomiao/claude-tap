@@ -19,6 +19,7 @@ from yarl import URL
 
 from claude_tap.sse import SSEReassembler
 from claude_tap.trace import TraceWriter
+from claude_tap.usage import normalize_usage
 
 log = logging.getLogger("claude-tap")
 
@@ -284,7 +285,7 @@ async def _handle_streaming(
     duration_ms = int((time.monotonic() - t0) * 1000)
     reconstructed = reassembler.reconstruct()
 
-    usage = reconstructed.get("usage", {}) if reconstructed else {}
+    usage = normalize_usage(reconstructed.get("usage", {}) if reconstructed else {})
     in_tok = usage.get("input_tokens", 0)
     out_tok = usage.get("output_tokens", 0)
     cache_read = usage.get("cache_read_input_tokens", 0)
