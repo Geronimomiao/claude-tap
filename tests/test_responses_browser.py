@@ -259,6 +259,196 @@ def test_viewer_expands_codex_websocket_session_into_response_entries(codex_ws_m
     assert "有状态 Responses 续接" not in final_detail
 
 
+def test_viewer_interleaves_codex_ws_tool_results_with_prior_outputs(responses_page) -> None:
+    result = responses_page.evaluate(
+        """() => {
+          const record = {
+            request_id: 'req_interleave',
+            turn: 21,
+            transport: 'websocket',
+            request: {
+              method: 'WEBSOCKET',
+              path: '/backend-api/codex/responses',
+              headers: {},
+              body: {
+                type: 'response.create',
+                model: 'gpt-5.5',
+                input: [],
+                stream: true
+              },
+              ws_events: [
+                {
+                  type: 'response.create',
+                  model: 'gpt-5.5',
+                  previous_response_id: 'resp_prefetch',
+                  input: [
+                    {
+                      type: 'message',
+                      role: 'user',
+                      content: [{ type: 'input_text', text: 'Run two tools.' }]
+                    }
+                  ],
+                  tools: [{ type: 'function', name: 'exec_command' }],
+                  stream: true
+                },
+                {
+                  type: 'response.create',
+                  model: 'gpt-5.5',
+                  previous_response_id: 'resp_first',
+                  input: [
+                    { type: 'function_call_output', call_id: 'call_first', output: 'first result' }
+                  ],
+                  tools: [{ type: 'function', name: 'exec_command' }],
+                  stream: true
+                },
+                {
+                  type: 'response.create',
+                  model: 'gpt-5.5',
+                  previous_response_id: 'resp_second',
+                  input: [
+                    { type: 'custom_tool_call_output', call_id: 'call_second', output: 'second result' }
+                  ],
+                  tools: [{ type: 'function', name: 'exec_command' }],
+                  stream: true
+                }
+              ]
+            },
+            response: {
+              status: 101,
+              headers: {},
+              body: {},
+              ws_events: [
+                { type: 'response.created', response: { id: 'resp_first', status: 'in_progress', model: 'gpt-5.5' } },
+                {
+                  type: 'response.output_item.done',
+                  output_index: 0,
+                  item: {
+                    id: 'msg_first',
+                    type: 'message',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: 'First decision' }]
+                  }
+                },
+                {
+                  type: 'response.output_item.done',
+                  output_index: 1,
+                  item: {
+                    id: 'fc_first',
+                    type: 'function_call',
+                    name: 'exec_command',
+                    call_id: 'call_first',
+                    arguments: '{\"cmd\":\"pwd\"}'
+                  }
+                },
+                {
+                  type: 'response.completed',
+                  response: {
+                    id: 'resp_first',
+                    status: 'completed',
+                    model: 'gpt-5.5',
+                    output: [],
+                    usage: { input_tokens: 10, output_tokens: 4, total_tokens: 14 }
+                  }
+                },
+                {
+                  type: 'response.created',
+                  response: {
+                    id: 'resp_second',
+                    status: 'in_progress',
+                    model: 'gpt-5.5',
+                    previous_response_id: 'resp_first'
+                  }
+                },
+                {
+                  type: 'response.output_item.done',
+                  output_index: 0,
+                  item: {
+                    id: 'msg_second',
+                    type: 'message',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: 'Second decision' }]
+                  }
+                },
+                {
+                  type: 'response.output_item.done',
+                  output_index: 1,
+                  item: {
+                    id: 'fc_second',
+                    type: 'function_call',
+                    name: 'exec_command',
+                    call_id: 'call_second',
+                    arguments: '{\"cmd\":\"ls\"}'
+                  }
+                },
+                {
+                  type: 'response.completed',
+                  response: {
+                    id: 'resp_second',
+                    status: 'completed',
+                    model: 'gpt-5.5',
+                    previous_response_id: 'resp_first',
+                    output: [],
+                    usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 }
+                  }
+                },
+                {
+                  type: 'response.created',
+                  response: {
+                    id: 'resp_final',
+                    status: 'in_progress',
+                    model: 'gpt-5.5',
+                    previous_response_id: 'resp_second'
+                  }
+                },
+                {
+                  type: 'response.output_item.done',
+                  output_index: 0,
+                  item: {
+                    id: 'msg_final',
+                    type: 'message',
+                    role: 'assistant',
+                    content: [{ type: 'output_text', text: 'Done' }]
+                  }
+                },
+                {
+                  type: 'response.completed',
+                  response: {
+                    id: 'resp_final',
+                    status: 'completed',
+                    model: 'gpt-5.5',
+                    previous_response_id: 'resp_second',
+                    output: [],
+                    usage: { input_tokens: 30, output_tokens: 2, total_tokens: 32 }
+                  }
+                }
+              ]
+            }
+          };
+          const expanded = expandWebSocketResponseEntries([record]);
+          const messages = getMessages(expanded[2].request.body);
+          return messages.map(message => {
+            const content = Array.isArray(message.content) ? message.content : [];
+            const toolUse = content.find(block => block.type === 'tool_use');
+            if (toolUse) return `assistant:tool_use:${toolUse.id}:${toolUse.name}`;
+            const toolResult = content.find(block => block.type === 'tool_result');
+            if (toolResult) return `tool:${toolResult.tool_use_id}:${toolResult.content}`;
+            const text = content.map(block => block.text || '').filter(Boolean).join(' ');
+            return `${message.role}:text:${text}`;
+          });
+        }"""
+    )
+
+    assert result == [
+        "user:text:Run two tools.",
+        "assistant:text:First decision",
+        "assistant:tool_use:call_first:exec_command",
+        "tool:call_first:first result",
+        "assistant:text:Second decision",
+        "assistant:tool_use:call_second:exec_command",
+        "tool:call_second:second result",
+    ]
+
+
 def test_viewer_omits_empty_reasoning_blocks_for_zero_reasoning_tokens(responses_page) -> None:
     responses_page.evaluate(
         """() => {

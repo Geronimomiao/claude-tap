@@ -1349,12 +1349,15 @@ function isToolResultInputItem(item) {
   return content.some(block => block?.type === 'tool_result');
 }
 
+function messageKey(message) {
+  try { return JSON.stringify(message); } catch(e) { return String(message); }
+}
+
 function uniqueMessages(messages) {
   const seen = new Set();
   const unique = [];
   for (const message of messages) {
-    let key;
-    try { key = JSON.stringify(message); } catch(e) { key = String(message); }
+    const key = messageKey(message);
     if (seen.has(key)) continue;
     seen.add(key);
     unique.push(message);
@@ -1367,15 +1370,63 @@ function regularMessagesFromBody(body) {
   return normalized.filter(item => !isToolResultInputItem(item));
 }
 
+function toolResultMessagesFromInput(input) {
+  const normalized = normalizeWebSocketDerivedInput(Array.isArray(input) ? input : []);
+  return normalized.filter(isToolResultInputItem);
+}
+
+function toolUseIdsFromMessage(message) {
+  const content = Array.isArray(message?.content) ? message.content : [];
+  return content
+    .filter(block => block?.type === 'tool_use')
+    .map(block => block.id || block.tool_use_id || '')
+    .filter(Boolean);
+}
+
+function toolResultIdsFromMessage(message) {
+  const content = Array.isArray(message?.content) ? message.content : [];
+  return content
+    .filter(block => block?.type === 'tool_result')
+    .map(block => block.tool_use_id || block.id || '')
+    .filter(Boolean);
+}
+
+function interleaveWebSocketOutputGroups(outputGroups, toolResults) {
+  const resultPool = (toolResults || []).map(message => ({
+    message,
+    ids: toolResultIdsFromMessage(message),
+    used: false
+  }));
+  const messages = [];
+  for (const outputMessages of outputGroups || []) {
+    messages.push(...outputMessages);
+    const callIds = outputMessages.flatMap(toolUseIdsFromMessage);
+    for (const callId of callIds) {
+      const matched = resultPool.find(result => !result.used && result.ids.includes(callId));
+      if (!matched) continue;
+      matched.used = true;
+      messages.push(matched.message);
+    }
+  }
+  messages.push(...resultPool.filter(result => !result.used).map(result => result.message));
+  return messages;
+}
+
 function buildWebSocketHistoryInput(input, priorGroups, priorRequestBodies) {
   const normalized = normalizeWebSocketDerivedInput(Array.isArray(input) ? input : []);
   const regularMessages = uniqueMessages([
     ...(priorRequestBodies || []).flatMap(regularMessagesFromBody),
     ...normalized.filter(item => !isToolResultInputItem(item))
   ]);
-  const toolResults = normalized.filter(isToolResultInputItem);
-  const priorOutputs = (priorGroups || []).flatMap(group => webSocketOutputMessages(group.events));
-  return uniqueMessages([...regularMessages, ...priorOutputs, ...toolResults]);
+  const toolResults = uniqueMessages([
+    ...(priorRequestBodies || []).flatMap(body => toolResultMessagesFromInput(body?.input)),
+    ...normalized.filter(isToolResultInputItem)
+  ]);
+  const outputGroups = (priorGroups || []).map(group => webSocketOutputMessages(group.events));
+  const priorOutputKeys = new Set(outputGroups.flat().map(messageKey));
+  const contextMessages = regularMessages.filter(message => !priorOutputKeys.has(messageKey(message)));
+  const interleavedOutputs = interleaveWebSocketOutputGroups(outputGroups, toolResults);
+  return uniqueMessages([...contextMessages, ...interleavedOutputs]);
 }
 
 function requestBodiesForWebSocketEntry(entry) {
