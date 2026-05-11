@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.1.60] - 2026-05-11
+
+### Changed
+- add --tap-allow-path argument to support custom api prefixes (#122)
 ## [0.1.59] - 2026-05-11
 
 ### Changed
