@@ -1,6 +1,6 @@
 ---
 owner: claude-tap-maintainers
-last_reviewed: 2026-05-08
+last_reviewed: 2026-05-09
 source_of_truth: AGENTS.md
 ---
 
@@ -24,6 +24,8 @@ Simplified Chinese version: [支持矩阵](support-matrix.zh.md).
 | Kimi CLI | Kimi CLI auth/config | `https://api.moonshot.ai/v1` | none | HTTP/SSE Chat Completions | Supported by config |
 | OpenCode | Provider creds via `opencode providers` | Forward proxy (any HTTPS upstream) | n/a | HTTP/SSE | Unit-tested |
 | OpenCode | Anthropic provider only (`--tap-proxy-mode reverse`) | `https://api.anthropic.com` | none | HTTP/SSE | Unit-tested |
+| Hermes Agent | Provider creds via `~/.hermes/` | Forward proxy (any HTTPS upstream) | n/a | HTTP/SSE | Unit-tested |
+| Hermes Agent | Custom OpenAI-compatible provider (`--tap-proxy-mode reverse`) | `https://api.openai.com` | `/v1` | HTTP/SSE | Unit-tested |
 | Cursor CLI | Cursor login (`cursor-agent login`) | Forward proxy to `https://api2.cursor.sh` | n/a | HTTPS/protobuf + local transcript import | Real E2E verified |
 
 ## Default Proxy Mode by Client
@@ -37,9 +39,29 @@ Each client in `CLIENT_CONFIGS` declares a `default_proxy_mode` used when
 | `codex` | `reverse` | Single provider, native `OPENAI_BASE_URL` env var |
 | `kimi` | `reverse` | Single provider, native `KIMI_BASE_URL` env var |
 | `opencode` | `forward` | Multi-provider; forward proxy captures every upstream regardless of which env var the client honors |
+| `hermes` | `forward` | Multi-provider Python agent; `httpx` and `requests` honor `HTTPS_PROXY` natively, so forward proxy capture is the natural default |
 | `cursor` | `forward` | Cursor CLI has no base URL override; forward proxy captures network traffic and local transcripts provide readable turns |
 
 Users can always override with `--tap-proxy-mode {reverse,forward}`.
+
+## Subcommand Argv Rewrites
+
+Some clients delegate to OS service managers (launchd / systemd / schtasks) for
+their long-running daemons. The spawned daemon does **not** inherit the
+proxy / CA env we inject, so trace capture would silently fail. claude-tap
+detects these patterns and rewrites the argv to the foreground equivalent:
+
+| Client | Detected argv | Rewritten to | Reason |
+|--------|---------------|--------------|--------|
+| `hermes` | `gateway start [...]` | `gateway run [...]` | Recent hermes versions delegate `gateway start` to systemd / launchd; `gateway run` is the foreground equivalent and is exactly what the systemd unit's `ExecStart=` itself invokes. |
+
+The rewrite is logged loudly at process start so users can spot it and pass
+`--tap-no-launch` + run the original command themselves if they actually want
+the daemonised behaviour (and accept that no traffic will be captured).
+
+> **Note:** Gateway mode only produces traces when a configured messaging platform (Slack, Telegram, etc.)
+> delivers a message to the bot. Without an active platform integration, the gateway makes no LLM calls
+> and no traces are recorded. Use TUI mode (`claude-tap --tap-client hermes`) for local trace capture.
 
 ## URL Construction Rules
 
@@ -75,6 +97,7 @@ strip = CLIENT_CONFIGS[client].reverse_strip_path_prefix(target)
 - `test_kimi_client_reverse_proxy` — e2e with fake Kimi Chat Completions stream
 - `test_chat_completions_reasoning_content_is_mirrored_as_thinking` — verifies Kimi thinking stream rendering shape
 - `test_websocket_proxy_basic` — WS relay and trace recording
+- `test_hermes_*` — registration, parse_args default-mode resolution, forward/reverse env, argv rewrite
 - `test_cursor_registered_in_client_configs` — verifies Cursor CLI registration and default forward mode
 - `test_run_client_cursor_forward_sets_proxy_ca_and_no_proxy` — verifies Cursor launch env for forward proxy mode
 - `test_import_cursor_transcripts_appends_viewer_friendly_records` — verifies readable Cursor transcript import

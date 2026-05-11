@@ -73,7 +73,7 @@ class ClientConfig:
     strip_path_prefix: str = ""
     strip_path_prefix_unless_target_contains: tuple[str, ...] = ()
     # Default proxy mode when --tap-proxy-mode is not explicitly set.
-    # Multi-provider clients (e.g. opencode) default to "forward" so that all
+    # Multi-provider clients (e.g. hermes, opencode) default to "forward" so that all
     # provider traffic is captured regardless of which env var the client honors.
     default_proxy_mode: str = "reverse"
 
@@ -136,6 +136,18 @@ CLIENT_CONFIGS: dict[str, ClientConfig] = {
         default_target="https://api.anthropic.com",
         default_proxy_mode="forward",
     ),
+    "hermes": ClientConfig(
+        cmd="hermes",
+        label="Hermes Agent",
+        install_url="https://github.com/NousResearch/hermes-agent",
+        base_url_env="OPENAI_BASE_URL",
+        base_url_suffix="/v1",
+        default_target="https://api.openai.com",
+        # hermes is a Python 3.11+ multi-provider agent; reverse mode requires
+        # a user-configured OpenAI-compatible provider in ~/.hermes that honors
+        # OPENAI_BASE_URL. Default to forward proxy capture.
+        default_proxy_mode="forward",
+    ),
     "cursor": ClientConfig(
         cmd="cursor-agent",
         label="Cursor CLI",
@@ -169,6 +181,7 @@ async def run_client(
     env = os.environ.copy()
 
     cmd_args = list(extra_args)
+    cmd_args = _maybe_rewrite_hermes_gateway_start(client, cmd_args)
     has_base_url_config_override = bool(
         cfg.base_url_config_key and _has_config_override(cmd_args, cfg.base_url_config_key)
     )
@@ -188,6 +201,9 @@ async def run_client(
             # Codex is a Rust binary; NODE_EXTRA_CA_CERTS does not affect its TLS stack.
             env["SSL_CERT_FILE"] = str(ca_cert_path)
             env["CODEX_CA_CERTIFICATE"] = str(ca_cert_path)
+            # hermes is Python (httpx + requests); SSL_CERT_FILE covers httpx,
+            # REQUESTS_CA_BUNDLE covers the requests library.
+            env["REQUESTS_CA_BUNDLE"] = str(ca_cert_path)
 
         if cfg.inject_settings_env:
             if not _has_settings_arg(cmd_args):
@@ -308,6 +324,52 @@ async def run_client(
 
     print(f"\n📋 {cfg.label} exited with code {code}")
     return code
+
+
+_HERMES_GLOBAL_OPTS_WITH_VALUE = {"--profile", "-p"}
+_HERMES_GLOBAL_BOOLEAN_OPTS = {"--ignore-user-config", "--accept-hooks"}
+
+
+def _maybe_rewrite_hermes_gateway_start(client: str, cmd_args: list[str]) -> list[str]:
+    """Rewrite ``hermes [global-opts] gateway start`` to ``... gateway run``.
+
+    Recent hermes versions delegate ``gateway start`` to systemd / launchd,
+    which spawn the gateway in a fresh env that does NOT inherit the
+    HTTPS_PROXY / CA env we inject — trace capture would silently fail.
+    ``gateway run`` is the foreground equivalent (it's exactly what the
+    systemd unit's ``ExecStart=`` invokes), so the spawned process is our
+    child and inherits the injected env.
+
+    Hermes' CLI shape is ``hermes [global-options] <command> [...]``, so the
+    rewrite skips any recognised leading global options before matching
+    ``gateway start``.
+    """
+    if client != "hermes":
+        return cmd_args
+    i = 0
+    while i < len(cmd_args):
+        arg = cmd_args[i]
+        if arg in _HERMES_GLOBAL_OPTS_WITH_VALUE and i + 1 < len(cmd_args):
+            i += 2
+            continue
+        if "=" in arg and arg.split("=", 1)[0] in _HERMES_GLOBAL_OPTS_WITH_VALUE:
+            i += 1
+            continue
+        if arg in _HERMES_GLOBAL_BOOLEAN_OPTS:
+            i += 1
+            continue
+        break
+    if i + 1 < len(cmd_args) and cmd_args[i] == "gateway" and cmd_args[i + 1] == "start":
+        print(
+            "ℹ️  Rewriting `hermes gateway start` to `hermes gateway run` so the "
+            "gateway runs in the foreground under claude-tap. Recent hermes "
+            "versions delegate `gateway start` to systemd / launchd, which spawns "
+            "the gateway in a fresh env that does NOT inherit the proxy / CA env "
+            "we inject — trace capture would silently fail. Pass --tap-no-launch "
+            "and start the gateway yourself if you want the daemonised behaviour."
+        )
+        return cmd_args[:i] + ["gateway", "run"] + cmd_args[i + 2 :]
+    return cmd_args
 
 
 def _extend_no_proxy(env: dict[str, str], values: tuple[str, ...]) -> None:
@@ -635,6 +697,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "  # Force reverse mode (single ANTHROPIC_BASE_URL provider only)\n"
             "  claude-tap --tap-client opencode --tap-proxy-mode reverse\n"
             "\n"
+            "hermes agent (multi-provider Python agent — forward proxy default):\n"
+            "  # Interactive TUI — captures LLM calls directly\n"
+            "  claude-tap --tap-client hermes --tap-live\n"
+            "  # Gateway mode — captures LLM calls triggered by Slack/Telegram/etc. messages\n"
+            "  #   (requires messaging platform configured in ~/.hermes/.env)\n"
+            "  claude-tap --tap-client hermes -- gateway start\n"
+            "\n"
             "cursor cli (defaults to forward proxy mode):\n"
             '  claude-tap --tap-client cursor -- -p --trust --model auto "hello"\n'
             "  # Cursor readable messages are imported from local transcripts after exit\n"
@@ -670,7 +739,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     proxy_group.add_argument(
         "--tap-client",
-        choices=list(CLIENT_CONFIGS),
+        choices=sorted(CLIENT_CONFIGS.keys()),
         default="claude",
         dest="client",
         help="Client to launch (default: claude)",
@@ -688,7 +757,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="proxy_mode",
         help=(
             "'reverse' sets provider base URL, 'forward' sets HTTPS_PROXY with CONNECT/TLS termination. "
-            "Default depends on the client: 'reverse' for claude/codex/kimi, 'forward' for opencode/cursor."
+            "Default depends on the client: 'reverse' for claude/codex/kimi, 'forward' for opencode/hermes/cursor."
         ),
     )
     proxy_group.add_argument(
@@ -751,6 +820,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     # 127.0.0.1 otherwise (launching the client locally).
     if args.host is None:
         args.host = "0.0.0.0" if args.no_launch else "127.0.0.1"
+    if args.proxy_mode is None:
+        args.proxy_mode = CLIENT_CONFIGS[args.client].default_proxy_mode
     if args.target is None:
         detector = TARGET_DETECTORS.get(args.client)
         args.target = detector() if detector else CLIENT_CONFIGS[args.client].default_target
