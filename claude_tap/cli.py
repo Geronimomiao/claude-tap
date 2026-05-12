@@ -63,6 +63,7 @@ class ClientConfig:
     base_url_env: str
     base_url_suffix: str  # appended to http://127.0.0.1:{port}
     default_target: str
+    extra_base_url_envs: tuple[str, ...] = ()
     nesting_env_keys: tuple[str, ...] = ()  # env vars to clear before launch
     # Some CLIs need process env duplicated into a CLI settings payload.
     inject_settings_env: bool = False
@@ -85,6 +86,21 @@ class ClientConfig:
 
     def reverse_base_url(self, port: int) -> str:
         return f"http://127.0.0.1:{port}{self.base_url_suffix}"
+
+    @property
+    def reverse_base_url_envs(self) -> tuple[str, ...]:
+        seen: set[str] = set()
+        env_keys: list[str] = []
+        for env_key in (self.base_url_env, *self.extra_base_url_envs):
+            if env_key in seen:
+                continue
+            seen.add(env_key)
+            env_keys.append(env_key)
+        return tuple(env_keys)
+
+    def reverse_base_url_env_map(self, port: int) -> dict[str, str]:
+        base_url = self.reverse_base_url(port)
+        return {env_key: base_url for env_key in self.reverse_base_url_envs}
 
     def reverse_strip_path_prefix(self, target: str) -> str:
         if not self.strip_path_prefix:
@@ -222,14 +238,15 @@ async def run_client(
                 cmd_args = _settings_arg(settings_payload["env"]) + cmd_args
         # Don't set provider-specific base URL in forward mode
     else:
-        base_url = cfg.reverse_base_url(port)
-        env[cfg.base_url_env] = base_url
+        reverse_env = cfg.reverse_base_url_env_map(port)
+        env.update(reverse_env)
         env["NO_PROXY"] = "127.0.0.1"
         if cfg.inject_settings_env and not _has_settings_arg(cmd_args):
-            cmd_args = _settings_arg({cfg.base_url_env: base_url}) + cmd_args
+            cmd_args = _settings_arg(reverse_env) + cmd_args
         if cfg.base_url_config_key and not has_base_url_config_override:
             # Some clients ignore their base URL env in selected auth/transport modes
             # unless the same value is also supplied as a config override.
+            base_url = cfg.reverse_base_url(port)
             cmd_args = ["-c", f'{cfg.base_url_config_key}="{base_url}"'] + cmd_args
 
     for key in cfg.nesting_env_keys:
@@ -242,7 +259,8 @@ async def run_client(
         if ca_cert_path:
             print(f"   NODE_EXTRA_CA_CERTS={ca_cert_path}")
     else:
-        print(f"   {cfg.base_url_env}={cfg.reverse_base_url(port)}")
+        for env_key, base_url in cfg.reverse_base_url_env_map(port).items():
+            print(f"   {env_key}={base_url}")
     print()
 
     # Give child its own process group and make it the foreground group
