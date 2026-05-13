@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add Gemini CLI client support with forward proxy default.
+- Render Gemini CLI system prompts, messages, tool calls, tool results, SSE output, and token usage in the viewer.
+
 
 
 

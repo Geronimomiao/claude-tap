@@ -9,7 +9,7 @@
 
 [English](README.md)
 
-拦截并查看 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Codex CLI](https://github.com/openai/codex)、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)、[OpenCode](https://opencode.ai)、[Hermes Agent](https://github.com/NousResearch/hermes-agent) 或 [Cursor CLI](https://cursor.com/cli) 的所有 API 流量。看清它们如何构造 system prompt、管理对话历史、选择工具、优化 token 用量——通过一个美观的 trace 查看器。
+拦截并查看 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Codex CLI](https://github.com/openai/codex)、[Gemini CLI](https://github.com/google-gemini/gemini-cli)、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)、[OpenCode](https://opencode.ai)、[Hermes Agent](https://github.com/NousResearch/hermes-agent) 或 [Cursor CLI](https://cursor.com/cli) 的所有 API 流量。看清它们如何构造 system prompt、管理对话历史、选择工具、优化 token 用量——通过一个美观的 trace 查看器。
 
 ![演示](docs/demo_zh.gif)
 
@@ -28,7 +28,7 @@
 
 ## 安装
 
-需要 Python 3.11+ 以及要追踪的客户端：[Claude Code](https://docs.anthropic.com/en/docs/claude-code)（默认）、[Codex CLI](https://github.com/openai/codex)（`--tap-client codex` 时）、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)（`--tap-client kimi` 时）、[OpenCode](https://opencode.ai)（`--tap-client opencode` 时）、[Hermes Agent](https://github.com/NousResearch/hermes-agent)（`--tap-client hermes` 时）、或 [Cursor CLI](https://cursor.com/cli)（`--tap-client cursor` 时）。
+需要 Python 3.11+ 以及要追踪的客户端：[Claude Code](https://docs.anthropic.com/en/docs/claude-code)（默认）、[Codex CLI](https://github.com/openai/codex)（`--tap-client codex` 时）、[Gemini CLI](https://github.com/google-gemini/gemini-cli)（`--tap-client gemini` 时）、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)（`--tap-client kimi` 时）、[OpenCode](https://opencode.ai)（`--tap-client opencode` 时）、[Hermes Agent](https://github.com/NousResearch/hermes-agent)（`--tap-client hermes` 时）、或 [Cursor CLI](https://cursor.com/cli)（`--tap-client cursor` 时）。
 
 ```bash
 # 推荐
@@ -53,6 +53,9 @@ claude-tap --tap-live
 
 # Codex CLI
 claude-tap --tap-client codex
+
+# Gemini CLI
+claude-tap --tap-client gemini -- -p "hello"
 
 # Kimi CLI
 claude-tap --tap-client kimi
@@ -153,6 +156,24 @@ claude-tap --tap-client kimi -- --thinking
 
 # 改用 Moonshot Open Platform，而不是 Kimi Code
 claude-tap --tap-client kimi --tap-target https://api.moonshot.ai/v1
+```
+
+</details>
+
+<details>
+<summary>Gemini CLI 示例</summary>
+
+Gemini CLI 默认使用 forward proxy。Google OAuth / Code Assist 流量会访问多个 Google 端点，因此 forward proxy 是更稳妥的默认抓取方式。对于会读取 `GOOGLE_GEMINI_BASE_URL` 或 `GOOGLE_VERTEX_BASE_URL` 的 API key / Vertex 类流程，仍可显式使用 reverse 模式。
+
+```bash
+# Google OAuth / Code Assist
+claude-tap --tap-client gemini -- -p "hello"
+
+# 配合实时查看器
+claude-tap --tap-client gemini --tap-live -- -p "hello"
+
+# API key / Vertex 兼容流程的 reverse 模式
+claude-tap --tap-client gemini --tap-proxy-mode reverse -- -p "hello"
 ```
 
 </details>
@@ -264,6 +285,11 @@ OPENAI_BASE_URL=http://127.0.0.1:8080/v1 codex -c 'openai_base_url="http://127.0
 claude-tap --tap-client kimi --tap-no-launch --tap-port 8080
 # 在另一个终端:
 KIMI_BASE_URL=http://127.0.0.1:8080 kimi
+
+# Gemini CLI（仅 reverse 模式）
+claude-tap --tap-client gemini --tap-proxy-mode reverse --tap-no-launch --tap-port 8080
+# 在另一个终端:
+GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:8080 GOOGLE_VERTEX_BASE_URL=http://127.0.0.1:8080 gemini
 ```
 
 ### 常用组合
@@ -287,7 +313,7 @@ claude-tap --tap-max-traces 10
 除以下 `--tap-*` 参数外，所有参数均透传给所选客户端：
 
 ```
---tap-client CLIENT      启动的客户端: claude（默认）/ codex / kimi / opencode / hermes / cursor
+--tap-client CLIENT      启动的客户端: claude（默认）/ codex / gemini / kimi / opencode / hermes / cursor
 --tap-target URL         上游 API 地址（默认: 根据客户端自动选择）
 --tap-live               启动实时查看器（自动打开浏览器）
 --tap-live-port PORT     实时查看器端口（默认: 自动分配）
@@ -299,7 +325,7 @@ claude-tap --tap-max-traces 10
 --tap-max-traces N       最大保留 trace 数量（默认: 50，0 = 不限）
 --tap-no-update-check    禁用启动时的 PyPI 更新检查
 --tap-no-auto-update     仅检查更新，不自动下载
---tap-proxy-mode MODE    代理模式: reverse 或 forward（默认：claude/codex/kimi 用 reverse，opencode/hermes/cursor 用 forward）
+--tap-proxy-mode MODE    代理模式: reverse 或 forward（默认：claude/codex/kimi 用 reverse，gemini/opencode/hermes/cursor 用 forward）
 ```
 
 </details>

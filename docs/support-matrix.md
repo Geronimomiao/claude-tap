@@ -1,6 +1,6 @@
 ---
 owner: claude-tap-maintainers
-last_reviewed: 2026-05-09
+last_reviewed: 2026-05-13
 source_of_truth: AGENTS.md
 ---
 
@@ -20,6 +20,8 @@ Simplified Chinese version: [支持矩阵](support-matrix.zh.md).
 | Codex CLI | API Key (`OPENAI_API_KEY`) | `https://api.openai.com` | none | WebSocket | Verified |
 | Codex CLI | OAuth (`codex login`) | `https://chatgpt.com/backend-api/codex` | `/v1` | HTTP/SSE | Verified |
 | Codex CLI | OAuth (`codex login`) | `https://chatgpt.com/backend-api/codex` | `/v1` | WebSocket | Verified |
+| Gemini CLI | Google OAuth / Code Assist | Forward proxy (Google endpoints) | n/a | HTTP/SSE | Real E2E verified |
+| Gemini CLI | API key / Vertex-compatible config (`--tap-proxy-mode reverse`) | `https://generativelanguage.googleapis.com` | none | HTTP/SSE | Unit-tested |
 | Kimi CLI | Kimi CLI auth/config | `https://api.kimi.com/coding/v1` | none | HTTP/SSE Chat Completions | Unit-tested |
 | Kimi CLI | Kimi CLI auth/config | `https://api.moonshot.ai/v1` | none | HTTP/SSE Chat Completions | Supported by config |
 | OpenCode | Provider creds via `opencode providers` | Forward proxy (any HTTPS upstream) | n/a | HTTP/SSE | Unit-tested |
@@ -37,6 +39,7 @@ Each client in `CLIENT_CONFIGS` declares a `default_proxy_mode` used when
 |--------|--------------|--------|
 | `claude` | `reverse` | Single provider, native `ANTHROPIC_BASE_URL` env var |
 | `codex` | `reverse` | Single provider, native `OPENAI_BASE_URL` env var |
+| `gemini` | `forward` | Google OAuth / Code Assist uses several Google endpoints; forward proxy captures the flow without assuming a single base URL |
 | `kimi` | `reverse` | Single provider, native `KIMI_BASE_URL` env var |
 | `opencode` | `forward` | Multi-provider; forward proxy captures every upstream regardless of which env var the client honors |
 | `hermes` | `forward` | Multi-provider Python agent; `httpx` and `requests` honor `HTTPS_PROXY` natively, so forward proxy capture is the natural default |
@@ -93,6 +96,10 @@ strip = CLIENT_CONFIGS[client].reverse_strip_path_prefix(target)
 
 - `test_codex_upstream_url_construction` — verifies URL construction for all 5 matrix combinations
 - `test_codex_client_reverse_proxy` — e2e with fake upstream (OAuth-like, with strip)
+- `test_gemini_registered_in_client_configs` — verifies Gemini CLI registration and default forward mode
+- `test_run_client_gemini_forward_sets_proxy_ca_and_skips_base_url_envs` — verifies Gemini forward proxy launch env
+- `test_run_client_gemini_reverse_sets_both_base_url_envs` — verifies Gemini reverse proxy base URL env injection
+- `test_viewer_renders_gemini_semantic_sections` — verifies Gemini systemInstruction, contents, functionDeclarations, functionCall, functionResponse, SSE output, and token usage render as semantic viewer sections
 - `test_kimi_registered_in_client_configs` — verifies Kimi CLI registration
 - `test_kimi_client_reverse_proxy` — e2e with fake Kimi Chat Completions stream
 - `test_chat_completions_reasoning_content_is_mirrored_as_thinking` — verifies Kimi thinking stream rendering shape
@@ -122,6 +129,10 @@ uv run python -m claude_tap --tap-client cursor -- -p --trust --model auto "Repl
 # Kimi CLI
 uv run python -m claude_tap --tap-client kimi -- --thinking
 # Verify the trace contains /chat/completions records and thinking/text output
+
+# Gemini CLI
+uv run python -m claude_tap --tap-client gemini -- -p "Reply OK" --yolo --output-format text
+# Verify the trace contains Google OAuth / Code Assist API records
 ```
 
 ### Real E2E (optional, when auth is available)
@@ -139,6 +150,13 @@ OPENAI_BASE_URL=http://127.0.0.1:8080/v1 codex exec "Reply: OK"
 uv run python -m claude_tap --tap-client cursor -- -p --trust --model auto \
   "Use tools to inspect the workspace and reply OK"
 # Verify the generated HTML contains cursor-transcript turns and tool_use blocks.
+```
+
+```bash
+# Gemini CLI real verification
+uv run python -m claude_tap --tap-client gemini -- -p \
+  "Use tools to inspect the workspace and reply OK" --yolo --output-format text
+# Verify the trace contains cloudcode-pa.googleapis.com / streamGenerateContent records.
 ```
 
 ## Adding New Clients or Backends

@@ -140,6 +140,18 @@ CLIENT_CONFIGS: dict[str, ClientConfig] = {
         base_url_suffix="",
         default_target="https://api.kimi.com/coding/v1",
     ),
+    "gemini": ClientConfig(
+        cmd="gemini",
+        label="Gemini CLI",
+        install_url="https://github.com/google-gemini/gemini-cli",
+        base_url_env="GOOGLE_GEMINI_BASE_URL",
+        extra_base_url_envs=("GOOGLE_VERTEX_BASE_URL",),
+        base_url_suffix="",
+        default_target="https://generativelanguage.googleapis.com",
+        # Google OAuth / Code Assist traffic spans several Google endpoints.
+        # Forward mode captures that flow without assuming a single base URL.
+        default_proxy_mode="forward",
+    ),
     "opencode": ClientConfig(
         cmd="opencode",
         label="OpenCode",
@@ -684,8 +696,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     tap_parser = argparse.ArgumentParser(
         prog="claude-tap",
-        description="Trace Claude Code, Codex CLI, Kimi CLI, OpenCode, or Cursor CLI API requests via a local proxy. "
-        "All flags not listed below are forwarded to the selected client.",
+        description=(
+            "Trace Claude Code, Codex CLI, Gemini CLI, Kimi CLI, OpenCode, Hermes Agent, "
+            "or Cursor CLI API requests via a local proxy. All flags not listed below are "
+            "forwarded to the selected client."
+        ),
         epilog=(
             "claude code:\n"
             "  claude-tap                            Basic tracing\n"
@@ -709,6 +724,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "  claude-tap --tap-client kimi -- --thinking\n"
             "  # Use Moonshot Open Platform instead of Kimi Code\n"
             "  claude-tap --tap-client kimi --tap-target https://api.moonshot.ai/v1\n"
+            "\n"
+            "gemini cli (defaults to forward proxy mode):\n"
+            '  claude-tap --tap-client gemini -- -p "hello"\n'
+            "  # Reverse mode sets GOOGLE_GEMINI_BASE_URL and GOOGLE_VERTEX_BASE_URL\n"
+            "  claude-tap --tap-client gemini --tap-proxy-mode reverse\n"
             "\n"
             "opencode (multi-provider; defaults to forward proxy mode):\n"
             "  # Forward proxy captures every provider opencode talks to\n"
@@ -776,7 +796,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         dest="proxy_mode",
         help=(
             "'reverse' sets provider base URL, 'forward' sets HTTPS_PROXY with CONNECT/TLS termination. "
-            "Default depends on the client: 'reverse' for claude/codex/kimi, 'forward' for opencode/hermes/cursor."
+            "Default depends on the client: 'reverse' for claude/codex/kimi, "
+            "'forward' for gemini/opencode/hermes/cursor."
         ),
     )
     proxy_group.add_argument(

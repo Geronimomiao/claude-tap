@@ -1,6 +1,6 @@
 ---
 owner: claude-tap-maintainers
-last_reviewed: 2026-05-10
+last_reviewed: 2026-05-13
 source_of_truth: AGENTS.md
 ---
 
@@ -20,6 +20,8 @@ English version: [Support Matrix](support-matrix.md).
 | Codex CLI | API Key (`OPENAI_API_KEY`) | `https://api.openai.com` | 无 | WebSocket | 已验证 |
 | Codex CLI | OAuth (`codex login`) | `https://chatgpt.com/backend-api/codex` | `/v1` | HTTP/SSE | 已验证 |
 | Codex CLI | OAuth (`codex login`) | `https://chatgpt.com/backend-api/codex` | `/v1` | WebSocket | 已验证 |
+| Gemini CLI | Google OAuth / Code Assist | Forward proxy（Google 端点） | n/a | HTTP/SSE | 真实 E2E 已验证 |
+| Gemini CLI | API key / Vertex 兼容配置（`--tap-proxy-mode reverse`） | `https://generativelanguage.googleapis.com` | 无 | HTTP/SSE | 单测覆盖 |
 | Kimi CLI | Kimi CLI 认证/配置 | `https://api.kimi.com/coding/v1` | 无 | HTTP/SSE Chat Completions | 单测覆盖 |
 | Kimi CLI | Kimi CLI 认证/配置 | `https://api.moonshot.ai/v1` | 无 | HTTP/SSE Chat Completions | 配置支持 |
 | OpenCode | 通过 `opencode providers` 配置 provider 凭据 | Forward proxy（任意 HTTPS 上游） | n/a | HTTP/SSE | 单测覆盖 |
@@ -36,6 +38,7 @@ English version: [Support Matrix](support-matrix.md).
 |--------|----------|------|
 | `claude` | `reverse` | 单 provider，原生支持 `ANTHROPIC_BASE_URL` 环境变量 |
 | `codex` | `reverse` | 单 provider，原生支持 `OPENAI_BASE_URL` 环境变量 |
+| `gemini` | `forward` | Google OAuth / Code Assist 会访问多个 Google 端点；forward proxy 不依赖单一 base URL，更适合作为默认 |
 | `kimi` | `reverse` | 单 provider，原生支持 `KIMI_BASE_URL` 环境变量 |
 | `opencode` | `forward` | 多 provider；forward proxy 可以捕获所有上游，而不依赖客户端支持哪个环境变量 |
 | `hermes` | `forward` | 多 provider 的 Python agent；`httpx` 与 `requests` 都原生认 `HTTPS_PROXY`，forward proxy 捕获是最自然的默认 |
@@ -87,6 +90,10 @@ strip = CLIENT_CONFIGS[client].reverse_strip_path_prefix(target)
 
 - `test_codex_upstream_url_construction`：验证全部 5 个矩阵组合的 URL 构造
 - `test_codex_client_reverse_proxy`：使用 fake upstream 覆盖 OAuth 类 reverse proxy e2e
+- `test_gemini_registered_in_client_configs`：验证 Gemini CLI 注册和默认 forward 模式
+- `test_run_client_gemini_forward_sets_proxy_ca_and_skips_base_url_envs`：验证 Gemini forward proxy 启动环境变量
+- `test_run_client_gemini_reverse_sets_both_base_url_envs`：验证 Gemini reverse proxy base URL 环境变量注入
+- `test_viewer_renders_gemini_semantic_sections`：验证 Gemini systemInstruction、contents、functionDeclarations、functionCall、functionResponse、SSE output 和 token usage 会渲染为语义化 viewer 区块
 - `test_kimi_registered_in_client_configs`：验证 Kimi CLI 注册
 - `test_kimi_client_reverse_proxy`：使用 fake Kimi Chat Completions stream 覆盖 e2e
 - `test_chat_completions_reasoning_content_is_mirrored_as_thinking`：验证 Kimi thinking stream 渲染形状
@@ -116,6 +123,10 @@ uv run python -m claude_tap --tap-client cursor -- -p --trust --model auto "Repl
 # Kimi CLI
 uv run python -m claude_tap --tap-client kimi -- --thinking
 # 验证 trace 包含 /chat/completions 记录和 thinking/text 输出
+
+# Gemini CLI
+uv run python -m claude_tap --tap-client gemini -- -p "Reply OK" --yolo --output-format text
+# 验证 trace 包含 Google OAuth / Code Assist API 记录
 ```
 
 ### 真实 E2E（有认证时可选）
@@ -133,6 +144,13 @@ OPENAI_BASE_URL=http://127.0.0.1:8080/v1 codex exec "Reply: OK"
 uv run python -m claude_tap --tap-client cursor -- -p --trust --model auto \
   "Use tools to inspect the workspace and reply OK"
 # 验证生成的 HTML 包含 cursor-transcript turns 和 tool_use blocks。
+```
+
+```bash
+# Gemini CLI 真实验证
+uv run python -m claude_tap --tap-client gemini -- -p \
+  "Use tools to inspect the workspace and reply OK" --yolo --output-format text
+# 验证 trace 包含 cloudcode-pa.googleapis.com / streamGenerateContent 记录。
 ```
 
 ## 添加新客户端或后端

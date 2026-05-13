@@ -9,18 +9,22 @@ import pytest
 from claude_tap import parse_args
 from claude_tap.cli import CLIENT_CONFIGS, ClientConfig, run_client
 
-EXISTING_CLIENTS = {
+SUPPORTED_CLIENTS = {
     "claude",
     "codex",
+    "gemini",
     "kimi",
     "opencode",
     "hermes",
     "cursor",
 }
 
-EXISTING_DEFAULT_PROXY_MODES = {
+SINGLE_REVERSE_ENV_CLIENTS = SUPPORTED_CLIENTS - {"gemini"}
+
+SUPPORTED_DEFAULT_PROXY_MODES = {
     "claude": "reverse",
     "codex": "reverse",
+    "gemini": "forward",
     "kimi": "reverse",
     "opencode": "forward",
     "hermes": "forward",
@@ -44,12 +48,12 @@ class _DummyProc:
         self.returncode = -9
 
 
-def test_framework_refactor_keeps_existing_client_matrix_only() -> None:
-    assert set(CLIENT_CONFIGS) == EXISTING_CLIENTS
+def test_client_matrix_contains_only_supported_clients() -> None:
+    assert set(CLIENT_CONFIGS) == SUPPORTED_CLIENTS
 
 
-@pytest.mark.parametrize("client", sorted(EXISTING_CLIENTS))
-def test_existing_client_default_proxy_modes_are_unchanged(
+@pytest.mark.parametrize("client", sorted(SUPPORTED_CLIENTS))
+def test_supported_client_default_proxy_modes_are_unchanged(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     client: str,
@@ -59,14 +63,24 @@ def test_existing_client_default_proxy_modes_are_unchanged(
     args = parse_args(["--tap-client", client])
 
     assert args.client == client
-    assert args.proxy_mode == EXISTING_DEFAULT_PROXY_MODES[client]
+    assert args.proxy_mode == SUPPORTED_DEFAULT_PROXY_MODES[client]
 
 
-@pytest.mark.parametrize("client", sorted(EXISTING_CLIENTS))
-def test_existing_clients_keep_single_reverse_base_url_env(client: str) -> None:
+@pytest.mark.parametrize("client", sorted(SINGLE_REVERSE_ENV_CLIENTS))
+def test_single_env_clients_keep_single_reverse_base_url_env(client: str) -> None:
     cfg = CLIENT_CONFIGS[client]
 
     assert cfg.reverse_base_url_envs == (cfg.base_url_env,)
+
+
+def test_gemini_declares_both_reverse_base_url_envs() -> None:
+    cfg = CLIENT_CONFIGS["gemini"]
+
+    assert cfg.reverse_base_url_envs == ("GOOGLE_GEMINI_BASE_URL", "GOOGLE_VERTEX_BASE_URL")
+    assert cfg.reverse_base_url_env_map(43123) == {
+        "GOOGLE_GEMINI_BASE_URL": "http://127.0.0.1:43123",
+        "GOOGLE_VERTEX_BASE_URL": "http://127.0.0.1:43123",
+    }
 
 
 def test_reverse_base_url_envs_deduplicate_primary_and_extra_envs() -> None:

@@ -2441,7 +2441,7 @@ function matchSearch(e, q) {
     const mc = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
     if (mc.toLowerCase().includes(q)) return true;
   }
-  const tools = body?.tools || [];
+  const tools = getRequestTools(body);
   for (const td of tools) {
     if (toolDisplayName(td).toLowerCase().includes(q)) return true;
     if (toolDescription(td).toLowerCase().includes(q)) return true;
@@ -2516,7 +2516,7 @@ function getEntrySearchText(entry) {
   parts.push(body?.model || '');
   parts.push(extractSystem(body) || '');
   getMessages(body).forEach(m => parts.push(msgToText(m)));
-  (body?.tools || []).forEach(td => parts.push(JSON.stringify(td)));
+  getRequestTools(body).forEach(td => parts.push(JSON.stringify(td)));
   const output = getResponseOutput(resolved);
   if (output?.content) parts.push(msgToText({ role: 'assistant', content: output.content }));
   getResponseEvents(resolved).forEach(ev => parts.push(JSON.stringify(ev)));
@@ -3147,7 +3147,7 @@ function renderDetail(e) {
 
   if (usage) html += renderTokenUsage(usage);
 
-  const tools = reqBody?.tools;
+  const tools = getRequestTools(reqBody);
   if (tools && tools.length) html += section(t('section_tools'), renderTools(tools), false, null, tools.length + ' ' + t('badge_tools'));
 
   const sysPrompt = extractSystem(reqBody);
@@ -3241,6 +3241,112 @@ function normalizeChatMessageForDisplay(msg) {
   return { ...msg, content };
 }
 
+function geminiRequest(body) {
+  return body?.request && typeof body.request === 'object' ? body.request : {};
+}
+
+function isGeminiRequestBody(body) {
+  const req = geminiRequest(body);
+  return !!req && (
+    Array.isArray(req.contents) ||
+    !!req.systemInstruction ||
+    Array.isArray(req.tools)
+  );
+}
+
+function geminiTextFromParts(parts) {
+  if (!Array.isArray(parts)) return '';
+  return parts
+    .filter(part => part && typeof part === 'object' && typeof part.text === 'string')
+    .map(part => part.text)
+    .join('\n');
+}
+
+function geminiSystemInstruction(body) {
+  const instruction = geminiRequest(body).systemInstruction;
+  if (!instruction || typeof instruction !== 'object') return '';
+  return geminiTextFromParts(instruction.parts).trim();
+}
+
+function geminiRole(role) {
+  return role === 'model' ? 'assistant' : (typeof role === 'string' && role ? role : 'user');
+}
+
+function geminiFunctionResponseContent(response) {
+  const payload = response?.response;
+  const output = payload && typeof payload === 'object' && Object.prototype.hasOwnProperty.call(payload, 'output')
+    ? payload.output
+    : payload;
+  if (typeof output === 'string') return output;
+  if (output === undefined || output === null) return '';
+  return JSON.stringify(output, null, 2);
+}
+
+function geminiPartContentBlocks(part) {
+  const blocks = [];
+  if (!part || typeof part !== 'object') return blocks;
+  if (typeof part.text === 'string' && part.text.trim()) {
+    if (part.thought === true) blocks.push({ type: 'thinking', thinking: part.text });
+    else blocks.push({ type: 'text', text: part.text });
+  }
+  if (part.functionCall && typeof part.functionCall === 'object') {
+    const call = part.functionCall;
+    blocks.push({
+      type: 'tool_use',
+      id: call.id || '',
+      name: call.name || 'tool_use',
+      input: call.args && typeof call.args === 'object' ? call.args : {},
+    });
+  }
+  if (part.functionResponse && typeof part.functionResponse === 'object') {
+    const response = part.functionResponse;
+    blocks.push({
+      type: 'tool_result',
+      tool_use_id: response.id || response.name || '',
+      content: geminiFunctionResponseContent(response),
+    });
+  }
+  return blocks;
+}
+
+function geminiMessages(body) {
+  const contents = geminiRequest(body).contents;
+  if (!Array.isArray(contents)) return [];
+  return contents.map(item => {
+    if (!item || typeof item !== 'object') return null;
+    const blocks = (item.parts || []).flatMap(geminiPartContentBlocks);
+    if (!blocks.length) return null;
+    let role = geminiRole(item.role);
+    if (blocks.every(block => block.type === 'tool_result')) role = 'tool';
+    return { role, content: blocks };
+  }).filter(Boolean);
+}
+
+function flattenGeminiTools(tools) {
+  if (!Array.isArray(tools)) return [];
+  const flattened = [];
+  for (const group of tools) {
+    if (!group || typeof group !== 'object') continue;
+    const declarations = group.functionDeclarations;
+    if (!Array.isArray(declarations)) continue;
+    for (const decl of declarations) {
+      if (!decl || typeof decl !== 'object') continue;
+      flattened.push({
+        name: decl.name || '',
+        description: decl.description || '',
+        input_schema: decl.parametersJsonSchema || decl.parameters || {},
+      });
+    }
+  }
+  return flattened;
+}
+
+function getRequestTools(body) {
+  const direct = Array.isArray(body?.tools) ? body.tools : [];
+  const geminiTools = flattenGeminiTools(geminiRequest(body).tools);
+  return geminiTools.length ? geminiTools : direct;
+}
+
 function hasDisplayContent(content) {
   if (typeof content === 'string') return content.trim().length > 0;
   if (!Array.isArray(content)) return content !== undefined && content !== null;
@@ -3273,14 +3379,41 @@ function extractSystem(body) {
     .map(m => chatMessageContentToText(m.content))
     .filter(text => text.trim());
   parts.push(...chatInstructions);
+  const geminiSystem = geminiSystemInstruction(body);
+  if (geminiSystem) parts.push(geminiSystem);
   return parts.length ? parts.join('\n\n') : null;
+}
+
+function parseSseDataFrames(text) {
+  if (typeof text !== 'string' || !text.includes('data:')) return [];
+  const events = [];
+  let dataLines = [];
+  const flush = () => {
+    if (!dataLines.length) return;
+    const raw = dataLines.join('\n');
+    dataLines = [];
+    if (raw === '[DONE]') return;
+    let data = raw;
+    try { data = JSON.parse(raw); } catch(e) {}
+    events.push({ event: 'message', data });
+  };
+  for (const line of text.split(/\r?\n/)) {
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trim());
+      continue;
+    }
+    if (!line.trim()) flush();
+  }
+  flush();
+  return events;
 }
 
 function getResponseEvents(entry) {
   const sse = entry?.response?.sse_events;
   if (Array.isArray(sse) && sse.length > 0) return sse;
   const ws = entry?.response?.ws_events;
-  return Array.isArray(ws) ? ws : [];
+  if (Array.isArray(ws) && ws.length > 0) return ws;
+  return parseSseDataFrames(entry?.response?.body);
 }
 
 function getEventType(event) {
@@ -3337,6 +3470,9 @@ function getMessages(body) {
       .map(normalizeChatMessageForDisplay)
       .filter(m => hasDisplayContent(m.content));
   }
+  if (isGeminiRequestBody(body)) {
+    return geminiMessages(body).filter(m => hasDisplayContent(m.content));
+  }
   if (Array.isArray(body.input)) {
     const normalizedInput = normalizeWebSocketDerivedInput(body.input);
     const messages = normalizedInput.filter(item => {
@@ -3378,11 +3514,18 @@ function normalizeUsage(usage) {
   if (normalized.input_tokens === undefined && usage.prompt_tokens !== undefined) {
     normalized.input_tokens = usage.prompt_tokens;
   }
+  if (normalized.input_tokens === undefined && usage.promptTokenCount !== undefined) {
+    normalized.input_tokens = usage.promptTokenCount;
+  }
   if (normalized.output_tokens === undefined && usage.completion_tokens !== undefined) {
     normalized.output_tokens = usage.completion_tokens;
   }
+  if (normalized.output_tokens === undefined && usage.candidatesTokenCount !== undefined) {
+    normalized.output_tokens = usage.candidatesTokenCount;
+  }
   if (normalized.cache_read_input_tokens === undefined) {
     let cached = usage.cached_tokens;
+    if (cached === undefined) cached = usage.cachedContentTokenCount;
     if (cached === undefined && usage.input_tokens_details && typeof usage.input_tokens_details === 'object') {
       cached = usage.input_tokens_details.cached_tokens;
     }
@@ -3400,6 +3543,8 @@ function normalizeUsage(usage) {
 function getUsage(entry) {
   const u = getResponsePayload(entry)?.usage;
   if (u) return normalizeUsage(u);
+  const geminiUsage = geminiUsageFromPayloads(entry);
+  if (geminiUsage) return geminiUsage;
   const events = getResponseEvents(entry);
   for (let i = events.length - 1; i >= 0; i--) {
     if (getEventType(events[i]) !== 'response.completed') continue;
@@ -3449,8 +3594,71 @@ function reconstructOutputFromEvents(events) {
   );
 }
 
+function geminiResponsePayloads(entry) {
+  const body = entry?.response?.body;
+  if (typeof body === 'string') {
+    return parseSseDataFrames(body)
+      .map(event => event.data)
+      .filter(data => data && typeof data === 'object');
+  }
+  if (body && typeof body === 'object') return [body];
+  return [];
+}
+
+function geminiUsageFromPayloads(entry) {
+  if (!isGeminiRequestBody(entry?.request?.body)) return null;
+  let usage = null;
+  for (const payload of geminiResponsePayloads(entry)) {
+    const response = payload?.response && typeof payload.response === 'object' ? payload.response : payload;
+    if (response?.usageMetadata) usage = response.usageMetadata;
+  }
+  return usage ? normalizeUsage(usage) : null;
+}
+
+function geminiResponseOutput(entry) {
+  if (!isGeminiRequestBody(entry?.request?.body)) return null;
+  const content = [];
+  let textBlock = null;
+  const appendText = text => {
+    if (typeof text !== 'string' || !text.trim()) return;
+    if (!textBlock) {
+      textBlock = { type: 'text', text: '' };
+      content.push(textBlock);
+    }
+    textBlock.text += text;
+  };
+  for (const payload of geminiResponsePayloads(entry)) {
+    const response = payload?.response && typeof payload.response === 'object' ? payload.response : payload;
+    const candidates = response?.candidates;
+    if (!Array.isArray(candidates)) continue;
+    for (const candidate of candidates) {
+      const parts = candidate?.content?.parts;
+      if (!Array.isArray(parts)) continue;
+      for (const part of parts) {
+        if (!part || typeof part !== 'object') continue;
+        if (typeof part.text === 'string') {
+          if (part.thought === true && part.text.trim()) content.push({ type: 'thinking', thinking: part.text });
+          else appendText(part.text);
+        }
+        if (part.functionCall && typeof part.functionCall === 'object') {
+          const call = part.functionCall;
+          content.push({
+            type: 'tool_use',
+            id: call.id || '',
+            name: call.name || 'tool_use',
+            input: call.args && typeof call.args === 'object' ? call.args : {},
+          });
+        }
+      }
+    }
+  }
+  return content.length ? { content } : null;
+}
+
 // Extract response output from response.body.content or SSE response.completed event
 function getResponseOutput(entry) {
+  const geminiOutput = geminiResponseOutput(entry);
+  if (geminiOutput) return geminiOutput;
   const body = getResponsePayload(entry);
   if (body?.content) return body;
   const fromBody = normalizeResponseOutput(body?.output);
@@ -3666,7 +3874,8 @@ function isMainTurn(e) {
   const b = e?.request?.body;
   if (!b) return false;
   const hasSys = (b.system && (typeof b.system === 'string' ? b.system.length > 0 : b.system.length > 0))
-      || (typeof b.instructions === 'string' && b.instructions.length > 0);
+      || (typeof b.instructions === 'string' && b.instructions.length > 0)
+      || !!geminiSystemInstruction(b);
   const msgs = getMessages(b);
   return hasSys || msgs.length > 1;
 }
@@ -4053,8 +4262,8 @@ function structuralDiff(oldB, newB) {
   d.oldSystemText = oldSys;
   d.newSystemText = newSys;
   // Tools — find added/removed by name
-  const oldToolEntries = oldB.tools || [];
-  const newToolEntries = newB.tools || [];
+  const oldToolEntries = getRequestTools(oldB);
+  const newToolEntries = getRequestTools(newB);
   const oldTools = oldToolEntries.map(toolDisplayName);
   const newTools = newToolEntries.map(toolDisplayName);
   const oldToolMap = new Map(oldToolEntries.map(tool => [toolDisplayName(tool), tool]));

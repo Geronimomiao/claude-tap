@@ -9,7 +9,7 @@
 
 [中文文档](README_zh.md)
 
-Intercept and inspect all API traffic from [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Kimi CLI](https://github.com/MoonshotAI/kimi-cli), [OpenCode](https://opencode.ai), [Hermes Agent](https://github.com/NousResearch/hermes-agent), or [Cursor CLI](https://cursor.com/cli). See exactly how they construct system prompts, manage conversation history, select tools, and use tokens — in a beautiful trace viewer.
+Intercept and inspect all API traffic from [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Kimi CLI](https://github.com/MoonshotAI/kimi-cli), [OpenCode](https://opencode.ai), [Hermes Agent](https://github.com/NousResearch/hermes-agent), or [Cursor CLI](https://cursor.com/cli). See exactly how they construct system prompts, manage conversation history, select tools, and use tokens — in a beautiful trace viewer.
 
 ![Demo](docs/demo.gif)
 
@@ -28,7 +28,7 @@ Intercept and inspect all API traffic from [Claude Code](https://docs.anthropic.
 
 ## Install
 
-Requires Python 3.11+ and the client you want to trace: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (default), [Codex CLI](https://github.com/openai/codex) for `--tap-client codex`, [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) for `--tap-client kimi`, [OpenCode](https://opencode.ai) for `--tap-client opencode`, [Hermes Agent](https://github.com/NousResearch/hermes-agent) for `--tap-client hermes`, or [Cursor CLI](https://cursor.com/cli) for `--tap-client cursor`.
+Requires Python 3.11+ and the client you want to trace: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (default), [Codex CLI](https://github.com/openai/codex) for `--tap-client codex`, [Gemini CLI](https://github.com/google-gemini/gemini-cli) for `--tap-client gemini`, [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) for `--tap-client kimi`, [OpenCode](https://opencode.ai) for `--tap-client opencode`, [Hermes Agent](https://github.com/NousResearch/hermes-agent) for `--tap-client hermes`, or [Cursor CLI](https://cursor.com/cli) for `--tap-client cursor`.
 
 ```bash
 # Recommended
@@ -53,6 +53,9 @@ claude-tap --tap-live
 
 # Codex CLI
 claude-tap --tap-client codex
+
+# Gemini CLI
+claude-tap --tap-client gemini -- -p "hello"
 
 # Kimi CLI
 claude-tap --tap-client kimi
@@ -153,6 +156,24 @@ claude-tap --tap-client kimi -- --thinking
 
 # Use Moonshot Open Platform instead of Kimi Code
 claude-tap --tap-client kimi --tap-target https://api.moonshot.ai/v1
+```
+
+</details>
+
+<details>
+<summary>Gemini CLI examples</summary>
+
+Gemini CLI uses forward proxy mode by default. Google OAuth / Code Assist traffic goes to several Google endpoints, so forward proxy capture is the safest default. Reverse mode remains available for API-key or Vertex-style flows that honor `GOOGLE_GEMINI_BASE_URL` or `GOOGLE_VERTEX_BASE_URL`.
+
+```bash
+# Google OAuth / Code Assist
+claude-tap --tap-client gemini -- -p "hello"
+
+# Live viewer
+claude-tap --tap-client gemini --tap-live -- -p "hello"
+
+# Reverse mode for compatible API-key / Vertex flows
+claude-tap --tap-client gemini --tap-proxy-mode reverse -- -p "hello"
 ```
 
 </details>
@@ -266,6 +287,11 @@ OPENAI_BASE_URL=http://127.0.0.1:8080/v1 codex -c 'openai_base_url="http://127.0
 claude-tap --tap-client kimi --tap-no-launch --tap-port 8080
 # In another terminal:
 KIMI_BASE_URL=http://127.0.0.1:8080 kimi
+
+# Gemini CLI (reverse mode only)
+claude-tap --tap-client gemini --tap-proxy-mode reverse --tap-no-launch --tap-port 8080
+# In another terminal:
+GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:8080 GOOGLE_VERTEX_BASE_URL=http://127.0.0.1:8080 gemini
 ```
 
 ### Common Combos
@@ -289,7 +315,7 @@ claude-tap --tap-max-traces 10
 All flags are forwarded to the selected client, except these `--tap-*` ones:
 
 ```
---tap-client CLIENT      Client to launch: claude (default), codex, kimi, opencode, hermes, or cursor
+--tap-client CLIENT      Client to launch: claude (default), codex, gemini, kimi, opencode, hermes, or cursor
 --tap-target URL         Upstream API URL (default: auto per client)
 --tap-live               Start real-time viewer (auto-opens browser)
 --tap-live-port PORT     Port for live viewer server (default: auto)
@@ -301,7 +327,7 @@ All flags are forwarded to the selected client, except these `--tap-*` ones:
 --tap-max-traces N       Max trace sessions to keep (default: 50, 0 = unlimited)
 --tap-no-update-check    Disable PyPI update check on startup
 --tap-no-auto-update     Check for updates but don't auto-download
---tap-proxy-mode MODE    Proxy mode: reverse or forward (default: reverse for claude/codex/kimi, forward for opencode/hermes/cursor)
+--tap-proxy-mode MODE    Proxy mode: reverse or forward (default: reverse for claude/codex/kimi, forward for gemini/opencode/hermes/cursor)
 ```
 
 </details>
