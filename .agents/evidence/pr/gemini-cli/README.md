@@ -19,16 +19,26 @@ timeout 240 uv run python -m claude_tap --tap-client gemini --tap-output-dir .tr
 - Hosts captured: `cloudcode-pa.googleapis.com`, `oauth2.googleapis.com`, and `play.googleapis.com`.
 - Generation endpoint captured: `/v1internal:streamGenerateContent?alt=sse`.
 
+## Screenshot Quality Gate
+
+The screenshots below were generated only after Playwright assertions confirmed that the rendered viewer contained:
+
+- `System Prompt` with Gemini's `systemInstruction` text.
+- `Tools` with Gemini `functionDeclarations`.
+- `Messages` with Gemini `contents`, prior `functionCall`, and `functionResponse` tool results.
+- `Response` with parsed SSE text output or tool calls.
+- `SSE Events` parsed from the raw Google SSE body.
+
 ## Screenshots
 
-- `first-01-overview.png`
-- `first-02-expanded-sections.png`
-- `first-03-detail-mid-scroll.png`
-- `first-04-later-turn-scrolled.png`
-- `resume-01-overview.png`
-- `resume-02-expanded-sections.png`
-- `resume-03-detail-mid-scroll.png`
-- `resume-04-later-turn-scrolled.png`
+- `first-01-system-and-tools.png`
+- `first-02-message-history.png`
+- `first-03-tool-result-history.png`
+- `first-04-response-output.png`
+- `resume-01-system-and-tools.png`
+- `resume-02-message-history.png`
+- `resume-03-tool-result-history.png`
+- `resume-04-response-output.png`
 
 ## Validation
 
