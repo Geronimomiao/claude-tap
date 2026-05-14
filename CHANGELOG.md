@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 
+
+## [0.1.65] - 2026-05-14
+
+### Changed
+- feat: support Pi CLI capture (#172)
 ## [0.1.64] - 2026-05-13
 
 ### Changed
