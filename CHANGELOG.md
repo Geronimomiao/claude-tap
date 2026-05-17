@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.1.74] - 2026-05-17
+
+### Changed
+- refactor: move viewer i18n strings to JSON source (#186)
 ## [0.1.73] - 2026-05-17
 
 ### Changed
