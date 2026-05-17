@@ -387,7 +387,13 @@ claude-tap --tap-no-open
 
 ### Star 历史
 
-[![Star History Chart](https://api.star-history.com/svg?repos=liaohch3/claude-tap&type=Date)](https://www.star-history.com/#liaohch3/claude-tap&Date)
+<a href="https://www.star-history.com/?repos=liaohch3%2Fclaude-tap&type=date&legend=bottom-right">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=liaohch3/claude-tap&type=date&theme=dark&legend=top-left" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=liaohch3/claude-tap&type=date&legend=top-left" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=liaohch3/claude-tap&type=date&legend=top-left" />
+  </picture>
+</a>
 
 ### 贡献者
 
