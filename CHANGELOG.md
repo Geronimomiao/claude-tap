@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+
+## [0.1.73] - 2026-05-17
+
+### Changed
+- fix viewer empty trace evidence quality (#184)
 ## [0.1.72] - 2026-05-17
 
 ### Changed
