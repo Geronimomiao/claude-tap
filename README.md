@@ -346,10 +346,7 @@ All flags are forwarded to the selected client, except these `--tap-*` ones:
 
 ## Viewer Features
 
-The "Why use it" section describes the outcomes; this section lists the concrete viewer controls available after a trace is captured.
-
-<details>
-<summary>Trace viewer capabilities</summary>
+### Trace viewer capabilities
 
 The viewer is a single self-contained HTML file (zero external dependencies):
 
@@ -363,8 +360,6 @@ The viewer is a single self-contained HTML file (zero external dependencies):
 - **Keyboard navigation** — `j`/`k` or arrow keys
 - **Copy helpers** — one-click copy of request JSON or cURL command
 - **i18n** — English, 简体中文, 日本語, 한국어, Français, العربية, Deutsch, Русский
-
-</details>
 
 ## Architecture
 

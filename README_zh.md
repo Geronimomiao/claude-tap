@@ -343,10 +343,7 @@ claude-tap --tap-no-open
 
 ## 查看器功能
 
-上面的“为什么用它”讲使用收益；这里列的是 trace 打开后 viewer 里能用的具体能力。
-
-<details>
-<summary>Trace 查看器能力</summary>
+### Trace 查看器能力
 
 查看器是一个自包含的 HTML 文件（零外部依赖）：
 
@@ -360,8 +357,6 @@ claude-tap --tap-no-open
 - **键盘导航** — `j`/`k` 或方向键
 - **复制助手** — 一键复制请求 JSON 或 cURL 命令
 - **多语言** — English, 简体中文, 日本語, 한국어, Français, العربية, Deutsch, Русский
-
-</details>
 
 ## 架构
 
