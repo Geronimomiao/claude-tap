@@ -11,7 +11,7 @@
 
 `claude-tap` 是给 AI 编程 agent 用的本地代理和 trace 查看器。把 CLI 通过它启动，就能看到真实 API 流量：system prompt、对话历史、工具 schema、工具调用、流式响应、token 用量和请求 diff。
 
-它支持 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Codex CLI](https://github.com/openai/codex)、[Gemini CLI](https://github.com/google-gemini/gemini-cli)、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)、[OpenCode](https://opencode.ai)、[Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)、[Hermes Agent](https://github.com/NousResearch/hermes-agent) 和 [Cursor CLI](https://cursor.com/cli)。
+它支持 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Codex CLI](https://github.com/openai/codex)、[Gemini CLI](https://github.com/google-gemini/gemini-cli)、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)、[OpenCode](https://opencode.ai)、[Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)、[Hermes Agent](https://github.com/NousResearch/hermes-agent)、[Cursor CLI](https://cursor.com/cli) 和 [Qoder CLI](https://qoder.com/cli)。
 
 <p align="center">
   <img src="docs/demo_zh.gif" alt="claude-tap 演示：真实 Codex trace" width="100%">
@@ -45,7 +45,7 @@
 - 🔎 **用证据定位问题**：对比相邻请求，明确是哪段 prompt、消息、工具或参数发生了变化。
 - 📦 **留下可分享证据**：每次运行都会写入 JSONL trace，并生成自包含 HTML 查看器，方便 review 或归档。
 - 🔒 **数据留在本机**：不依赖云端 dashboard；常见认证 header 会在记录前自动脱敏。
-- 🧩 **覆盖主流编码 CLI**：同一套流程可用于 Claude Code、Codex CLI、Gemini CLI、Kimi CLI、OpenCode、Pi、Hermes Agent 和 Cursor CLI。
+- 🧩 **覆盖主流编码 CLI**：同一套流程可用于 Claude Code、Codex CLI、Gemini CLI、Kimi CLI、OpenCode、Pi、Hermes Agent、Cursor CLI 和 Qoder CLI。
 
 ## 支持的客户端
 
@@ -59,6 +59,7 @@
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | Pi 会话，包括 OpenAI Codex OAuth 提供方 |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | 多提供方 Hermes TUI 或 gateway 会话 |
 | [Cursor CLI](https://cursor.com/cli) | Cursor Agent 会话，并导入可读的本地 transcript |
+| [Qoder CLI](https://qoder.com/cli) | 通过 forward proxy 捕获 Qoder Agent 会话 |
 
 ## 安装
 
@@ -99,6 +100,9 @@ claude-tap --tap-client pi -- --model openai-codex/gpt-5.3-codex-spark -p "hello
 
 # Cursor CLI
 claude-tap --tap-client cursor -- -p --trust --model auto "hello"
+
+# Qoder CLI
+claude-tap --tap-client qoder -- -p "hello" --permission-mode dont_ask
 ```
 
 <details>
@@ -294,6 +298,20 @@ claude-tap --tap-client cursor -- -p --trust --model auto --continue "continue"
 - [客户端支持矩阵](docs/support-matrix.md)：查看各客户端对应的环境变量、代理模式和 URL 改写规则。
 
 <details>
+<summary>Qoder CLI 示例</summary>
+
+Qoder CLI 会访问多个 Qoder 端点，因此 `--tap-client qoder` 默认使用 **forward proxy** 模式。
+
+```bash
+# 启动前需要先配置浏览器登录、PAT 或 job token。
+qodercli login
+
+claude-tap --tap-client qoder -- -p "hello" --permission-mode dont_ask
+```
+
+</details>
+
+<details>
 <summary>查看器、导出和高级选项</summary>
 
 ```bash
@@ -324,7 +342,7 @@ claude-tap --tap-no-open
 除以下 `--tap-*` 参数外，所有参数均透传给所选客户端：
 
 ```
---tap-client CLIENT      启动的客户端: claude（默认）/ codex / gemini / kimi / opencode / pi / hermes / cursor
+--tap-client CLIENT      启动的客户端: claude（默认）/ codex / gemini / kimi / opencode / pi / hermes / cursor / qoder
 --tap-target URL         上游 API 地址（默认: 根据客户端自动选择）
 --tap-live               启动实时查看器（自动打开浏览器）
 --tap-live-port PORT     实时查看器端口（默认: 自动分配）
@@ -336,7 +354,7 @@ claude-tap --tap-no-open
 --tap-max-traces N       最大保留 trace 数量（默认: 50，0 = 不限）
 --tap-no-update-check    禁用启动时的 PyPI 更新检查
 --tap-no-auto-update     仅检查更新，不自动下载
---tap-proxy-mode MODE    代理模式: reverse 或 forward（默认：claude/codex/kimi 用 reverse，gemini/opencode/pi/hermes/cursor 用 forward）
+--tap-proxy-mode MODE    代理模式: reverse 或 forward（默认：claude/codex/kimi 用 reverse，gemini/opencode/pi/hermes/cursor/qoder 用 forward）
 ```
 
 </details>

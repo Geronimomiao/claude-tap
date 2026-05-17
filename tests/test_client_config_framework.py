@@ -18,6 +18,7 @@ SUPPORTED_CLIENTS = {
     "pi",
     "hermes",
     "cursor",
+    "qoder",
 }
 
 SINGLE_REVERSE_ENV_CLIENTS = SUPPORTED_CLIENTS - {"gemini"}
@@ -31,6 +32,7 @@ SUPPORTED_DEFAULT_PROXY_MODES = {
     "pi": "forward",
     "hermes": "forward",
     "cursor": "forward",
+    "qoder": "forward",
 }
 
 
