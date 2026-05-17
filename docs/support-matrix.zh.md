@@ -1,6 +1,6 @@
 ---
 owner: claude-tap-maintainers
-last_reviewed: 2026-05-14
+last_reviewed: 2026-05-17
 source_of_truth: AGENTS.md
 ---
 
@@ -16,6 +16,7 @@ English version: [Support Matrix](support-matrix.md).
 | 客户端 | 认证方式 | 上游目标 | strip_path_prefix | 传输 | 状态 |
 |--------|----------|----------|-------------------|------|------|
 | Claude Code | API Key | `https://api.anthropic.com` | 无 | HTTP/SSE | 已验证 |
+| Claude Code | Claude 兼容网关（`ANTHROPIC_BASE_URL` 环境变量或 Claude settings） | 自定义 Anthropic 兼容上游 | 无 | HTTP/SSE | 单测覆盖；DeepSeek 真实 E2E 已验证 |
 | Codex CLI | API Key (`OPENAI_API_KEY`) | `https://api.openai.com` | 无 | HTTP/SSE | 已验证 |
 | Codex CLI | API Key (`OPENAI_API_KEY`) | `https://api.openai.com` | 无 | WebSocket | 已验证 |
 | Codex CLI | OAuth (`codex login`) | `https://chatgpt.com/backend-api/codex` | `/v1` | HTTP/SSE | 已验证 |

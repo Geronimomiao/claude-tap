@@ -2,7 +2,7 @@
 
 本文说明如何让 Claude Code 通过 DeepSeek 的 Anthropic 兼容 API 运行，并用 `claude-tap` 捕获这条流量。
 
-DeepSeek 官方 Claude Code 集成会把 Claude Code 指向 `https://api.deepseek.com/anthropic`，主模型使用 `deepseek-v4-pro[1m]`。如果同时使用 `claude-tap`，需要保留 DeepSeek 的认证和模型环境变量，但不要让 Claude Code 直接连接 DeepSeek；应由 `claude-tap` 把 Claude Code 指向本地代理，并通过 `--tap-target` 指定真实 DeepSeek 上游。
+DeepSeek 官方 Claude Code 集成会把 Claude Code 指向 `https://api.deepseek.com/anthropic`，主模型使用 `deepseek-v4-pro[1m]`。如果同时使用 `claude-tap`，继续保留这套 Claude Code 环境即可。`claude-tap` 会先从 `ANTHROPIC_BASE_URL` 读取 DeepSeek 上游，再把 Claude Code 指向本地代理。
 
 English version: [Claude Code with DeepSeek API](deepseek-claude-code.md).
 
@@ -20,33 +20,23 @@ export ANTHROPIC_DEFAULT_SONNET_MODEL="deepseek-v4-pro[1m]"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_SUBAGENT_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_EFFORT_LEVEL=max
-```
-
-如果不使用 `claude-tap`，直接运行 Claude Code，还需要设置 DeepSeek 官方文档中的 base URL：
-
-```bash
 export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ```
 
-如果要用 `claude-tap` 捕获流量，不要依赖已经存在的 `ANTHROPIC_BASE_URL`；reverse proxy 模式会为被启动的 Claude Code 进程改写它。
+`claude-tap` 会在改写被启动的 Claude Code 进程之前，把当前 `ANTHROPIC_BASE_URL` 作为真实上游目标。只有想手动覆盖时才需要传 `--tap-target`。
 
 ## 使用 claude-tap 捕获
 
-用显式 DeepSeek Anthropic 上游启动：
+正常启动 `claude-tap`：
 
 ```bash
-claude-tap \
-  --tap-proxy-mode reverse \
-  --tap-target https://api.deepseek.com/anthropic \
-  -- --permission-mode bypassPermissions
+claude-tap -- --permission-mode bypassPermissions
 ```
 
 一次性非交互 smoke test：
 
 ```bash
 claude-tap \
-  --tap-proxy-mode reverse \
-  --tap-target https://api.deepseek.com/anthropic \
   -- \
   --permission-mode bypassPermissions \
   -p 'Use Bash to run pwd, then reply with DEEPSEEK_CLAUDE_TAP_OK.'
@@ -70,9 +60,7 @@ claude-tap export .traces/2026-05-06/trace_153111.jsonl -o trace.html
 
 ```bash
 # macOS/Homebrew 常见路径是 /etc/ssl/cert.pem。
-SSL_CERT_FILE=/etc/ssl/cert.pem claude-tap \
-  --tap-proxy-mode reverse \
-  --tap-target https://api.deepseek.com/anthropic
+SSL_CERT_FILE=/etc/ssl/cert.pem claude-tap
 ```
 
 Debian/Ubuntu 的系统 CA bundle 通常是 `/etc/ssl/certs/ca-certificates.crt`。
@@ -93,7 +81,8 @@ DeepSeek 对 Claude Code 启动时的 `/v1/models?limit=1000` 预检可能返回
 - Claude Code `2.1.131`
 - Claude Code 主对话模型：`deepseek-v4-pro[1m]`
 - Claude Code 标题和辅助调用模型：`deepseek-v4-flash`
-- `claude-tap --tap-proxy-mode reverse --tap-target https://api.deepseek.com/anthropic`
+- `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`
+- `claude-tap`
 - `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`
 
 真实 tmux 串行运行结果：
