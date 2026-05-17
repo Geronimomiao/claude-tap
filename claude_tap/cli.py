@@ -200,6 +200,18 @@ CLIENT_CONFIGS: dict[str, ClientConfig] = {
         default_target="https://api2.cursor.sh",
         default_proxy_mode="forward",
     ),
+    "qoder": ClientConfig(
+        cmd="qodercli",
+        label="Qoder CLI",
+        install_url="https://qoder.com/cli",
+        # Qoder CLI talks to multiple Qoder endpoints and does not expose a
+        # reliable single-provider base URL override. Keep reverse-mode fields
+        # structurally valid, but default to forward proxy mode.
+        base_url_env="QODER_BASE_URL",
+        base_url_suffix="",
+        default_target="https://api2.qoder.sh",
+        default_proxy_mode="forward",
+    ),
 }
 
 
@@ -754,7 +766,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         prog="claude-tap",
         description=(
             "Trace Claude Code, Codex CLI, Gemini CLI, Kimi CLI, OpenCode, Pi, Hermes Agent, "
-            "or Cursor CLI API requests via a local proxy. All flags not listed below are "
+            "Cursor CLI, or Qoder CLI API requests via a local proxy. All flags not listed below are "
             "forwarded to the selected client."
         ),
         epilog=(
@@ -807,6 +819,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "cursor cli (defaults to forward proxy mode):\n"
             '  claude-tap --tap-client cursor -- -p --trust --model auto "hello"\n'
             "  # Cursor readable messages are imported from local transcripts after exit\n"
+            "\n"
+            "qoder cli (defaults to forward proxy mode):\n"
+            '  claude-tap --tap-client qoder -- -p "hello" --permission-mode dont_ask\n'
+            "  # Authenticate first with `qodercli login` or QODER_PERSONAL_ACCESS_TOKEN / QODER_JOB_TOKEN\n"
             "\n"
             "proxy-only mode (connect from another terminal):\n"
             "  claude-tap --tap-no-launch --tap-port 8080\n"
@@ -862,7 +878,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=(
             "'reverse' sets provider base URL, 'forward' sets HTTPS_PROXY with CONNECT/TLS termination. "
             "Default depends on the client: 'reverse' for claude/codex/kimi, "
-            "'forward' for gemini/opencode/pi/hermes/cursor."
+            "'forward' for gemini/opencode/pi/hermes/cursor/qoder."
         ),
     )
     proxy_group.add_argument(

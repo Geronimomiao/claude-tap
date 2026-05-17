@@ -32,6 +32,7 @@ English version: [Support Matrix](support-matrix.md).
 | Hermes Agent | 通过 `~/.hermes/` 配置 provider 凭据 | Forward proxy（任意 HTTPS 上游） | n/a | HTTP/SSE | 单测覆盖 |
 | Hermes Agent | 自定义 OpenAI 兼容 provider（`--tap-proxy-mode reverse`） | `https://api.openai.com` | `/v1` | HTTP/SSE | 单测覆盖 |
 | Cursor CLI | Cursor 登录（`cursor-agent login`） | Forward proxy 到 `https://api2.cursor.sh` | n/a | HTTPS/protobuf + 本地 transcript import | 真实 E2E 已验证 |
+| Qoder CLI | Qoder 登录 / `QODER_PERSONAL_ACCESS_TOKEN` / `QODER_JOB_TOKEN` | Forward proxy（Qoder 端点） | n/a | HTTP/SSE | 真实 E2E 已验证 |
 
 ## 各客户端默认代理模式
 
@@ -47,6 +48,7 @@ English version: [Support Matrix](support-matrix.md).
 | `pi` | `forward` | 多 provider；Pi 可以使用 OpenAI Codex OAuth 和自定义 model registry provider，forward proxy 不依赖单一 base URL 覆盖即可捕获流量 |
 | `hermes` | `forward` | 多 provider 的 Python agent；`httpx` 与 `requests` 都原生认 `HTTPS_PROXY`，forward proxy 捕获是最自然的默认 |
 | `cursor` | `forward` | Cursor CLI 没有 base URL 覆盖能力；forward proxy 捕获网络流量，本地 transcript 提供可读对话 |
+| `qoder` | `forward` | Qoder CLI 会访问多个 Qoder 服务端点，且没有可靠的单一 base URL 覆盖能力 |
 
 用户始终可以通过 `--tap-proxy-mode {reverse,forward}` 显式覆盖。
 
@@ -108,6 +110,7 @@ strip = CLIENT_CONFIGS[client].reverse_strip_path_prefix(target)
 - `test_run_client_cursor_forward_sets_proxy_ca_and_no_proxy`：验证 Cursor forward proxy 启动环境变量
 - `test_import_cursor_transcripts_appends_viewer_friendly_records`：验证 Cursor transcript import 会追加 viewer 友好的记录
 - `test_import_cursor_transcripts_preserves_tool_uses`：验证 Cursor tool_use block 能在 viewer trace shape 中渲染
+- `test_qoder_*`：验证 Qoder 注册、parse_args 默认模式解析、forward/reverse 环境变量和参数透传
 
 ### 手动验证（代理变更合入前）
 
@@ -124,6 +127,10 @@ uv run python -m claude_tap --tap-client codex \
 # Cursor CLI
 uv run python -m claude_tap --tap-client cursor -- -p --trust --model auto "Reply OK"
 # 验证 trace 同时包含 raw proxy records 和 cursor-transcript records
+
+# Qoder CLI
+uv run python -m claude_tap --tap-client qoder -- -p "Reply OK" --permission-mode dont_ask
+# 验证 stdout 包含 assistant 响应，trace 包含 Qoder 端点记录
 
 # Kimi CLI
 uv run python -m claude_tap --tap-client kimi -- --thinking

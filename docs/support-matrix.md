@@ -32,6 +32,7 @@ Simplified Chinese version: [支持矩阵](support-matrix.zh.md).
 | Hermes Agent | Provider creds via `~/.hermes/` | Forward proxy (any HTTPS upstream) | n/a | HTTP/SSE | Unit-tested |
 | Hermes Agent | Custom OpenAI-compatible provider (`--tap-proxy-mode reverse`) | `https://api.openai.com` | `/v1` | HTTP/SSE | Unit-tested |
 | Cursor CLI | Cursor login (`cursor-agent login`) | Forward proxy to `https://api2.cursor.sh` | n/a | HTTPS/protobuf + local transcript import | Real E2E verified |
+| Qoder CLI | Qoder login / `QODER_PERSONAL_ACCESS_TOKEN` / `QODER_JOB_TOKEN` | Forward proxy (Qoder endpoints) | n/a | HTTP/SSE | Real E2E verified |
 
 ## Default Proxy Mode by Client
 
@@ -48,6 +49,7 @@ Each client in `CLIENT_CONFIGS` declares a `default_proxy_mode` used when
 | `pi` | `forward` | Multi-provider; Pi can use OpenAI Codex OAuth and custom model registry providers, so forward proxy captures traffic without relying on a single base URL override |
 | `hermes` | `forward` | Multi-provider Python agent; `httpx` and `requests` honor `HTTPS_PROXY` natively, so forward proxy capture is the natural default |
 | `cursor` | `forward` | Cursor CLI has no base URL override; forward proxy captures network traffic and local transcripts provide readable turns |
+| `qoder` | `forward` | Qoder CLI uses multiple Qoder service endpoints and has no reliable single base URL override |
 
 Users can always override with `--tap-proxy-mode {reverse,forward}`.
 
@@ -114,6 +116,7 @@ strip = CLIENT_CONFIGS[client].reverse_strip_path_prefix(target)
 - `test_run_client_cursor_forward_sets_proxy_ca_and_no_proxy` — verifies Cursor launch env for forward proxy mode
 - `test_import_cursor_transcripts_appends_viewer_friendly_records` — verifies readable Cursor transcript import
 - `test_import_cursor_transcripts_preserves_tool_uses` — verifies Cursor tool_use blocks render in the viewer trace shape
+- `test_qoder_*` — verifies Qoder registration, parse_args default-mode resolution, forward/reverse env, and argument preservation
 
 ### Manual (pre-merge for proxy changes)
 
@@ -130,6 +133,10 @@ uv run python -m claude_tap --tap-client codex \
 # Cursor CLI
 uv run python -m claude_tap --tap-client cursor -- -p --trust --model auto "Reply OK"
 # Verify the trace contains raw proxy records plus cursor-transcript records
+
+# Qoder CLI
+uv run python -m claude_tap --tap-client qoder -- -p "Reply OK" --permission-mode dont_ask
+# Verify stdout contains the assistant response and the trace contains Qoder endpoint records
 
 # Kimi CLI
 uv run python -m claude_tap --tap-client kimi -- --thinking

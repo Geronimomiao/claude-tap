@@ -40,15 +40,37 @@ HOP_BY_HOP = frozenset(
     }
 )
 
+SENSITIVE_HEADER_KEYS = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "set-cookie2",
+        "x-api-key",
+        # Qoder/Cosy runtime headers can carry account, machine, or token-derived
+        # identifiers and must not be persisted in trace evidence.
+        "cosy-key",
+        "cosy-machinetoken",
+        "cosy-machine-token",
+        "cosy-machineid",
+        "cosy-machine-id",
+        "cosy-machinetype",
+        "cosy-machine-type",
+        "cosy-user",
+    }
+)
+PREFIX_REDACTED_HEADER_KEYS = frozenset({"authorization", "x-api-key"})
+
 
 def filter_headers(headers: dict[str, str], *, redact_keys: bool = False) -> dict[str, str]:
     """Filter hop-by-hop headers and optionally redact sensitive values."""
     out: dict[str, str] = {}
     for k, v in headers.items():
-        if k.lower() in HOP_BY_HOP:
+        key = k.lower()
+        if key in HOP_BY_HOP:
             continue
-        if redact_keys and k.lower() in ("x-api-key", "authorization"):
-            out[k] = v[:12] + "..." if len(v) > 12 else "***"
+        if redact_keys and key in SENSITIVE_HEADER_KEYS:
+            out[k] = v[:12] + "..." if key in PREFIX_REDACTED_HEADER_KEYS and len(v) > 12 else "***"
         else:
             out[k] = v
     return out
@@ -401,7 +423,7 @@ def _build_record(
         },
         "response": {
             "status": status,
-            "headers": filter_headers(resp_headers),
+            "headers": filter_headers(resp_headers, redact_keys=True),
             "body": resp_body,
         },
     }

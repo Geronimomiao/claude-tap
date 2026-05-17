@@ -1786,6 +1786,13 @@ def test_filter_headers():
         "Content-Type": "application/json",
         "x-api-key": "sk-ant-api03-very-long-secret-key-12345678",
         "Authorization": "Bearer sk-ant-secret-token-abcdef",
+        "Cookie": "session=qoder-cookie-secret",
+        "Set-Cookie": "acw_tc=qoder-response-cookie-secret; Path=/",
+        "Cosy-Key": "cosy-signature-secret-value",
+        "Cosy-MachineToken": "qoder-machine-token-secret-value",
+        "Cosy-MachineId": "qoder-machine-id-secret-value",
+        "Cosy-MachineType": "qoder-machine-type-secret-value",
+        "Cosy-User": "qoder-user-id-secret-value",
         "Transfer-Encoding": "chunked",
         "Connection": "keep-alive",
         "X-Custom": "custom-value",
@@ -1796,6 +1803,7 @@ def test_filter_headers():
     assert "Transfer-Encoding" not in out, "hop-by-hop not filtered"
     assert "Connection" not in out, "hop-by-hop not filtered"
     assert out["x-api-key"] == headers["x-api-key"], "should not redact without flag"
+    assert out["Cosy-Key"] == headers["Cosy-Key"], "should not redact without flag"
     assert out["X-Custom"] == "custom-value"
     print("  OK: hop-by-hop filtered, no redaction")
 
@@ -1805,6 +1813,20 @@ def test_filter_headers():
     assert "very-long-secret" not in out["x-api-key"]
     assert out["Authorization"].endswith("...")
     assert "secret-token" not in out["Authorization"]
+    assert out["Cookie"] == "***"
+    assert "cookie-secret" not in out["Cookie"]
+    assert out["Set-Cookie"] == "***"
+    assert "response-cookie-secret" not in out["Set-Cookie"]
+    assert out["Cosy-Key"] == "***"
+    assert "signature-secret" not in out["Cosy-Key"]
+    assert out["Cosy-MachineToken"] == "***"
+    assert "machine-token-secret" not in out["Cosy-MachineToken"]
+    assert out["Cosy-MachineId"] == "***"
+    assert "machine-id-secret" not in out["Cosy-MachineId"]
+    assert out["Cosy-MachineType"] == "***"
+    assert "machine-type-secret" not in out["Cosy-MachineType"]
+    assert out["Cosy-User"] == "***"
+    assert "user-id-secret" not in out["Cosy-User"]
     assert out["Content-Type"] == "application/json"
     assert out["X-Custom"] == "custom-value"
     print("  OK: secrets redacted")

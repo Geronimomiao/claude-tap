@@ -11,7 +11,7 @@
 
 `claude-tap` is a local proxy and trace viewer for AI coding agents. Run your CLI through it, then inspect the real API traffic: system prompts, conversation history, tool schemas, tool calls, streaming responses, token usage, and request diffs.
 
-It works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Kimi CLI](https://github.com/MoonshotAI/kimi-cli), [OpenCode](https://opencode.ai), [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [Hermes Agent](https://github.com/NousResearch/hermes-agent), and [Cursor CLI](https://cursor.com/cli).
+It works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Kimi CLI](https://github.com/MoonshotAI/kimi-cli), [OpenCode](https://opencode.ai), [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [Hermes Agent](https://github.com/NousResearch/hermes-agent), [Cursor CLI](https://cursor.com/cli), and [Qoder CLI](https://qoder.com/cli).
 
 <p align="center">
   <img src="docs/demo.gif" alt="claude-tap demo showing a real Codex trace" width="100%">
@@ -45,7 +45,7 @@ It works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Co
 - 🔎 **Debug behavior with evidence**: compare adjacent requests and pinpoint which prompt, message, tool, or parameter changed.
 - 📦 **Share one portable artifact**: each run writes a JSONL trace and a self-contained HTML viewer for review or archiving.
 - 🔒 **Keep traces on your machine**: no hosted dashboard is required, and common auth headers are redacted before recording.
-- 🧩 **Use one workflow across clients**: trace Claude Code, Codex CLI, Gemini CLI, Kimi CLI, OpenCode, Pi, Hermes Agent, and Cursor CLI.
+- 🧩 **Use one workflow across clients**: trace Claude Code, Codex CLI, Gemini CLI, Kimi CLI, OpenCode, Pi, Hermes Agent, Cursor CLI, and Qoder CLI.
 
 ## Supported Clients
 
@@ -59,6 +59,7 @@ It works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Co
 | [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) | Pi sessions, including OpenAI Codex OAuth providers |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Multi-provider Hermes TUI or gateway sessions |
 | [Cursor CLI](https://cursor.com/cli) | Cursor Agent sessions plus readable local transcript import |
+| [Qoder CLI](https://qoder.com/cli) | Qoder Agent sessions through forward proxy mode |
 
 ## Install
 
@@ -99,6 +100,9 @@ claude-tap --tap-client pi -- --model openai-codex/gpt-5.3-codex-spark -p "hello
 
 # Cursor CLI
 claude-tap --tap-client cursor -- -p --trust --model auto "hello"
+
+# Qoder CLI
+claude-tap --tap-client qoder -- -p "hello" --permission-mode dont_ask
 ```
 
 <details>
@@ -297,6 +301,20 @@ claude-tap --tap-client cursor -- -p --trust --model auto --continue "continue"
 - [Client support matrix](docs/support-matrix.md) for exact environment variables, proxy modes, and URL rewrite rules.
 
 <details>
+<summary>Qoder CLI examples</summary>
+
+Qoder CLI talks to multiple Qoder endpoints, so claude-tap defaults to **forward proxy** mode for `--tap-client qoder`.
+
+```bash
+# Browser login, PAT, or job token must be configured before launch.
+qodercli login
+
+claude-tap --tap-client qoder -- -p "hello" --permission-mode dont_ask
+```
+
+</details>
+
+<details>
 <summary>Viewer, export, and advanced options</summary>
 
 ```bash
@@ -327,7 +345,7 @@ In proxy-only mode, start your client in another terminal and point its base URL
 All flags are forwarded to the selected client, except these `--tap-*` ones:
 
 ```
---tap-client CLIENT      Client to launch: claude (default), codex, gemini, kimi, opencode, pi, hermes, or cursor
+--tap-client CLIENT      Client to launch: claude (default), codex, gemini, kimi, opencode, pi, hermes, cursor, or qoder
 --tap-target URL         Upstream API URL (default: auto per client)
 --tap-live               Start real-time viewer (auto-opens browser)
 --tap-live-port PORT     Port for live viewer server (default: auto)
@@ -339,7 +357,7 @@ All flags are forwarded to the selected client, except these `--tap-*` ones:
 --tap-max-traces N       Max trace sessions to keep (default: 50, 0 = unlimited)
 --tap-no-update-check    Disable PyPI update check on startup
 --tap-no-auto-update     Check for updates but don't auto-download
---tap-proxy-mode MODE    Proxy mode: reverse or forward (default: reverse for claude/codex/kimi, forward for gemini/opencode/pi/hermes/cursor)
+--tap-proxy-mode MODE    Proxy mode: reverse or forward (default: reverse for claude/codex/kimi, forward for gemini/opencode/pi/hermes/cursor/qoder)
 ```
 
 </details>
