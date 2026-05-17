@@ -9,7 +9,9 @@
 
 [中文文档](README_zh.md)
 
-Intercept and inspect all API traffic from [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Kimi CLI](https://github.com/MoonshotAI/kimi-cli), [OpenCode](https://opencode.ai), [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [Hermes Agent](https://github.com/NousResearch/hermes-agent), or [Cursor CLI](https://cursor.com/cli). See exactly how they construct system prompts, manage conversation history, select tools, and use tokens — in a beautiful trace viewer.
+`claude-tap` is a local proxy and trace viewer for AI coding agents. Run your CLI through it, then inspect the real API traffic: system prompts, conversation history, tool schemas, tool calls, streaming responses, token usage, and request diffs.
+
+It works with [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex CLI](https://github.com/openai/codex), [Gemini CLI](https://github.com/google-gemini/gemini-cli), [Kimi CLI](https://github.com/MoonshotAI/kimi-cli), [OpenCode](https://opencode.ai), [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent), [Hermes Agent](https://github.com/NousResearch/hermes-agent), and [Cursor CLI](https://cursor.com/cli).
 
 ![Demo](docs/demo.gif)
 
@@ -26,9 +28,30 @@ Intercept and inspect all API traffic from [Claude Code](https://docs.anthropic.
 
 > **OpenClaw:** If you are integrating claude-tap with OpenClaw, read the [OpenClaw setup guide](docs/guides/OPENCLAW_README.md). Simplified Chinese version: [OpenClaw 设置指南](docs/guides/OPENCLAW_README.zh.md).
 
+## Why use it
+
+- **See what the agent really sent**: prompts, messages, tool definitions, tool inputs, tool results, response chunks, and usage.
+- **Debug agent behavior faster**: compare consecutive requests with structural and character-level diffs.
+- **Use real evidence**: every run writes a JSONL trace plus a self-contained HTML viewer you can share or archive.
+- **Works across client architectures**: reverse proxy for base-URL clients, forward proxy for multi-provider clients.
+- **No cloud dashboard required**: traces stay on your machine; common auth headers are redacted from recorded requests.
+
+## Supported Clients
+
+| Client | Default capture mode | Typical use |
+|--------|----------------------|-------------|
+| Claude Code | Reverse proxy | Anthropic API or Claude-compatible gateways such as DeepSeek / GLM |
+| Codex CLI | Reverse proxy | OpenAI API key mode or ChatGPT subscription OAuth |
+| Gemini CLI | Forward proxy | Google OAuth / Code Assist traffic across Google endpoints |
+| Kimi CLI | Reverse proxy | Kimi Code or Moonshot Open Platform |
+| OpenCode | Forward proxy | Multi-provider OpenCode sessions |
+| Pi | Forward proxy | Pi sessions, including OpenAI Codex OAuth providers |
+| Hermes Agent | Forward proxy | Multi-provider Hermes TUI or gateway sessions |
+| Cursor CLI | Forward proxy | Cursor Agent sessions plus readable local transcript import |
+
 ## Install
 
-Requires Python 3.11+ and the client you want to trace: [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (default), [Codex CLI](https://github.com/openai/codex) for `--tap-client codex`, [Gemini CLI](https://github.com/google-gemini/gemini-cli) for `--tap-client gemini`, [Kimi CLI](https://github.com/MoonshotAI/kimi-cli) for `--tap-client kimi`, [OpenCode](https://opencode.ai) for `--tap-client opencode`, [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) for `--tap-client pi`, [Hermes Agent](https://github.com/NousResearch/hermes-agent) for `--tap-client hermes`, or [Cursor CLI](https://cursor.com/cli) for `--tap-client cursor`.
+Requires Python 3.11+ and the client you want to trace.
 
 ```bash
 # Recommended
@@ -42,7 +65,7 @@ Upgrade: `claude-tap update`, `uv tool upgrade claude-tap`, or `pip install --up
 
 ## Quick Start
 
-Run the client you want to inspect through `claude-tap`:
+Run the client you want to inspect through `claude-tap`. Flags after `--` are passed to the selected client.
 
 ```bash
 # Claude Code
@@ -66,8 +89,6 @@ claude-tap --tap-client pi -- --model openai-codex/gpt-5.3-codex-spark -p "hello
 # Cursor CLI
 claude-tap --tap-client cursor -- -p --trust --model auto "hello"
 ```
-
-Flags that are not `--tap-*` are forwarded to the selected client after `--`.
 
 <details>
 <summary>Claude Code examples</summary>
@@ -105,16 +126,14 @@ export ANTHROPIC_DEFAULT_SONNET_MODEL="deepseek-v4-pro[1m]"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_SUBAGENT_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_EFFORT_LEVEL=max
+export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ```
 
 ```bash
-claude-tap \
-  --tap-proxy-mode reverse \
-  --tap-target https://api.deepseek.com/anthropic \
-  -- --permission-mode bypassPermissions
+claude-tap -- --permission-mode bypassPermissions
 ```
 
-Set `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` only for direct Claude Code usage. When capturing with `claude-tap`, use `--tap-target` for the DeepSeek upstream.
+`claude-tap` reads the DeepSeek upstream from `ANTHROPIC_BASE_URL`, then launches Claude Code against the local proxy. Use `--tap-target https://api.deepseek.com/anthropic` only as a manual override.
 
 </details>
 
@@ -332,8 +351,8 @@ GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:8080 GOOGLE_VERTEX_BASE_URL=http://127.0
 # Trace Claude Code with live viewer and auto-accept
 claude-tap --tap-live -- --dangerously-skip-permissions
 
-# Trace Codex (OAuth) with live viewer and full auto
-claude-tap --tap-client codex --tap-target https://chatgpt.com/backend-api/codex --tap-live -- --full-auto
+# Trace Codex with live viewer and full auto
+claude-tap --tap-client codex --tap-live -- --full-auto
 
 # Save traces to a custom directory
 claude-tap --tap-output-dir ./my-traces

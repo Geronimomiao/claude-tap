@@ -9,7 +9,9 @@
 
 [English](README.md)
 
-拦截并查看 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Codex CLI](https://github.com/openai/codex)、[Gemini CLI](https://github.com/google-gemini/gemini-cli)、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)、[OpenCode](https://opencode.ai)、[Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)、[Hermes Agent](https://github.com/NousResearch/hermes-agent) 或 [Cursor CLI](https://cursor.com/cli) 的所有 API 流量。看清它们如何构造 system prompt、管理对话历史、选择工具、优化 token 用量——通过一个美观的 trace 查看器。
+`claude-tap` 是给 AI 编程 agent 用的本地代理和 trace 查看器。把 CLI 通过它启动，就能看到真实 API 流量：system prompt、对话历史、工具 schema、工具调用、流式响应、token 用量和请求 diff。
+
+它支持 [Claude Code](https://docs.anthropic.com/en/docs/claude-code)、[Codex CLI](https://github.com/openai/codex)、[Gemini CLI](https://github.com/google-gemini/gemini-cli)、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)、[OpenCode](https://opencode.ai)、[Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)、[Hermes Agent](https://github.com/NousResearch/hermes-agent) 和 [Cursor CLI](https://cursor.com/cli)。
 
 ![演示](docs/demo_zh.gif)
 
@@ -26,9 +28,30 @@
 
 > **OpenClaw：** 如果你要在 OpenClaw 中集成 claude-tap，请阅读 [OpenClaw 设置指南](docs/guides/OPENCLAW_README.zh.md)。英文版见 [OpenClaw setup guide](docs/guides/OPENCLAW_README.md)。
 
+## 为什么用它
+
+- **看见 agent 真正发了什么**：prompt、messages、tool 定义、tool 输入输出、response chunk 和 token usage。
+- **更快定位 agent 行为问题**：用结构化 diff 和字符级 diff 对比相邻请求。
+- **留下可分享证据**：每次运行都会写 JSONL trace，并生成自包含 HTML 查看器。
+- **覆盖不同客户端架构**：支持 base URL 客户端的 reverse proxy，也支持多 provider 客户端的 forward proxy。
+- **不用云端 dashboard**：trace 保留在本机；常见认证 header 会自动脱敏。
+
+## 支持的客户端
+
+| 客户端 | 默认捕获方式 | 典型用途 |
+|--------|--------------|----------|
+| Claude Code | Reverse proxy | Anthropic API，或 DeepSeek / GLM 等 Claude 兼容网关 |
+| Codex CLI | Reverse proxy | OpenAI API key 模式，或 ChatGPT 订阅 OAuth |
+| Gemini CLI | Forward proxy | Google OAuth / Code Assist 的多 Google 端点流量 |
+| Kimi CLI | Reverse proxy | Kimi Code 或 Moonshot Open Platform |
+| OpenCode | Forward proxy | 多 provider OpenCode 会话 |
+| Pi | Forward proxy | Pi 会话，包括 OpenAI Codex OAuth provider |
+| Hermes Agent | Forward proxy | 多 provider Hermes TUI 或 gateway 会话 |
+| Cursor CLI | Forward proxy | Cursor Agent 会话，并导入可读的本地 transcript |
+
 ## 安装
 
-需要 Python 3.11+ 以及要追踪的客户端：[Claude Code](https://docs.anthropic.com/en/docs/claude-code)（默认）、[Codex CLI](https://github.com/openai/codex)（`--tap-client codex` 时）、[Gemini CLI](https://github.com/google-gemini/gemini-cli)（`--tap-client gemini` 时）、[Kimi CLI](https://github.com/MoonshotAI/kimi-cli)（`--tap-client kimi` 时）、[OpenCode](https://opencode.ai)（`--tap-client opencode` 时）、[Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)（`--tap-client pi` 时）、[Hermes Agent](https://github.com/NousResearch/hermes-agent)（`--tap-client hermes` 时）、或 [Cursor CLI](https://cursor.com/cli)（`--tap-client cursor` 时）。
+需要 Python 3.11+，以及你要追踪的客户端。
 
 ```bash
 # 推荐
@@ -42,7 +65,7 @@ pip install claude-tap
 
 ## 快速开始
 
-用 `claude-tap` 启动你想观察的客户端：
+用 `claude-tap` 启动你想观察的客户端。`--` 后面的参数会透传给所选客户端。
 
 ```bash
 # Claude Code
@@ -66,8 +89,6 @@ claude-tap --tap-client pi -- --model openai-codex/gpt-5.3-codex-spark -p "hello
 # Cursor CLI
 claude-tap --tap-client cursor -- -p --trust --model auto "hello"
 ```
-
-非 `--tap-*` 参数会在 `--` 后透传给所选客户端。
 
 <details>
 <summary>Claude Code 更多示例</summary>
@@ -104,16 +125,14 @@ export ANTHROPIC_DEFAULT_SONNET_MODEL="deepseek-v4-pro[1m]"
 export ANTHROPIC_DEFAULT_HAIKU_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_SUBAGENT_MODEL="deepseek-v4-flash"
 export CLAUDE_CODE_EFFORT_LEVEL=max
+export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
 ```
 
 ```bash
-claude-tap \
-  --tap-proxy-mode reverse \
-  --tap-target https://api.deepseek.com/anthropic \
-  -- --permission-mode bypassPermissions
+claude-tap -- --permission-mode bypassPermissions
 ```
 
-直接运行 Claude Code 时才设置 `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`；通过 `claude-tap` 捕获时用 `--tap-target` 指定 DeepSeek 上游。
+`claude-tap` 会从 `ANTHROPIC_BASE_URL` 读取 DeepSeek 上游，再把 Claude Code 指向本地代理。只有手动覆盖时才需要 `--tap-target https://api.deepseek.com/anthropic`。
 
 </details>
 
@@ -329,8 +348,8 @@ GOOGLE_GEMINI_BASE_URL=http://127.0.0.1:8080 GOOGLE_VERTEX_BASE_URL=http://127.0
 # 追踪 Claude Code：实时查看器 + 自动批准
 claude-tap --tap-live -- --dangerously-skip-permissions
 
-# 追踪 Codex（OAuth）：实时查看器 + 全自动
-claude-tap --tap-client codex --tap-target https://chatgpt.com/backend-api/codex --tap-live -- --full-auto
+# 追踪 Codex：实时查看器 + 全自动
+claude-tap --tap-client codex --tap-live -- --full-auto
 
 # 自定义 trace 输出目录
 claude-tap --tap-output-dir ./my-traces
