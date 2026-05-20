@@ -212,6 +212,15 @@ CLIENT_CONFIGS: dict[str, ClientConfig] = {
         default_target="https://api2.qoder.sh",
         default_proxy_mode="forward",
     ),
+    "agy": ClientConfig(
+        cmd="agy",
+        label="Antigravity CLI",
+        install_url="https://antigravity.dev",
+        base_url_env="AGY_BASE_URL",
+        base_url_suffix="",
+        default_target="https://antigravity.goog",
+        default_proxy_mode="forward",
+    ),
 }
 
 
