@@ -497,7 +497,8 @@ async def async_main(args: argparse.Namespace):
         print(f"🌐 Live viewer: {live_server.url}")
         _open_browser(live_server.url)
 
-    writer = TraceWriter(trace_path, live_server=live_server)
+    trace_metadata = {"client": args.client, "proxy_mode": args.proxy_mode}
+    writer = TraceWriter(trace_path, live_server=live_server, metadata=trace_metadata)
 
     # Proxy logs go to file, not terminal (avoids polluting Claude TUI)
     file_handler = logging.FileHandler(log_path, encoding="utf-8")
@@ -644,7 +645,7 @@ async def async_main(args: argparse.Namespace):
         trace_files = [_rel_posix(trace_path, output_dir), _rel_posix(log_path, output_dir)]
         if html_path.exists():
             trace_files.append(_rel_posix(html_path, output_dir))
-        _register_trace(output_dir, ts, trace_files)
+        _register_trace(output_dir, ts, trace_files, metadata=trace_metadata)
         if args.max_traces > 0:
             cleaned = _cleanup_traces(output_dir, args.max_traces)
             if cleaned:
@@ -1014,7 +1015,9 @@ async def dashboard_main(args: argparse.Namespace) -> int:
     date_dir.mkdir(parents=True, exist_ok=True)
     trace_path = date_dir / f"dashboard_{now.strftime('%H%M%S')}.jsonl"
 
-    server = LiveViewerServer(trace_path, port=args.live_port, host=args.host, output_dir=output_dir)
+    server = LiveViewerServer(
+        trace_path, port=args.live_port, host=args.host, output_dir=output_dir, dashboard_mode=True
+    )
     await server.start()
     print(f"🌐 claude-tap dashboard: {server.url}")
     print(f"📁 Trace directory: {output_dir}")
@@ -1166,7 +1169,7 @@ def _save_manifest(output_dir: Path, manifest: dict) -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def _register_trace(output_dir: Path, ts: str, trace_files: list[str]) -> dict:
+def _register_trace(output_dir: Path, ts: str, trace_files: list[str], metadata: dict[str, str] | None = None) -> dict:
     """Register a new trace session in the manifest."""
     manifest = _load_manifest(output_dir)
     entry = {
@@ -1174,6 +1177,8 @@ def _register_trace(output_dir: Path, ts: str, trace_files: list[str]) -> dict:
         "files": trace_files,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if metadata:
+        entry.update(metadata)
     manifest["traces"].append(entry)
     _save_manifest(output_dir, manifest)
     return manifest

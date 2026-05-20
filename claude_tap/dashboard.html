@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>claude-tap dashboard</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f7f4;
+  --panel: #ffffff;
+  --panel-soft: #f0f3f1;
+  --line: #d9ded9;
+  --line-strong: #b9c2ba;
+  --ink: #202722;
+  --muted: #667069;
+  --faint: #909991;
+  --blue: #266df0;
+  --blue-soft: #e9f0ff;
+  --green: #009b6a;
+  --green-soft: #e3f6ee;
+  --orange: #bd6b00;
+  --orange-soft: #fff0dc;
+  --red: #bd2f35;
+  --red-soft: #ffe8e9;
+  --mono: "SFMono-Regular", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --sans: "Avenir Next", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--line-strong);
+  background: #fbfcfb;
+}
+
+button.active {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.app {
+  display: grid;
+  grid-template-rows: 54px 1fr;
+  height: 100vh;
+  min-height: 640px;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: 220px 1fr auto;
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.searchbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 420px) 170px 120px;
+  gap: 10px;
+  align-items: center;
+}
+
+.searchbar input,
+.searchbar select {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  padding: 0 10px;
+}
+
+.topstats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(0, 155, 106, 0.12);
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 190px minmax(320px, 430px) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.agents,
+.sessions,
+.detail {
+  min-height: 0;
+  overflow: auto;
+}
+
+.agents {
+  border-right: 1px solid var(--line);
+  background: #fbfcfb;
+  padding: 16px 12px;
+}
+
+.section-title {
+  margin: 0 0 10px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agent-list {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  text-align: left;
+}
+
+.agent-button span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.count {
+  min-width: 24px;
+  height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: center;
+}
+
+.sessions {
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.session-list-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(8px);
+}
+
+.refresh-button {
+  width: 32px;
+  height: 28px;
+  font-family: var(--mono);
+}
+
+.session-list {
+  display: grid;
+}
+
+.session-row {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--panel);
+  text-align: left;
+}
+
+.session-row:hover,
+.session-row.active {
+  background: #f7faff;
+}
+
+.session-row.active {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.session-top,
+.session-meta,
+.metric-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-top {
+  justify-content: space-between;
+}
+
+.session-agent {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--panel-soft);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.badge.active {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.badge.error {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.badge.empty {
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+
+.session-preview {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.metric-row {
+  flex-wrap: wrap;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.detail {
+  background: var(--bg);
+  padding: 18px;
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
+  color: var(--muted);
+}
+
+.detail-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.detail-title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.detail-subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.tabs,
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tabs button,
+.actions button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.metric {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 10px;
+}
+
+.metric label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  font-family: var(--mono);
+  font-size: 17px;
+}
+
+.records {
+  display: grid;
+  gap: 10px;
+}
+
+.record {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.record-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.record-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.record-title strong {
+  font-family: var(--mono);
+}
+
+.path {
+  color: var(--muted);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.bubble {
+  display: grid;
+  gap: 6px;
+  max-width: 980px;
+}
+
+.bubble-label {
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bubble-body {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+  line-height: 1.48;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bubble.assistant .bubble-body {
+  background: #f6f9ff;
+  border-color: #d5e2ff;
+}
+
+.json-panel {
+  display: none;
+  margin: 0 12px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #101612;
+  color: #dce9de;
+  overflow: auto;
+}
+
+.json-panel.open {
+  display: block;
+}
+
+pre {
+  margin: 0;
+  padding: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.hidden {
+  display: none !important;
+}
+
+@media (max-width: 1120px) {
+  .topbar {
+    grid-template-columns: 1fr;
+    height: auto;
+    padding: 12px;
+  }
+
+  .searchbar {
+    grid-template-columns: 1fr 140px 110px;
+  }
+
+  .app {
+    grid-template-rows: auto 1fr;
+  }
+
+  .main {
+    grid-template-columns: 160px minmax(280px, 360px) minmax(0, 1fr);
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(110px, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .main {
+    grid-template-columns: 1fr;
+  }
+
+  .agents,
+  .sessions {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .searchbar {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand"><span class="mark">ct</span><span>claude-tap</span></div>
+    <div class="searchbar">
+      <input id="search" type="search" placeholder="Search sessions, prompts, models, paths">
+      <select id="date-filter"></select>
+      <select id="status-filter">
+        <option value="all">All status</option>
+        <option value="active">Active</option>
+        <option value="complete">Complete</option>
+        <option value="error">Error</option>
+        <option value="empty">Empty</option>
+      </select>
+    </div>
+    <div class="topstats">
+      <span id="top-summary">0 sessions</span>
+      <span class="live-pill"><span class="live-dot"></span><span id="live-label">Watching</span></span>
+    </div>
+  </header>
+
+  <main class="main">
+    <aside class="agents">
+      <h2 class="section-title">Agents</h2>
+      <div id="agent-list" class="agent-list"></div>
+    </aside>
+
+    <section class="sessions">
+      <div class="session-list-header">
+        <h2 class="section-title" style="margin:0">Sessions</h2>
+        <button id="refresh" class="refresh-button" title="Refresh">R</button>
+      </div>
+      <div id="session-list" class="session-list"></div>
+    </section>
+
+    <section id="detail" class="detail">
+      <div class="empty">No trace sessions found.</div>
+    </section>
+  </main>
+</div>
+
+<script>
+const state = {
+  sessions: [],
+  selectedAgent: "all",
+  selectedSessionId: null,
+  activeTab: "conversation",
+  search: "",
+  date: "all",
+  status: "all",
+};
+
+const $ = selector => document.querySelector(selector);
+
+function fmtNumber(value) {
+  return Number(value || 0).toLocaleString();
+}
+
+function fmtTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function esc(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function fetchJSON(url) {
+  const response = await fetch(url, {cache: "no-store"});
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return await response.json();
+}
+
+function filteredSessions() {
+  const needle = state.search.trim().toLowerCase();
+  return state.sessions.filter(session => {
+    if (state.selectedAgent !== "all" && session.agent_key !== state.selectedAgent) return false;
+    if (state.date !== "all" && session.date !== state.date) return false;
+    if (state.status !== "all" && session.status !== state.status) return false;
+    if (!needle) return true;
+    const haystack = [
+      session.agent,
+      session.model,
+      session.first_user,
+      session.last_response,
+      session.rel_trace_path,
+      session.status,
+    ].join(" ").toLowerCase();
+    return haystack.includes(needle);
+  });
+}
+
+async function refreshSessions({preserveSelection = true} = {}) {
+  const payload = await fetchJSON("/api/sessions");
+  state.sessions = payload.sessions || [];
+  renderFilters();
+  renderAgents();
+  renderSessions();
+
+  const visible = filteredSessions();
+  const stillVisible = visible.some(session => session.id === state.selectedSessionId);
+  if (!preserveSelection || !state.selectedSessionId || !stillVisible) {
+    state.selectedSessionId = visible[0]?.id || null;
+  }
+  if (state.selectedSessionId) {
+    await loadSession(state.selectedSessionId);
+  } else {
+    renderEmpty();
+  }
+}
+
+function renderFilters() {
+  const dates = Array.from(new Set(state.sessions.map(session => session.date))).sort().reverse();
+  const dateFilter = $("#date-filter");
+  const current = state.date;
+  dateFilter.innerHTML = '<option value="all">All dates</option>' + dates
+    .map(date => `<option value="${esc(date)}">${esc(date)}</option>`)
+    .join("");
+  state.date = dates.includes(current) ? current : "all";
+  dateFilter.value = state.date;
+
+  const totalRecords = state.sessions.reduce((sum, session) => sum + session.record_count, 0);
+  $("#top-summary").textContent = `${fmtNumber(state.sessions.length)} sessions / ${fmtNumber(totalRecords)} records`;
+}
+
+function renderAgents() {
+  const buckets = new Map();
+  for (const session of state.sessions) {
+    const bucket = buckets.get(session.agent_key) || {key: session.agent_key, label: session.agent, sessions: 0};
+    bucket.sessions += 1;
+    buckets.set(session.agent_key, bucket);
+  }
+  const agents = [{key: "all", label: "All agents", sessions: state.sessions.length}]
+    .concat(Array.from(buckets.values()).sort((a, b) => a.label.localeCompare(b.label)));
+  $("#agent-list").innerHTML = agents.map(agent => `
+    <button class="agent-button ${state.selectedAgent === agent.key ? "active" : ""}" data-agent="${esc(agent.key)}">
+      <span>${esc(agent.label)}</span>
+      <span class="count">${fmtNumber(agent.sessions)}</span>
+    </button>
+  `).join("");
+  document.querySelectorAll("[data-agent]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.selectedAgent = button.dataset.agent;
+      state.selectedSessionId = null;
+      renderAgents();
+      renderSessions();
+      const first = filteredSessions()[0];
+      if (first) {
+        selectSession(first.id);
+      } else {
+        renderEmpty();
+      }
+    });
+  });
+}
+
+function renderSessions() {
+  const sessions = filteredSessions();
+  $("#session-list").innerHTML = sessions.map(session => sessionRow(session)).join("");
+  document.querySelectorAll("[data-session]").forEach(button => {
+    button.addEventListener("click", () => selectSession(button.dataset.session));
+  });
+}
+
+function sessionRow(session) {
+  const statusClass = ["active", "error", "empty"].includes(session.status) ? session.status : "";
+  const preview = session.first_user || session.last_response || session.rel_trace_path;
+  return `
+    <button class="session-row ${state.selectedSessionId === session.id ? "active" : ""}" data-session="${esc(session.id)}">
+      <div class="session-top">
+        <span class="session-agent">${esc(session.agent)}</span>
+        <span class="badge ${statusClass}">${esc(session.status)}</span>
+      </div>
+      <div class="session-preview">${esc(preview || "No captured messages yet.")}</div>
+      <div class="metric-row">
+        <span>${esc(session.model || "unknown")}</span>
+        <span>${fmtNumber(session.record_count)} req</span>
+        <span>${fmtNumber(session.total_tokens)} tok</span>
+        <span>${esc(fmtTime(session.updated_at))}</span>
+      </div>
+    </button>
+  `;
+}
+
+async function selectSession(sessionId) {
+  state.selectedSessionId = sessionId;
+  renderSessions();
+  await loadSession(sessionId);
+}
+
+async function loadSession(sessionId) {
+  try {
+    const payload = await fetchJSON(`/api/sessions/${encodeURIComponent(sessionId)}/records`);
+    renderDetail(payload.session, payload.records || []);
+  } catch (error) {
+    $("#detail").innerHTML = `<div class="empty">Unable to load session: ${esc(error.message)}</div>`;
+  }
+}
+
+function renderEmpty() {
+  $("#detail").innerHTML = '<div class="empty">No matching trace sessions.</div>';
+}
+
+function renderDetail(session, records) {
+  const statusClass = ["active", "error", "empty"].includes(session.status) ? session.status : "";
+  $("#detail").innerHTML = `
+    <div class="detail-head">
+      <div>
+        <h1 class="detail-title">${esc(session.agent)} <span class="badge ${statusClass}">${esc(session.status)}</span></h1>
+        <p class="detail-subtitle">${esc(session.rel_trace_path)}</p>
+      </div>
+      <div class="actions">
+        ${session.html_path ? `<button data-open-html="${esc(session.id)}">Open HTML</button>` : ""}
+        <button data-copy-path="${esc(session.trace_path)}">Copy path</button>
+      </div>
+    </div>
+    <div class="metrics">
+      ${metric("Records", session.record_count)}
+      ${metric("Turns", session.turn_count)}
+      ${metric("Input", session.input_tokens)}
+      ${metric("Output", session.output_tokens)}
+      ${metric("Total", session.total_tokens)}
+    </div>
+    <div class="tabs">
+      <button class="${state.activeTab === "conversation" ? "active" : ""}" data-tab="conversation">Conversation</button>
+      <button class="${state.activeTab === "raw" ? "active" : ""}" data-tab="raw">Raw JSON</button>
+    </div>
+    <div id="conversation-tab" class="${state.activeTab === "conversation" ? "" : "hidden"}">
+      <div class="records">${records.map((record, index) => renderRecord(record, index)).join("") || emptyRecord()}</div>
+    </div>
+    <div id="raw-tab" class="${state.activeTab === "raw" ? "" : "hidden"}">
+      <div class="json-panel open"><pre>${esc(JSON.stringify(records, null, 2))}</pre></div>
+    </div>
+  `;
+
+  document.querySelectorAll("[data-tab]").forEach(button => {
+    button.addEventListener("click", () => {
+      state.activeTab = button.dataset.tab;
+      renderDetail(session, records);
+    });
+  });
+  document.querySelectorAll("[data-json-toggle]").forEach(button => {
+    button.addEventListener("click", () => {
+      const panel = document.getElementById(button.dataset.jsonToggle);
+      panel?.classList.toggle("open");
+    });
+  });
+  document.querySelectorAll("[data-copy-path]").forEach(button => {
+    button.addEventListener("click", () => navigator.clipboard?.writeText(button.dataset.copyPath || ""));
+  });
+  document.querySelectorAll("[data-open-html]").forEach(button => {
+    button.addEventListener("click", () => window.open(`/api/sessions/${encodeURIComponent(button.dataset.openHtml)}/html`, "_blank"));
+  });
+}
+
+function metric(label, value) {
+  return `<div class="metric"><label>${esc(label)}</label><strong>${fmtNumber(value)}</strong></div>`;
+}
+
+function renderRecord(record, index) {
+  const request = record.request || {};
+  const response = record.response || {};
+  const userText = requestText(request.body) || "Request body has no user-facing message.";
+  const responseText = responseTextFromRecord(record) || response.error || "Response body has no assistant text.";
+  const status = response.status ?? "";
+  const path = request.path || "";
+  const jsonId = `json-${index}`;
+  const statusClass = Number(status) >= 400 ? "error" : "";
+  return `
+    <article class="record">
+      <div class="record-head">
+        <div class="record-title">
+          <strong>Turn ${esc(record.turn ?? index + 1)}</strong>
+          <span class="badge ${statusClass}">${esc(status || "ok")}</span>
+          <span class="path">${esc(path)}</span>
+        </div>
+        <button data-json-toggle="${jsonId}">JSON</button>
+      </div>
+      <div class="conversation">
+        <div class="bubble user">
+          <span class="bubble-label">Request</span>
+          <div class="bubble-body">${esc(userText)}</div>
+        </div>
+        <div class="bubble assistant">
+          <span class="bubble-label">Response</span>
+          <div class="bubble-body">${esc(responseText)}</div>
+        </div>
+      </div>
+      <div id="${jsonId}" class="json-panel"><pre>${esc(JSON.stringify(record, null, 2))}</pre></div>
+    </article>
+  `;
+}
+
+function emptyRecord() {
+  return '<div class="empty">This session has no captured API records yet.</div>';
+}
+
+function requestText(body) {
+  if (typeof body === "string") return body;
+  if (!body || typeof body !== "object") return "";
+  if (Array.isArray(body.messages)) {
+    const message = body.messages.find(item => item && item.role === "user");
+    if (message) return contentText(message.content);
+  }
+  const input = contentText(body.input);
+  if (input) return input;
+  const request = body.request && typeof body.request === "object" ? body.request : body;
+  if (Array.isArray(request.contents)) {
+    const content = request.contents.find(item => item && (!item.role || item.role.toLowerCase() === "user"));
+    if (content) return partsText(content.parts);
+  }
+  return typeof body.prompt === "string" ? body.prompt : "";
+}
+
+function responseTextFromBody(body) {
+  if (typeof body === "string") return body;
+  if (!body || typeof body !== "object") return "";
+  const direct = contentText(body.content);
+  if (direct) return direct;
+  if (Array.isArray(body.candidates)) {
+    return body.candidates.map(candidate => partsText(candidate?.content?.parts)).filter(Boolean).join("\\n");
+  }
+  if (Array.isArray(body.choices)) {
+    return body.choices.map(choice => contentText(choice?.message?.content || choice?.delta?.content)).filter(Boolean).join("\\n");
+  }
+  const output = contentText(body.output);
+  if (output) return output;
+  return contentText(body.response);
+}
+
+function responseTextFromRecord(record) {
+  const response = record.response || {};
+  const bodyText = responseTextFromBody(response.body);
+  if (bodyText) return bodyText;
+  const events = Array.isArray(response.ws_events) ? response.ws_events : Array.isArray(response.sse_events) ? response.sse_events : [];
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const event = events[i] || {};
+    const payload = event.response && typeof event.response === "object" ? event.response : event.data || event;
+    const text = responseTextFromBody(payload) || contentText(event.item) || contentText(event.part) || event.text || "";
+    if (text) return text;
+  }
+  return "";
+}
+
+function contentText(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      if (typeof item === "string") return item;
+      if (!item || typeof item !== "object") return "";
+      return contentText(item.text || item.content || item.output_text || "");
+    }).filter(Boolean).join("\\n");
+  }
+  if (value && typeof value === "object") {
+    return contentText(value.text || value.content || value.output_text || "");
+  }
+  return "";
+}
+
+function partsText(parts) {
+  if (!Array.isArray(parts)) return "";
+  return parts.map(part => typeof part?.text === "string" ? part.text : "").filter(Boolean).join("\\n");
+}
+
+function connectEvents() {
+  if (!window.EventSource) {
+    $("#live-label").textContent = "Polling";
+    return;
+  }
+  const events = new EventSource("/dashboard/events");
+  events.addEventListener("open", () => {
+    $("#live-label").textContent = "Watching";
+  });
+  events.addEventListener("refresh", () => {
+    refreshSessions({preserveSelection: true}).catch(console.error);
+  });
+  events.addEventListener("record", event => {
+    let payload = {};
+    try {
+      payload = JSON.parse(event.data);
+    } catch {
+      payload = {};
+    }
+    refreshSessions({preserveSelection: true}).then(() => {
+      if (payload.session_id && payload.session_id === state.selectedSessionId) {
+        loadSession(state.selectedSessionId).catch(console.error);
+      }
+    }).catch(console.error);
+  });
+  events.addEventListener("error", () => {
+    $("#live-label").textContent = "Reconnecting";
+  });
+}
+
+$("#search").addEventListener("input", event => {
+  state.search = event.target.value;
+  renderSessions();
+});
+
+$("#date-filter").addEventListener("change", event => {
+  state.date = event.target.value;
+  state.selectedSessionId = null;
+  renderSessions();
+  const first = filteredSessions()[0];
+  first ? selectSession(first.id) : renderEmpty();
+});
+
+$("#status-filter").addEventListener("change", event => {
+  state.status = event.target.value;
+  state.selectedSessionId = null;
+  renderSessions();
+  const first = filteredSessions()[0];
+  first ? selectSession(first.id) : renderEmpty();
+});
+
+$("#refresh").addEventListener("click", () => refreshSessions({preserveSelection: true}).catch(console.error));
+
+connectEvents();
+refreshSessions({preserveSelection: false}).catch(error => {
+  $("#detail").innerHTML = `<div class="empty">Unable to load dashboard: ${esc(error.message)}</div>`;
+});
+setInterval(() => refreshSessions({preserveSelection: true}).catch(console.error), 5000);
+</script>
+</body>
+</html>

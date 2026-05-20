@@ -16,7 +16,12 @@ if TYPE_CHECKING:
 class TraceWriter:
     """Writes trace records to a JSONL file and accumulates statistics."""
 
-    def __init__(self, path: Path, live_server: "LiveViewerServer | None" = None):
+    def __init__(
+        self,
+        path: Path,
+        live_server: "LiveViewerServer | None" = None,
+        metadata: dict[str, str] | None = None,
+    ):
         self.path = path
         self._lock = asyncio.Lock()
         self.count = 0
@@ -27,6 +32,7 @@ class TraceWriter:
         self.total_cache_create_tokens = 0
         self.models_used: dict[str, int] = {}
         self._live_server = live_server
+        self._metadata = metadata or {}
         path.parent.mkdir(parents=True, exist_ok=True)
         # Keep file handle open for real-time append + flush
         self._file = open(path, "a", encoding="utf-8")
@@ -34,6 +40,9 @@ class TraceWriter:
     async def write(self, record: dict) -> None:
         """Write a record and update statistics."""
         async with self._lock:
+            if self._metadata:
+                capture = record.get("capture") if isinstance(record.get("capture"), dict) else {}
+                record["capture"] = {**self._metadata, **capture}
             self._file.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
             self._file.flush()
             self.count += 1
