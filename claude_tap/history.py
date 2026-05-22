@@ -45,7 +45,7 @@ def _save_manifest(output_dir: Path, manifest: dict) -> None:
     manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def _register_trace(output_dir: Path, ts: str, trace_files: list[str]) -> dict:
+def _register_trace(output_dir: Path, ts: str, trace_files: list[str], metadata: dict[str, str] | None = None) -> dict:
     """Register a new trace session in the manifest."""
     manifest = _load_manifest(output_dir)
     entry = {
@@ -53,6 +53,8 @@ def _register_trace(output_dir: Path, ts: str, trace_files: list[str]) -> dict:
         "files": trace_files,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if metadata:
+        entry.update(metadata)
     manifest["traces"].append(entry)
     _save_manifest(output_dir, manifest)
     return manifest

@@ -3365,7 +3365,7 @@ async def test_live_viewer_server():
 
 @pytest.mark.asyncio
 async def test_dashboard_main_serves_viewer(monkeypatch):
-    """Test the dashboard command starts a standalone viewer server."""
+    """Test the dashboard command starts a standalone dashboard server."""
     import aiohttp
 
     from claude_tap import dashboard_main, parse_dashboard_args
@@ -3386,7 +3386,7 @@ async def test_dashboard_main_serves_viewer(monkeypatch):
                 async with session.get(opened_urls[0]) as resp:
                     assert resp.status == 200
                     html = await resp.text()
-                    assert "LIVE_MODE = true" in html
+                    assert "session-list" in html
         finally:
             task.cancel()
             try:
