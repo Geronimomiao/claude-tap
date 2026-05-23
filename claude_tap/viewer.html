@@ -1862,6 +1862,9 @@ function buildStubEntry(meta, rawIdx) {
   return {
     _isStub: true,
     _rawIdx: rawIdx,
+    _wsIdx: meta.websocket_response_index || null,
+    derived_from_websocket: meta.derived_from_websocket || false,
+    websocket_response_index: meta.websocket_response_index || undefined,
     turn: meta.turn,
     request_id: meta.request_id || '',
     timestamp: meta.timestamp || '',
@@ -1880,6 +1883,27 @@ function buildStubEntry(meta, rawIdx) {
       },
     },
   };
+}
+
+function buildLazyEntriesFromMeta(metaList) {
+  const built = [];
+  (metaList || []).forEach((meta, rawIdx) => {
+    const wsCount = Number(meta.websocket_response_count || 0);
+    if (wsCount > 1) {
+      for (let i = 0; i < wsCount; i++) {
+        built.push(buildStubEntry({
+          ...meta,
+          turn: `${meta.turn || '?'}.${i + 1}`,
+          request_id: `${meta.request_id || 'ws'}:${i + 1}`,
+          derived_from_websocket: true,
+          websocket_response_index: i + 1
+        }, rawIdx));
+      }
+      return;
+    }
+    built.push(buildStubEntry(meta, rawIdx));
+  });
+  return built;
 }
 
 function toolDisplayName(td) {
@@ -1910,12 +1934,26 @@ function toolSchema(td) {
 function getFullEntry(entry) {
   if (!entry._isStub) return entry;
   const idx = entry._rawIdx;
-  if (entryCache.has(idx)) return entryCache.get(idx);
+  const rawKey = `raw:${idx}`;
+  if (entry._wsIdx) {
+    const wsKey = `ws:${idx}:${entry._wsIdx}`;
+    if (entryCache.has(wsKey)) return entryCache.get(wsKey);
+  } else if (entryCache.has(rawKey)) {
+    return entryCache.get(rawKey);
+  }
   const lines = getRawLines();
   if (idx < 0 || idx >= lines.length) return entry;
   try {
     const full = JSON.parse(lines[idx]);
-    entryCache.set(idx, full);
+    entryCache.set(rawKey, full);
+    if (entry._wsIdx) {
+      const expanded = expandWebSocketResponseEntries([full]);
+      const selected = expanded.find(e => e.derived_from_websocket && e.websocket_response_index === entry._wsIdx)
+        || expanded[entry._wsIdx - 1]
+        || full;
+      entryCache.set(`ws:${idx}:${entry._wsIdx}`, selected);
+      return selected;
+    }
     return full;
   } catch (e) {
     console.error('Failed to parse entry at index', idx, e);
@@ -2281,7 +2319,7 @@ if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE) {
 } else if (typeof EMBEDDED_TRACE_META !== 'undefined') {
   // Lazy mode: build stub entries from metadata
   lazyMode = true;
-  entries = EMBEDDED_TRACE_META.map((meta, i) => buildStubEntry(meta, i));
+  entries = buildLazyEntriesFromMeta(EMBEDDED_TRACE_META);
   document.addEventListener('DOMContentLoaded', () => {
     initCommonUi();
     if (entries.length) renderApp();

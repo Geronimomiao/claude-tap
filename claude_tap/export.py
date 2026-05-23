@@ -108,7 +108,7 @@ def export_main(argv: list[str] | None = None) -> int:
         if not html_path.exists():
             print("Error: failed to generate HTML viewer", file=sys.stderr)
             return 1
-        print(f"Exported {len(records)} turns to {html_path}")
+        print(f"Exported {len(records)} records to {html_path}")
         return 0
 
     if fmt == "json":
@@ -118,7 +118,7 @@ def export_main(argv: list[str] | None = None) -> int:
 
     if args.output:
         args.output.write_text(output, encoding="utf-8")
-        print(f"Exported {len(records)} turns to {args.output}")
+        print(f"Exported {len(records)} records to {args.output}")
     else:
         print(output)
 

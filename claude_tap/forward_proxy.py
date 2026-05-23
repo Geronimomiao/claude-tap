@@ -25,6 +25,7 @@ import logging
 import time
 import uuid
 import zlib
+from collections.abc import Mapping
 from urllib.parse import urlparse
 
 import aiohttp
@@ -36,6 +37,7 @@ from claude_tap.certs import CertificateAuthority
 from claude_tap.proxy import (
     HOP_BY_HOP,
     _build_record,
+    _is_allowed_path,
     filter_headers,
 )
 from claude_tap.sse import SSEReassembler
@@ -48,6 +50,34 @@ from claude_tap.ws_proxy import (
 )
 
 log = logging.getLogger("claude-tap")
+
+TRACE_BODY_MAX_BYTES = 2 * 1024 * 1024
+CODEX_BACKEND_API_TRACE_PREFIXES = (
+    "/backend-api/codex/responses",
+    "/backend-api/codex/responses/compact",
+)
+LLM_GENERATION_PATH_SUFFIXES = (
+    ":generateContent",
+    ":streamGenerateContent",
+    "/converse",
+    "/converse-stream",
+    "/invoke",
+    "/invoke-with-response-stream",
+)
+TEXTUAL_CONTENT_TYPES = (
+    "application/json",
+    "application/x-ndjson",
+    "application/problem+json",
+    "text/",
+)
+LLM_REQUEST_BODY_KEYS = (
+    "messages",
+    "input",
+    "prompt",
+    "contents",
+    "system",
+    "instructions",
+)
 
 
 def _matches_path_prefix(path: str, prefixes: tuple[str, ...]) -> bool:
@@ -121,6 +151,83 @@ def _is_websocket_upgrade(headers: dict[str, str]) -> bool:
 def _build_ws_accept(sec_key: str) -> str:
     digest = hashlib.sha1(sec_key.encode("utf-8") + WS_KEY).digest()
     return base64.b64encode(digest).decode("ascii")
+
+
+def _request_body_looks_like_llm(req_body: object) -> bool:
+    if not isinstance(req_body, dict):
+        return False
+    if not any(isinstance(req_body.get(key), (str, list, dict)) for key in LLM_REQUEST_BODY_KEYS):
+        return False
+    model = req_body.get("model")
+    return model is None or isinstance(model, str)
+
+
+def _should_record_forward_trace(hostname: str, path: str, req_body: object) -> bool:
+    clean = path.split("?", 1)[0].rstrip("/")
+    if _is_allowed_path(path):
+        return True
+    if _matches_path_prefix(path, CODEX_BACKEND_API_TRACE_PREFIXES):
+        return True
+    if any(clean.endswith(suffix) for suffix in LLM_GENERATION_PATH_SUFFIXES):
+        return True
+    if _request_body_looks_like_llm(req_body):
+        return True
+    log.debug("Skipping non-LLM forward-proxy trace: host=%s path=%s", hostname, path)
+    return False
+
+
+def _content_length(headers: Mapping[str, str]) -> int | None:
+    content_length = None
+    for key, value in dict(headers).items():
+        if key.lower() == "content-length":
+            content_length = value
+            break
+    if content_length is None:
+        return None
+    try:
+        return int(str(content_length))
+    except ValueError:
+        return None
+
+
+def _is_textual_content(headers: Mapping[str, str]) -> bool:
+    content_type = str(dict(headers).get("Content-Type", dict(headers).get("content-type", ""))).lower()
+    return any(content_type.startswith(prefix) or prefix in content_type for prefix in TEXTUAL_CONTENT_TYPES)
+
+
+def _omitted_body_summary(resp_bytes: bytes, headers: Mapping[str, str], reason: str) -> dict[str, object]:
+    header_dict = dict(headers)
+    return {
+        "_claude_tap_body": "omitted",
+        "reason": reason,
+        "bytes": len(resp_bytes),
+        "sha256": hashlib.sha256(resp_bytes).hexdigest(),
+        "content_type": header_dict.get("Content-Type") or header_dict.get("content-type", ""),
+    }
+
+
+def _response_body_for_trace(resp_bytes: bytes, headers: Mapping[str, str]) -> object:
+    content_encoding = str(dict(headers).get("Content-Encoding", dict(headers).get("content-encoding", ""))).lower()
+    decode_bytes = resp_bytes
+    if resp_bytes and content_encoding in ("gzip", "deflate"):
+        try:
+            if content_encoding == "gzip":
+                decode_bytes = gzip.decompress(resp_bytes)
+            else:
+                decode_bytes = zlib.decompress(resp_bytes)
+        except Exception:
+            decode_bytes = resp_bytes
+
+    try:
+        return json.loads(decode_bytes) if decode_bytes else None
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
+        pass
+
+    if len(decode_bytes) > TRACE_BODY_MAX_BYTES:
+        return _omitted_body_summary(resp_bytes, headers, "non_json_response_too_large")
+    if not _is_textual_content(headers):
+        return _omitted_body_summary(resp_bytes, headers, "non_text_response")
+    return decode_bytes.decode("utf-8", errors="replace") if decode_bytes else None
 
 
 class ForwardProxyServer:
@@ -393,11 +500,9 @@ class ForwardProxyServer:
         client_writer: asyncio.StreamWriter,
     ) -> None:
         """Forward request to upstream, record trace, send response back."""
-        self._turn_counter += 1
-        turn = self._turn_counter
-        req_id = f"req_{uuid.uuid4().hex[:12]}"
         t0 = time.monotonic()
-        log_prefix = f"[Turn {turn}]"
+        parsed_url = urlparse(upstream_url)
+        hostname = parsed_url.hostname or headers.get("Host", headers.get("host", ""))
 
         # Parse request body for logging
         try:
@@ -405,12 +510,23 @@ class ForwardProxyServer:
         except (json.JSONDecodeError, ValueError):
             req_body = body.decode("utf-8", errors="replace") if body else None
 
+        record_trace = _should_record_forward_trace(hostname, path, req_body)
+        if record_trace:
+            self._turn_counter += 1
+            turn = self._turn_counter
+            req_id = f"req_{uuid.uuid4().hex[:12]}"
+            log_prefix = f"[Turn {turn}]"
+        else:
+            turn = 0
+            req_id = ""
+            log_prefix = "[Pass-through]"
+
         is_streaming = False
         if isinstance(req_body, dict):
             is_streaming = req_body.get("stream", False)
 
         model = req_body.get("model", "") if isinstance(req_body, dict) else ""
-        log.info(f"{log_prefix} -> {method} {path} (model={model}, stream={is_streaming})")
+        log.info(f"{log_prefix} -> {method} {path} (model={model}, stream={is_streaming}, trace={record_trace})")
 
         # Prepare forwarding headers
         fwd_headers = filter_headers(headers)
@@ -433,26 +549,29 @@ class ForwardProxyServer:
             log.error(f"{log_prefix} upstream error: {exc}")
             error_text = str(exc)
             error_body = error_text.encode("utf-8", errors="replace")
-            record = _build_record(
-                req_id,
-                turn,
-                duration_ms,
-                method,
-                path,
-                headers,
-                req_body,
-                502,
-                {"Content-Type": "text/plain"},
-                {"error": error_text},
-            )
-            await self._writer.write(record)
+            if record_trace:
+                record = _build_record(
+                    req_id,
+                    turn,
+                    duration_ms,
+                    method,
+                    path,
+                    headers,
+                    req_body,
+                    502,
+                    {"Content-Type": "text/plain"},
+                    {"error": error_text},
+                )
+                await self._writer.write(record)
             response_line = b"HTTP/1.1 502 Bad Gateway\r\n"
             resp_headers = f"Content-Length: {len(error_body)}\r\nContent-Type: text/plain\r\n\r\n"
             client_writer.write(response_line + resp_headers.encode() + error_body)
             await client_writer.drain()
             return
 
-        if is_streaming and upstream_resp.status == 200:
+        if not record_trace:
+            await self._handle_passthrough(upstream_resp, client_writer, t0, log_prefix)
+        elif is_streaming and upstream_resp.status == 200:
             await self._handle_streaming(
                 upstream_resp,
                 client_writer,
@@ -478,6 +597,42 @@ class ForwardProxyServer:
                 req_body,
                 log_prefix,
             )
+
+    async def _handle_passthrough(
+        self,
+        upstream_resp: aiohttp.ClientResponse,
+        client_writer: asyncio.StreamWriter,
+        t0: float,
+        log_prefix: str,
+    ) -> None:
+        """Forward a response without recording its body in the trace."""
+        status_line = f"HTTP/1.1 {upstream_resp.status} {upstream_resp.reason}\r\n"
+        client_writer.write(status_line.encode())
+
+        has_content_length = _content_length(upstream_resp.headers) is not None
+        for key, value in upstream_resp.headers.items():
+            if key.lower() not in HOP_BY_HOP:
+                client_writer.write(f"{key}: {value}\r\n".encode())
+        if not has_content_length:
+            client_writer.write(b"Transfer-Encoding: chunked\r\n")
+        client_writer.write(b"\r\n")
+        await client_writer.drain()
+
+        total_bytes = 0
+        try:
+            async for chunk in upstream_resp.content.iter_any():
+                total_bytes += len(chunk)
+                if has_content_length:
+                    client_writer.write(chunk)
+                else:
+                    client_writer.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
+                await client_writer.drain()
+        finally:
+            if not has_content_length:
+                client_writer.write(b"0\r\n\r\n")
+                await client_writer.drain()
+        duration_ms = int((time.monotonic() - t0) * 1000)
+        log.info(f"{log_prefix} <- {upstream_resp.status} ({duration_ms}ms, {total_bytes} bytes, not recorded)")
 
     async def _handle_streaming(
         self,
@@ -569,22 +724,7 @@ class ForwardProxyServer:
         resp_bytes = await upstream_resp.read()
         duration_ms = int((time.monotonic() - t0) * 1000)
 
-        # Decompress for JSON parsing
-        content_encoding = upstream_resp.headers.get("Content-Encoding", "").lower()
-        decode_bytes = resp_bytes
-        if resp_bytes and content_encoding in ("gzip", "deflate"):
-            try:
-                if content_encoding == "gzip":
-                    decode_bytes = gzip.decompress(resp_bytes)
-                else:
-                    decode_bytes = zlib.decompress(resp_bytes)
-            except Exception:
-                pass
-
-        try:
-            resp_body = json.loads(decode_bytes) if decode_bytes else None
-        except (json.JSONDecodeError, ValueError):
-            resp_body = decode_bytes.decode("utf-8", errors="replace") if decode_bytes else None
+        resp_body = _response_body_for_trace(resp_bytes, upstream_resp.headers)
 
         log.info(f"{log_prefix} <- {upstream_resp.status} ({duration_ms}ms, {len(resp_bytes)} bytes)")
 
@@ -624,11 +764,17 @@ class ForwardProxyServer:
         writer: asyncio.StreamWriter,
     ) -> None:
         """Relay a WebSocket upgrade received inside the CONNECT tunnel."""
-        self._turn_counter += 1
-        turn = self._turn_counter
-        req_id = f"req_{uuid.uuid4().hex[:12]}"
+        record_trace = _should_record_forward_trace(hostname, path, None)
+        if record_trace:
+            self._turn_counter += 1
+            turn = self._turn_counter
+            req_id = f"req_{uuid.uuid4().hex[:12]}"
+            log_prefix = f"[Turn {turn}]"
+        else:
+            turn = 0
+            req_id = ""
+            log_prefix = "[Pass-through]"
         t0 = time.monotonic()
-        log_prefix = f"[Turn {turn}]"
         upstream_base_url = f"https://{hostname}:{port}"
         upstream_ws_url = f"wss://{hostname}:{port}{path}"
 
@@ -673,22 +819,23 @@ class ForwardProxyServer:
                 + error_body
             )
             await writer.drain()
-            record = {
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "request_id": req_id,
-                "turn": turn,
-                "duration_ms": duration_ms,
-                "transport": "websocket",
-                "request": {
-                    "method": "WEBSOCKET",
-                    "path": path,
-                    "headers": filter_headers(headers, redact_keys=True),
-                    "body": None,
-                },
-                "response": {"status": 502, "headers": {}, "body": None, "error": str(exc)},
-                "upstream_base_url": upstream_base_url,
-            }
-            await self._writer.write(record)
+            if record_trace:
+                record = {
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "request_id": req_id,
+                    "turn": turn,
+                    "duration_ms": duration_ms,
+                    "transport": "websocket",
+                    "request": {
+                        "method": "WEBSOCKET",
+                        "path": path,
+                        "headers": filter_headers(headers, redact_keys=True),
+                        "body": None,
+                    },
+                    "response": {"status": 502, "headers": {}, "body": None, "error": str(exc)},
+                    "upstream_base_url": upstream_base_url,
+                }
+                await self._writer.write(record)
             return
 
         sec_key = headers.get("Sec-WebSocket-Key") or headers.get("sec-websocket-key")
@@ -737,7 +884,8 @@ class ForwardProxyServer:
                     break
 
                 if msg.type == WSMsgType.TEXT:
-                    client_messages.append(msg.data)
+                    if record_trace:
+                        client_messages.append(msg.data)
                     await upstream_ws.send_str(msg.data)
                 elif msg.type == WSMsgType.BINARY:
                     await upstream_ws.send_bytes(msg.data)
@@ -754,7 +902,8 @@ class ForwardProxyServer:
         async def _relay_upstream_to_client() -> None:
             async for msg in upstream_ws:
                 if msg.type == WSMsgType.TEXT:
-                    server_messages.append(msg.data)
+                    if record_trace:
+                        server_messages.append(msg.data)
                     await ws_writer.send_frame(msg.data.encode("utf-8"), WSMsgType.TEXT)
                     await writer.drain()
                 elif msg.type == WSMsgType.BINARY:
@@ -802,29 +951,30 @@ class ForwardProxyServer:
             pass
 
         duration_ms = int((time.monotonic() - t0) * 1000)
-        record = {
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "request_id": req_id,
-            "turn": turn,
-            "duration_ms": duration_ms,
-            "transport": "websocket",
-            "request": {
-                "method": "WEBSOCKET",
-                "path": path,
-                "headers": filter_headers(headers, redact_keys=True),
-                "body": reconstruct_ws_request_body(client_messages),
-                "ws_events": [json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in client_messages],
-            },
-            "response": {
-                "status": 101,
-                "headers": {},
-                "body": None,
-                "ws_events": [json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in server_messages],
-            },
-            "upstream_base_url": upstream_base_url,
-        }
-        record["response"]["body"] = reconstruct_ws_response_body(record["response"]["ws_events"])
-        await self._writer.write(record)
+        if record_trace:
+            record = {
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "request_id": req_id,
+                "turn": turn,
+                "duration_ms": duration_ms,
+                "transport": "websocket",
+                "request": {
+                    "method": "WEBSOCKET",
+                    "path": path,
+                    "headers": filter_headers(headers, redact_keys=True),
+                    "body": reconstruct_ws_request_body(client_messages),
+                    "ws_events": [json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in client_messages],
+                },
+                "response": {
+                    "status": 101,
+                    "headers": {},
+                    "body": None,
+                    "ws_events": [json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in server_messages],
+                },
+                "upstream_base_url": upstream_base_url,
+            }
+            record["response"]["body"] = reconstruct_ws_response_body(record["response"]["ws_events"])
+            await self._writer.write(record)
         log.info(
             f"{log_prefix} <- WS closed ({duration_ms}ms, "
             f"{len(client_messages)} client→upstream, {len(server_messages)} upstream→client)"

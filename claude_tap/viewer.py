@@ -82,6 +82,105 @@ def _event_payload(event: dict) -> dict | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _response_id_from_event(event: dict) -> str:
+    payload = _event_payload(event)
+    if not isinstance(payload, dict):
+        return ""
+    response = payload.get("response")
+    if isinstance(response, dict) and isinstance(response.get("id"), str):
+        return response["id"]
+    item = payload.get("item")
+    if isinstance(item, dict) and isinstance(item.get("id"), str):
+        return item["id"]
+    item_id = payload.get("item_id")
+    return item_id if isinstance(item_id, str) else ""
+
+
+def _response_event_matches_id(event: dict, response_id: str) -> bool:
+    if not response_id:
+        return False
+    payload = _event_payload(event)
+    if not isinstance(payload, dict):
+        return False
+    response = payload.get("response")
+    if isinstance(response, dict) and response.get("id") == response_id:
+        return True
+    item = payload.get("item")
+    item_id = item.get("id") if isinstance(item, dict) else payload.get("item_id")
+    return isinstance(item_id, str) and response_id[5:25] in item_id
+
+
+def _completed_response_from_events(events: list[dict]) -> dict | None:
+    for event in reversed(events):
+        if _event_type(event) not in {"response.completed", "response.done"}:
+            continue
+        payload = _event_payload(event)
+        response = payload.get("response") if isinstance(payload, dict) else None
+        if isinstance(response, dict):
+            return response
+    return None
+
+
+def _has_output_item_event(events: list[dict]) -> bool:
+    return any(_event_type(event) == "response.output_item.done" for event in events)
+
+
+def _split_websocket_response_events(events: list[dict]) -> list[dict[str, object]]:
+    groups: list[dict[str, object]] = []
+    current: dict[str, object] | None = None
+    for event in events:
+        event_type = _event_type(event)
+        if event_type == "response.created":
+            if current is not None and current.get("events"):
+                groups.append(current)
+            current = {"response_id": _response_id_from_event(event), "events": [event]}
+            continue
+        if current is None:
+            continue
+        response_id = str(current.get("response_id") or "")
+        if _response_event_matches_id(event, response_id) or event_type.startswith("response."):
+            group_events = current.get("events")
+            if isinstance(group_events, list):
+                group_events.append(event)
+        if event_type in {"response.completed", "response.done"}:
+            groups.append(current)
+            current = None
+    if current is not None and current.get("events"):
+        groups.append(current)
+    return [
+        group
+        for group in groups
+        if any(_event_type(event) in {"response.completed", "response.done"} for event in group.get("events", []))
+    ]
+
+
+def _is_displayable_websocket_response_group(group: dict[str, object]) -> bool:
+    events = group.get("events")
+    if not isinstance(events, list):
+        return False
+    completed = _completed_response_from_events(events)
+    if not completed:
+        return False
+    output_tokens = 0
+    usage = completed.get("usage")
+    if isinstance(usage, dict) and isinstance(usage.get("output_tokens"), int):
+        output_tokens = usage["output_tokens"]
+    return not (completed.get("generate") is False and not _has_output_item_event(events) and output_tokens == 0)
+
+
+def _codex_websocket_response_count(record: dict, request: dict, events: list[dict]) -> int:
+    if record.get("transport") != "websocket":
+        return 0
+    path = request.get("path")
+    if not isinstance(path, str):
+        return 0
+    if not (path.endswith("/backend-api/codex/responses") or path.endswith("/v1/responses") or path == "/responses"):
+        return 0
+    return sum(
+        1 for group in _split_websocket_response_events(events) if _is_displayable_websocket_response_group(group)
+    )
+
+
 def _decode_bedrock_eventstream_events(body: object) -> list[dict]:
     """Extract Anthropic stream events from a decoded AWS EventStream body.
 
@@ -591,6 +690,7 @@ def _extract_metadata(record_json: str) -> dict | None:
     stream_events = _iter_response_events(resp)
     if not stream_events:
         stream_events = _parse_sse_data_frames(raw_resp_body)
+    websocket_response_count = _codex_websocket_response_count(r, req, stream_events)
 
     # Token usage — from response.body.usage or terminal stream event
     usage = resp_body.get("usage") or _extract_gemini_response_usage(raw_resp_body) or {}
@@ -665,6 +765,7 @@ def _extract_metadata(record_json: str) -> dict | None:
         "request_id": r.get("request_id", ""),
         "timestamp": r.get("timestamp", ""),
         "duration_ms": r.get("duration_ms", 0),
+        "transport": r.get("transport", ""),
         "method": req.get("method", ""),
         "path": req.get("path", ""),
         "model": body.get("model", ""),
@@ -679,6 +780,7 @@ def _extract_metadata(record_json: str) -> dict | None:
         "sys_hint": sys_text[:200],
         "tool_names": tool_names,
         "response_tool_names": response_tool_names,
+        "websocket_response_count": websocket_response_count,
     }
 
 

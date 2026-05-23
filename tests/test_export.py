@@ -43,7 +43,7 @@ def test_export_html_inferred_from_output_suffix(tmp_path, capsys) -> None:
     assert "<!DOCTYPE html>" in html
     assert "EMBEDDED_TRACE_DATA" in html
     assert "hello from trace" in html
-    assert f"Exported 1 turns to {html_path}" in capsys.readouterr().out
+    assert f"Exported 1 records to {html_path}" in capsys.readouterr().out
 
 
 def test_export_html_format_defaults_to_trace_html_path(tmp_path, capsys) -> None:
@@ -54,7 +54,7 @@ def test_export_html_format_defaults_to_trace_html_path(tmp_path, capsys) -> Non
 
     assert html_path.exists()
     assert "hello from assistant" in html_path.read_text(encoding="utf-8")
-    assert f"Exported 1 turns to {html_path}" in capsys.readouterr().out
+    assert f"Exported 1 records to {html_path}" in capsys.readouterr().out
 
 
 def test_export_markdown_maps_responses_cached_tokens(tmp_path, capsys) -> None:
@@ -169,4 +169,4 @@ def test_export_json_tolerates_null_request_body_and_stream_text_response(tmp_pa
     assert exported[0]["response"]["usage"] == {"input_tokens": 4, "output_tokens": 3}
     assert exported[1]["model"] is None
     assert exported[1]["messages"] == []
-    assert f"Exported 2 turns to {json_path}" in capsys.readouterr().out
+    assert f"Exported 2 records to {json_path}" in capsys.readouterr().out

@@ -163,6 +163,33 @@ def test_generate_html_viewer_does_not_crash_on_mixed_bodies(tmp_path: Path) -> 
     assert html_path.stat().st_size > 0
 
 
+def test_extract_metadata_counts_codex_websocket_response_turns() -> None:
+    trace_path = Path(__file__).parent / "fixtures" / "codex_ws_multi_response_trace.jsonl"
+    meta = _extract_metadata(trace_path.read_text(encoding="utf-8").strip())
+
+    assert meta is not None
+    assert meta["transport"] == "websocket"
+    assert meta["path"] == "/backend-api/codex/responses"
+    assert meta["websocket_response_count"] == 2
+
+
+def test_lazy_html_uses_metadata_to_expand_codex_websocket_turns(tmp_path: Path) -> None:
+    trace_path = tmp_path / "trace.jsonl"
+    codex_ws = (
+        (Path(__file__).parent / "fixtures" / "codex_ws_multi_response_trace.jsonl").read_text(encoding="utf-8").strip()
+    )
+    filler = json.dumps(_record({"model": "claude-x", "messages": []}, {"usage": {}, "content": []}))
+    trace_path.write_text("\n".join([codex_ws, *[filler for _ in range(LAZY_THRESHOLD + 1)]]) + "\n", encoding="utf-8")
+
+    html_path = tmp_path / "trace.html"
+    _generate_html_viewer(trace_path, html_path)
+    html = html_path.read_text(encoding="utf-8")
+
+    assert "EMBEDDED_TRACE_META" in html
+    assert '"websocket_response_count":2' in html
+    assert "buildLazyEntriesFromMeta" in html
+
+
 def _opencode_homepage_payload() -> str:
     """A minimal stand-in for the kind of HTML body the forward proxy captures
     when opencode hits a non-LLM upstream (e.g. opencode.ai homepage). The two
