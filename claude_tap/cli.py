@@ -655,6 +655,7 @@ async def async_main(args: argparse.Namespace):
                 session=session,
                 local_reverse_target=args.target,
                 local_reverse_allowed_path_prefixes=CLIENT_CONFIGS[args.client].forward_base_url_allowed_path_prefixes,
+                store_stream_events=args.store_stream_events,
             )
             actual_port = await forward_server.start()
             print(f"🔍 claude-tap v{__version__} forward proxy on http://{args.host}:{actual_port}")
@@ -667,6 +668,7 @@ async def async_main(args: argparse.Namespace):
                 "session": session,
                 "turn_counter": 0,
                 "extra_allowed_path_prefixes": tuple(args.extra_allowed_paths),
+                "store_stream_events": args.store_stream_events,
                 **_reverse_proxy_trace_options(args.client, args.target),
             }
             app.router.add_route("*", "/{path_info:.*}", proxy_handler)
@@ -1112,6 +1114,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=50,
         dest="max_traces",
         help="Max trace sessions to keep (default: 50, 0 = unlimited)",
+    )
+    storage_group.add_argument(
+        "--tap-store-stream-events",
+        action="store_true",
+        dest="store_stream_events",
+        help="Persist raw SSE/WebSocket stream events in trace storage and viewer/export output (default: off)",
     )
     storage_group.add_argument(
         "--tap-no-update-check",
