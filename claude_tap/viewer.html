@@ -140,6 +140,20 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
 }
 .stats .stat-group { display: flex; align-items: center; gap: 4px; }
 .stats .stat-val { font-weight: 600; color: var(--text-secondary); font-family: var(--mono); }
+.viewer-actions {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+}
+.viewer-action {
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-height: 28px; padding: 4px 9px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-secondary); text-decoration: none; font-size: 12px; font-weight: 500;
+  transition: border-color .15s, color .15s, background .15s, transform .15s;
+  white-space: nowrap;
+}
+.viewer-action:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+.viewer-action:active { transform: translateY(1px); }
+.viewer-action svg { width: 13px; height: 13px; flex-shrink: 0; }
 .trace-path-bar {
   display: none; align-items: center; gap: 6px; padding: 4px 12px;
   background: var(--bg); border-bottom: 1px solid var(--border);
@@ -215,7 +229,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
 .sidebar-group-header .group-dot {
   width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
 }
-.sidebar-group-header .group-name { flex: 1; }
+.sidebar-group-header .group-name { flex: 1; min-width: 0; }
 .sidebar-group-header .group-count {
   font-size: 10px; font-weight: 500; color: var(--text-tertiary);
   background: var(--bg-hover); padding: 1px 6px; border-radius: 8px;
@@ -224,6 +238,28 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
   font-size: 10px; color: var(--text-tertiary); transition: transform .15s;
 }
 .sidebar-group-header .group-chevron.open { transform: rotate(90deg); }
+.session-hover-tooltip {
+  position: fixed;
+  z-index: 80;
+  display: none;
+  max-height: min(360px, calc(100vh - 24px));
+  overflow: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.session-hover-tooltip.visible { display: block; }
 
 .sidebar-item {
   padding: 10px 16px; cursor: pointer; transition: background .1s;
@@ -395,11 +431,30 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
   font-size: 12px;
   font-weight: 700;
 }
+.trace-block-title .trace-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trace-block-title .trace-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
 .trace-block-title .trace-badge {
   color: var(--text-tertiary);
   font-size: 10px;
   font-weight: 500;
 }
+.trace-block-title .trace-copy-btn {
+  font-size: 11px; padding: 3px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-tertiary); cursor: pointer; transition: all .15s;
+}
+.trace-block-title .trace-copy-btn:hover { color: var(--blue); border-color: var(--blue); }
 .trace-code {
   padding: 12px 13px;
   max-height: 360px;
@@ -517,11 +572,14 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
 .system-prompt-blocks .content-block-text {
   font-family: var(--mono); font-size: 12px; line-height: 1.6;
 }
-.content-image {
+.content-image,
+.message-image {
   display: block; width: auto; height: auto;
   min-width: min(160px, 100%); max-width: min(100%, 720px); max-height: 420px;
   border-radius: 6px; border: 1px solid var(--border); background: var(--bg);
+  object-fit: contain;
 }
+.image-block { white-space: normal; }
 .content-image-placeholder {
   display: inline-flex; align-items: center; max-width: 100%;
   padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px;
@@ -925,7 +983,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
 }
 .sidebar-sort-segment {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   flex: 1;
   min-width: 0;
   padding: 2px;
@@ -1219,6 +1277,15 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
     width: 100%;
   }
   .stats .stat-group { font-size: 11px; }
+  .viewer-actions {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .viewer-actions::-webkit-scrollbar { display: none; }
+  .viewer-action { min-height: 36px; padding: 7px 10px; }
   .trace-path-bar {
     flex-wrap: wrap;
     gap: 4px;
@@ -1375,6 +1442,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
     <div class="stat-group"><span id="label-time">Time</span> <span class="stat-val" id="stat-duration">0s</span></div>
     <div id="live-status" style="display:none;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:500;align-items:center;gap:6px;"></div>
   </div>
+  <div class="viewer-actions" id="viewer-actions" style="display:none"></div>
   <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">&#9790;</button>
   <select class="lang-select" id="lang-select" onchange="setLang(this.value)">
     <option value="en">English</option>
@@ -1428,6 +1496,7 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
       <div class="sidebar-sort-segment">
         <button type="button" class="sidebar-sort-btn" data-sort-mode="model" onclick="setSidebarOrderMode('model')">Model</button>
         <button type="button" class="sidebar-sort-btn" data-sort-mode="turn" onclick="setSidebarOrderMode('turn')">Turn</button>
+        <button type="button" class="sidebar-sort-btn" data-sort-mode="session" onclick="setSidebarOrderMode('session')">Session</button>
       </div>
     </div>
     <div id="tool-filter" style="display:none;padding:4px 8px;border-bottom:1px solid var(--border);font-size:11px;max-height:120px;overflow-y:auto"></div>
@@ -1449,8 +1518,9 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); heig
 <script>
 const $ = s => document.querySelector(s);
 let entries = [], filtered = [], activeIdx = -1, activePaths = new Set(), searchQuery = '', activeTools = null;
+let sessionImageRegistryCache = null, sessionImageRegistrySize = -1;
 let visualOrder = []; // filtered indices in sidebar visual (DOM) order, excludes collapsed items
-const SIDEBAR_ORDER_MODES = ['model', 'turn'];
+const SIDEBAR_ORDER_MODES = ['model', 'turn', 'session'];
 const savedSidebarOrderMode = localStorage.getItem('claude-tap-sidebar-order');
 let sidebarOrderMode = SIDEBAR_ORDER_MODES.includes(savedSidebarOrderMode) ? savedSidebarOrderMode : 'model';
 
@@ -1517,7 +1587,9 @@ function hasOutputItemEvent(events) {
 function isDisplayableWebSocketResponseGroup(group) {
   const completed = completedResponseFromEvents(group.events);
   if (!completed) return false;
-  return !(completed.generate === false && !hasOutputItemEvent(group.events) && (completed.usage?.output_tokens || 0) === 0);
+  const created = responseCreatedFromEvents(group.events);
+  const isGenerateFalse = completed.generate === false || created?.generate === false;
+  return !(isGenerateFalse && !hasOutputItemEvent(group.events) && (completed.usage?.output_tokens || 0) === 0);
 }
 
 function responseCreatedFromEvents(events) {
@@ -2032,6 +2104,7 @@ const globalSearchState = {
 const TRACE_JSONL_PATH = typeof __TRACE_JSONL_PATH__ !== 'undefined' ? __TRACE_JSONL_PATH__ : '';
 const TRACE_HTML_PATH = typeof __TRACE_HTML_PATH__ !== 'undefined' ? __TRACE_HTML_PATH__ : '';
 const CLAUDE_TAP_VERSION = typeof __CLAUDE_TAP_VERSION__ !== 'undefined' ? __CLAUDE_TAP_VERSION__ : '';
+const TRACE_SESSION_EXPORTS = typeof __TRACE_SESSION_EXPORTS__ !== 'undefined' ? __TRACE_SESSION_EXPORTS__ : null;
 
 /* ─── i18n ─── */
 const I18N = typeof __CLAUDE_TAP_I18N__ !== 'undefined' ? __CLAUDE_TAP_I18N__ : { en: {} };
@@ -2098,6 +2171,28 @@ function updateStaticTexts() {
   if (e('sidebar-sort-label')) e('sidebar-sort-label').textContent = t('sort_label');
   updateHistoryDeleteButton();
   updateSidebarSortControls();
+  renderViewerActions();
+}
+
+function renderViewerActions() {
+  const wrap = $('#viewer-actions');
+  if (!wrap) return;
+  const exports = TRACE_SESSION_EXPORTS && typeof TRACE_SESSION_EXPORTS === 'object' ? TRACE_SESSION_EXPORTS : {};
+  const downloadIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>`;
+  const actions = [];
+  if (typeof exports.jsonl === 'string' && exports.jsonl) {
+    actions.push(`<a class="viewer-action" href="${esc(exports.jsonl)}" download>${downloadIcon}${esc(t('export_jsonl'))}</a>`);
+  }
+  if (typeof exports.log === 'string' && exports.log) {
+    actions.push(`<a class="viewer-action" href="${esc(exports.log)}" download>${downloadIcon}${esc(t('export_log'))}</a>`);
+  }
+  if (!actions.length) {
+    wrap.innerHTML = '';
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.innerHTML = actions.join('');
+  wrap.style.display = 'inline-flex';
 }
 
 /* ─── Theme ─── */
@@ -2436,13 +2531,16 @@ function renderTracePathBar() {
   const copyIcon = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>`;
   let html = '';
   if (TRACE_JSONL_PATH) {
-    html += `<span class="tp-label">JSONL</span><span class="tp-val" title="${esc(TRACE_JSONL_PATH)}">${esc(TRACE_JSONL_PATH)}</span><button class="tp-copy" title="Copy path" onclick="copyPath('${esc(TRACE_JSONL_PATH)}',this)">${copyIcon}</button>`;
+    html += `<span class="tp-label">JSONL</span><span class="tp-val" title="${esc(TRACE_JSONL_PATH)}">${esc(TRACE_JSONL_PATH)}</span><button class="tp-copy" title="Copy path" data-copy-path="${esc(TRACE_JSONL_PATH)}">${copyIcon}</button>`;
   }
   if (TRACE_JSONL_PATH && TRACE_HTML_PATH) html += '<span class="tp-sep"></span>';
   if (TRACE_HTML_PATH) {
-    html += `<span class="tp-label">HTML</span><span class="tp-val" title="${esc(TRACE_HTML_PATH)}">${esc(TRACE_HTML_PATH)}</span><button class="tp-copy" title="Copy path" onclick="copyPath('${esc(TRACE_HTML_PATH)}',this)">${copyIcon}</button>`;
+    html += `<span class="tp-label">HTML</span><span class="tp-val" title="${esc(TRACE_HTML_PATH)}">${esc(TRACE_HTML_PATH)}</span><button class="tp-copy" title="Copy path" data-copy-path="${esc(TRACE_HTML_PATH)}">${copyIcon}</button>`;
   }
   bar.innerHTML = html;
+  bar.querySelectorAll('.tp-copy').forEach(btn => {
+    btn.addEventListener('click', () => copyPath(btn.dataset.copyPath || '', btn));
+  });
   bar.style.display = 'flex';
 }
 function copyPath(text, btn) {
@@ -2686,7 +2784,7 @@ function setSidebarOrderMode(mode) {
 function updateSidebarSortControls() {
   document.querySelectorAll('.sidebar-sort-btn').forEach(btn => {
     const mode = btn.dataset.sortMode;
-    btn.textContent = mode === 'turn' ? t('sort_turn') : t('sort_model');
+    btn.textContent = mode === 'turn' ? t('sort_turn') : mode === 'session' ? t('sort_session') : t('sort_model');
     const active = mode === sidebarOrderMode;
     btn.classList.toggle('active', active);
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
@@ -3020,6 +3118,260 @@ function modelBadge(m) {
   return { bg: 'var(--bg)', fg: 'var(--text-tertiary)' };
 }
 
+function sessionTextSnippet(text, maxLen = 56) {
+  const normalized = String(text || '').replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLen) return normalized;
+  return normalized.slice(0, Math.max(0, maxLen - 3)).trimEnd() + '...';
+}
+
+function naturalTextFromPromptPayload(payload) {
+  if (typeof payload === 'string') return cleanUserPromptText(payload);
+  if (Array.isArray(payload)) {
+    for (const item of payload) {
+      const text = naturalTextFromPromptPayload(item);
+      if (text) return text;
+    }
+    return '';
+  }
+  if (!payload || typeof payload !== 'object') return '';
+  for (const key of ['prompt', 'request', 'instruction', 'message', 'query', 'text', 'title']) {
+    if (typeof payload[key] !== 'string') continue;
+    const text = cleanUserPromptText(payload[key]);
+    if (text) return text;
+  }
+  if (payload.content !== undefined) return naturalTextForSessionContent(payload.content);
+  return '';
+}
+
+function cleanUserPromptText(text) {
+  let value = String(text || '').trim();
+  if (!value) return '';
+  if (value.length >= 2 && value[0] === '"' && value[value.length - 1] === '"') {
+    try {
+      const decoded = JSON.parse(value);
+      if (typeof decoded === 'string' && decoded.trim()) value = decoded.trim();
+    } catch (_) {
+      // Keep the original text when it only looks JSON-quoted.
+    }
+  }
+  if (/^[{[]/.test(value)) {
+    try {
+      const decoded = JSON.parse(value);
+      const prompt = naturalTextFromPromptPayload(decoded);
+      if (prompt) return prompt;
+    } catch (_) {
+      // Keep scanning the original text when it only looks like JSON.
+    }
+  }
+  const userRequest = value.match(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/i);
+  if (userRequest) return userRequest[1].trim();
+  const session = value.match(/^<session>\s*([\s\S]*?)\s*<\/session>$/i);
+  if (session) return session[1].trim();
+  const firstTag = value.match(/^<([A-Za-z_-]+)>/);
+  const injectedTags = new Set([
+    'artifacts',
+    'environment_context',
+    'session_context',
+    'skills',
+    'slash_commands',
+    'subagents',
+    'system-reminder',
+    'user_information',
+  ]);
+  if (firstTag && injectedTags.has(firstTag[1].toLowerCase())) return '';
+  if (/^(web page content|page content|网页内容)\s*[:：]/i.test(value)) return '';
+  if (/^\[Image:\s*source:/i.test(value)) return '';
+  return value.replace(/^\[Image #\d+\]\s*/i, '').trim();
+}
+
+function imageLookupKey(text) {
+  let value = String(text || '').trim();
+  const session = value.match(/^<session>\s*([\s\S]*?)\s*<\/session>$/i);
+  if (session) value = session[1].trim();
+  return value.replace(/^\[Image #\d+\]\s*/i, '').trim();
+}
+
+let sessionTooltipEl = null;
+function sessionTooltip() {
+  if (sessionTooltipEl) return sessionTooltipEl;
+  sessionTooltipEl = document.createElement('div');
+  sessionTooltipEl.id = 'session-full-input-tooltip';
+  sessionTooltipEl.className = 'session-hover-tooltip';
+  document.body.appendChild(sessionTooltipEl);
+  return sessionTooltipEl;
+}
+
+function positionSessionTooltip(trigger, tooltip) {
+  const rect = trigger.getBoundingClientRect();
+  let left = rect.right + 10;
+  let maxWidth = Math.min(520, window.innerWidth - left - 12);
+  if (maxWidth < 240) {
+    left = 12;
+    maxWidth = Math.max(180, window.innerWidth - 24);
+  }
+  tooltip.style.width = maxWidth + 'px';
+  tooltip.style.left = left + 'px';
+  tooltip.style.top = '0px';
+  const desiredTop = rect.top;
+  const height = tooltip.offsetHeight || 0;
+  const top = Math.max(12, Math.min(desiredTop, window.innerHeight - height - 12));
+  tooltip.style.top = top + 'px';
+}
+
+function showSessionTooltip(trigger) {
+  const fullText = trigger?.dataset?.fullUserInput || '';
+  if (!fullText) return;
+  const tooltip = sessionTooltip();
+  tooltip.textContent = fullText;
+  tooltip.classList.add('visible');
+  trigger.setAttribute('aria-describedby', tooltip.id);
+  positionSessionTooltip(trigger, tooltip);
+}
+
+function hideSessionTooltip(trigger) {
+  if (!sessionTooltipEl) return;
+  sessionTooltipEl.classList.remove('visible');
+  if (trigger) trigger.removeAttribute('aria-describedby');
+}
+
+function bindSessionInputTooltip(header, fullText, snippet) {
+  const original = String(fullText || '').trim();
+  if (!original || !snippet.endsWith('...')) return;
+  header.dataset.fullUserInput = original;
+  header.tabIndex = 0;
+  header.addEventListener('mouseenter', () => showSessionTooltip(header));
+  header.addEventListener('focus', () => showSessionTooltip(header));
+  header.addEventListener('mouseleave', () => hideSessionTooltip(header));
+  header.addEventListener('blur', () => hideSessionTooltip(header));
+}
+
+function naturalTextForSessionContent(content) {
+  if (content === undefined || content === null) return '';
+  if (typeof content === 'string') return cleanUserPromptText(content);
+  if (!Array.isArray(content)) {
+    if (typeof content === 'object') {
+      if (content.type === 'tool_result' || content.type === 'function_call_output') return '';
+      if (typeof content.text === 'string') return cleanUserPromptText(content.text);
+      if (typeof content.output === 'string') return cleanUserPromptText(content.output);
+      if (content.content !== undefined) return naturalTextForSessionContent(content.content);
+    }
+    return '';
+  }
+  for (const block of content) {
+    let text = '';
+    if (typeof block === 'string') {
+      text = block;
+    } else if (block && typeof block === 'object') {
+      if (block.type === 'tool_result' || block.type === 'function_call_output') continue;
+      if (block.type === 'text' || block.type === 'input_text' || block.type === 'output_text') text = block.text || '';
+      else if (block.type === 'message') text = naturalTextForSessionContent(block.content);
+      else if (typeof block.text === 'string') text = block.text;
+      else if (typeof block.output === 'string') text = block.output;
+    }
+    const prompt = cleanUserPromptText(text);
+    if (prompt) return prompt;
+  }
+  return '';
+}
+
+function contentTextForSession(content) {
+  if (content === undefined || content === null) return '';
+  if (typeof content === 'string') return content.trim();
+  if (!Array.isArray(content)) {
+    if (typeof content === 'object') {
+      if (typeof content.text === 'string') return content.text.trim();
+      if (typeof content.output === 'string') return content.output.trim();
+      if (content.content !== undefined) return contentTextForSession(content.content);
+    }
+    return '';
+  }
+  return content.map(block => {
+    if (!block || typeof block !== 'object') return String(block || '').trim();
+    if (block.type === 'text' || block.type === 'input_text' || block.type === 'output_text') return block.text || '';
+    if (block.type === 'message') return contentTextForSession(block.content);
+    if (block.type === 'thinking') return block.thinking || '';
+    if (block.type === 'tool_use' || block.type === 'function_call') return `[${block.name || block.type}]`;
+    if (block.type === 'tool_result') return contentTextForSession(block.content);
+    if (block.type === 'function_call_output') return block.output || '';
+    if (typeof block.text === 'string') return block.text;
+    if (typeof block.output === 'string') return block.output;
+    return '';
+  }).filter(Boolean).join('\n').trim();
+}
+
+function isToolResultOnlyMessage(message) {
+  const content = message?.content;
+  if (!Array.isArray(content) || content.length === 0) return false;
+  return content.every(block => block && typeof block === 'object'
+    && (block.type === 'tool_result' || block.type === 'function_call_output'));
+}
+
+function latestUserInputText(entry) {
+  const msgs = getMessages(entry?.request?.body);
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const message = msgs[i];
+    if (message?.role !== 'user' || isToolResultOnlyMessage(message)) continue;
+    const text = naturalTextForSessionContent(message.content);
+    if (text) return text;
+  }
+  return '';
+}
+
+function finalResponseText(entry) {
+  const output = getResponseOutput(entry);
+  const outputText = contentTextForSession(output?.content);
+  if (outputText) return outputText;
+  const payload = getResponsePayload(entry);
+  return contentTextForSession(payload?.output || payload?.content || payload?.message || payload);
+}
+
+function isContinuationWithoutUserInput(entry) {
+  if (previousResponseIdForDiff(entry)) return true;
+  const input = entry?.request?.body?.input;
+  return Array.isArray(input) && input.length > 0 && input.every(isResponseToolResultItem);
+}
+
+function sessionKeyForEntry(entry, currentGroup) {
+  const userText = latestUserInputText(entry);
+  if (userText) return { key: 'user:' + sessionTurnDiscriminator(entry) + ':' + userText, userText };
+  if (currentGroup) return { key: currentGroup.key, userText: '' };
+  const rootTurn = String(entry?.turn ?? '').split('.')[0];
+  if (rootTurn) return { key: 'turn:' + rootTurn, userText: '' };
+  return { key: 'request:' + (entry?.request_id || ''), userText: '' };
+}
+
+function sessionTurnDiscriminator(entry) {
+  const rootTurn = String(entry?.turn ?? '').split('.')[0];
+  if (rootTurn) return 'turn:' + rootTurn;
+  return 'request:' + (entry?.request_id || '');
+}
+
+function buildSessionGroups(items) {
+  const groups = [];
+  items.forEach(item => {
+    const current = groups[groups.length - 1] || null;
+    const info = sessionKeyForEntry(item.entry, current);
+    let group = current && current.key === info.key ? current : null;
+    if (!group) {
+      group = { key: info.key, userText: info.userText, responseText: '', items: [] };
+      groups.push(group);
+    } else if (!group.userText && info.userText) {
+      group.userText = info.userText;
+    }
+    const responseText = finalResponseText(item.entry);
+    if (responseText) group.responseText = responseText;
+    group.items.push(item);
+  });
+  return groups;
+}
+
+function sidebarItemsForMode() {
+  const items = filtered.map((entry, idx) => ({ entry, idx }));
+  if (sidebarOrderMode === 'model') return items.sort((a, b) => compareSidebarModelOrder(a.entry, b.entry));
+  if (sidebarOrderMode === 'session') return buildSessionGroups(items).flatMap(group => group.items);
+  return items;
+}
+
 /* ─── Visual order helpers ─── */
 function buildVisualOrder() {
   if (virtualMode) {
@@ -3166,8 +3518,7 @@ function renderSidebar(preserveDetail) {
   if (filtered.length > LAZY_THRESHOLD) {
     virtualMode = true;
     sb.classList.add('virtual-scroll');
-    vsFilteredItems = filtered.map((e, i) => ({ entry: e, idx: i }));
-    if (sidebarOrderMode === 'model') vsFilteredItems.sort((a, b) => compareSidebarModelOrder(a.entry, b.entry));
+    vsFilteredItems = sidebarItemsForMode();
     visualOrder = vsFilteredItems.map(item => item.idx);
     vsInitSidebar(sb, prevScrollTop, preserveDetail);
     return;
@@ -3184,6 +3535,40 @@ function renderSidebar(preserveDetail) {
       if (gap) sb.insertAdjacentHTML('beforeend', gap);
       lastTs = e.timestamp ? new Date(e.timestamp).getTime() : null;
       sb.appendChild(createSidebarItem(e, i));
+    });
+    buildVisualOrder();
+    _restoreSelection(preserveDetail);
+    if (preserveDetail) sb.scrollTop = prevScrollTop;
+    return;
+  }
+
+  if (sidebarOrderMode === 'session') {
+    const groups = buildSessionGroups(filtered.map((entry, idx) => ({ entry, idx })));
+    groups.forEach((group, groupIdx) => {
+      const firstEntry = group.items[0]?.entry;
+      const taskInfo = firstEntry ? getTaskFingerprint(firstEntry) : null;
+      const taskColor = taskInfo ? getTaskColor(taskInfo.fp) : TASK_COLORS[groupIdx % TASK_COLORS.length];
+      const groupKey = 'session:' + groupIdx + ':' + group.key;
+      const isCollapsed = collapsedGroups.has(groupKey);
+      const label = sessionTextSnippet(group.userText, 48);
+      const header = document.createElement('div');
+      header.className = 'sidebar-group-header';
+      header.innerHTML = `<span class="group-dot" style="background:${taskColor.color}"></span><span class="group-name">${esc(t('sort_session'))} ${groupIdx + 1}${label ? ' - ' + esc(label) : ''}</span><span class="group-count">${group.items.length}</span><span class="group-chevron${isCollapsed ? '' : ' open'}">&#9654;</span>`;
+      bindSessionInputTooltip(header, group.userText, label);
+      const content = document.createElement('div');
+      if (isCollapsed) content.style.display = 'none';
+      group.items.forEach(({ entry: e, idx: i }) => content.appendChild(createSidebarItem(e, i)));
+      header.onclick = () => {
+        hideSessionTooltip(header);
+        const nowCollapsed = content.style.display !== 'none';
+        content.style.display = nowCollapsed ? 'none' : '';
+        header.querySelector('.group-chevron').classList.toggle('open');
+        if (nowCollapsed) collapsedGroups.add(groupKey); else collapsedGroups.delete(groupKey);
+        buildVisualOrder();
+        updateMobileNav();
+      };
+      sb.appendChild(header);
+      sb.appendChild(content);
     });
     buildVisualOrder();
     _restoreSelection(preserveDetail);
@@ -3549,9 +3934,11 @@ function renderDetail(e) {
   }
 }
 
-function renderTraceBlock(title, content, badge = '') {
+function renderTraceBlock(title, payload, badge = '') {
   const badgeHtml = badge ? `<span class="trace-badge">${esc(badge)}</span>` : '';
-  return `<div class="trace-block"><div class="trace-block-title"><span>${esc(title)}</span>${badgeHtml}</div>${content}</div>`;
+  const copyText = tracePayloadText(payload);
+  const copyBtn = `<button class="trace-copy-btn" type="button" data-copy="${encodeCopyText(copyText)}">${t('copy')}</button>`;
+  return `<div class="trace-block"><div class="trace-block-title"><span class="trace-title">${esc(title)}</span><span class="trace-actions">${badgeHtml}${copyBtn}</span></div>${renderTracePayload(payload)}</div>`;
 }
 
 function renderTraceDetail(entry, ctx) {
@@ -3583,24 +3970,24 @@ function renderTraceDetail(entry, ctx) {
   html += '<div class="trace-grid">';
   html += renderTraceBlock(
     t('tok_input'),
-    renderTracePayload(inputPayload),
+    inputPayload,
     `${(ctx.msgs || []).length} ${t('badge_messages')}`
   );
   html += renderTraceBlock(
     t('tok_output'),
-    renderTracePayload(responsePayload),
+    responsePayload,
     `${getResponseStatus(entry)}`
   );
   if (ctx.streamEvents.length) {
     html += renderTraceBlock(
       t('section_sse'),
-      renderTracePayload(ctx.streamEvents),
+      ctx.streamEvents,
       `${ctx.streamEvents.length} ${t('badge_events')}`
     );
   }
   html += renderTraceBlock(
     t('section_metadata'),
-    renderTracePayload(metadata)
+    metadata
   );
   html += '</div>';
   return html;
@@ -3610,6 +3997,10 @@ function renderTracePayload(payload) {
   if (traceFormatMode === 'pretty') return `<div class="trace-pretty">${renderTracePrettyValue(payload)}</div>`;
   const text = traceFormatMode === 'yaml' ? toTraceYaml(payload) : JSON.stringify(payload, null, 2);
   return `<pre class="trace-code" data-format="${traceFormatMode}">${esc(text)}</pre>`;
+}
+
+function tracePayloadText(payload) {
+  return traceFormatMode === 'yaml' ? toTraceYaml(payload) : JSON.stringify(payload, null, 2);
 }
 
 function isTraceScalar(value) {
@@ -4025,8 +4416,7 @@ function getMessages(body) {
           })
         : item.content
     }));
-    const hasDeveloperMessage = messages.some(m => m.role === 'developer' || m.role === 'system');
-    if (!hasDeveloperMessage && typeof body.instructions === 'string' && body.instructions.trim()) {
+    if (shouldPrependResponsesInstructions(body, messages)) {
       return [{ role: 'developer', content: [{ type: 'text', text: body.instructions }] }, ...messages];
     }
     return messages;
@@ -4034,12 +4424,20 @@ function getMessages(body) {
   return [];
 }
 
+function shouldPrependResponsesInstructions(body, messages) {
+  if (!Array.isArray(body?.input) || body.input.length === 0) return false;
+  if (!Array.isArray(messages) || messages.length === 0) return false;
+  if (messages.some(m => m.role === 'developer' || m.role === 'system')) return false;
+  if (!messages.some(m => m.role === 'user')) return false;
+  return typeof body.instructions === 'string' && body.instructions.trim();
+}
+
 function shouldRenderRequestContext(entry, body, msgs, respOutput) {
   if (!entry || !body || !Array.isArray(msgs) || msgs.length === 0) return false;
   const method = entry?.request?.method || '';
   if (!entry.derived_from_websocket && entry.transport !== 'websocket' && method !== 'WEBSOCKET') return false;
   const path = getPath(entry);
-  if (!path.includes('/codex/responses')) return false;
+  if (!path.includes('/codex/responses') && !path.includes('/v1/responses')) return false;
   if (!Array.isArray(body.input) || body.input.length === 0) return false;
   return true;
 }
@@ -4251,34 +4649,130 @@ function renderMessages(msgs) {
   }).filter(Boolean).join('');
 }
 
-function wrapContentBlock(inner, block, index, total, options = {}) {
-  const frameBlock = !!options.frameBlocks && total > 1;
-  const cls = frameBlock ? 'content-block block-framed' : 'content-block';
-  return `<div class="${cls}">${inner}</div>`;
+function contentHasImagePlaceholder(content) {
+  if (typeof content === 'string') return /\[Image #\d+\]/i.test(content);
+  if (!Array.isArray(content)) return content && typeof content === 'object' && contentHasImagePlaceholder(content.content || content.text || content.output || '');
+  return content.some(block => {
+    if (typeof block === 'string') return contentHasImagePlaceholder(block);
+    if (!block || typeof block !== 'object') return false;
+    return contentHasImagePlaceholder(block.text || block.output || block.content || '');
+  });
 }
 
-function imageBlockSrc(block) {
-  if (!block || typeof block !== 'object') return '';
-  if (typeof block.image_url === 'string' && isInlineImageUrl(block.image_url)) return block.image_url;
-  const source = block.source || {};
-  if (source.type === 'base64' && source.data) {
-    return `data:${source.media_type || 'image/png'};base64,${source.data}`;
-  }
-  if (source.type === 'url' && isInlineImageUrl(source.url)) return source.url;
-  return '';
+function wrapContentBlock(inner, block, index, total, options = {}) {
+  const frameBlock = !!options.frameBlocks && total > 1;
+  const classes = ['content-block'];
+  if (frameBlock) classes.push('block-framed');
+  if (options.extraClass) classes.push(...String(options.extraClass).split(/\s+/).filter(Boolean));
+  return `<div class="${classes.join(' ')}">${inner}</div>`;
 }
 
 function isInlineImageUrl(url) {
   return typeof url === 'string' && /^data:image\//i.test(url);
 }
 
+function imageSourceFromBlock(block) {
+  if (!block || typeof block !== 'object') return null;
+  const source = block.source || {};
+  if (
+    (block.type === 'image' || block.type === 'input_image' || source.type === 'base64') &&
+    source.type === 'base64' &&
+    source.data
+  ) {
+    return { src: `data:${source.media_type || 'image/png'};base64,${source.data}`, alt: source.media_type || 'image' };
+  }
+  if (
+    (block.type === 'image' || block.type === 'input_image' || source.type === 'url') &&
+    source.type === 'url' &&
+    isInlineImageUrl(source.url)
+  ) {
+    return { src: source.url, alt: source.media_type || 'image' };
+  }
+  const imageUrl = block.image_url;
+  if (typeof imageUrl === 'string' && isInlineImageUrl(imageUrl)) return { src: imageUrl, alt: 'image' };
+  if (imageUrl && typeof imageUrl === 'object' && isInlineImageUrl(imageUrl.url)) return { src: imageUrl.url, alt: 'image' };
+  if (block.data && (block.media_type || block.mime_type)) {
+    return { src: `data:${block.media_type || block.mime_type};base64,${block.data}`, alt: block.media_type || block.mime_type || 'image' };
+  }
+  return null;
+}
+
+function imageBlocksForContent(content) {
+  const images = [];
+  const visit = value => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (typeof value !== 'object') return;
+    if (imageSourceFromBlock(value)) images.push(value);
+    if (value.type === 'message' || value.type === 'tool_result' || value.type === 'function_call_output') visit(value.content);
+  };
+  visit(content);
+  return images;
+}
+
+function imageSourceKey(block) {
+  const source = imageSourceFromBlock(block);
+  return source ? source.src.slice(0, 128) + ':' + source.src.length : '';
+}
+
+function buildSessionImageRegistry() {
+  if (sessionImageRegistryCache && sessionImageRegistrySize === entries.length) return sessionImageRegistryCache;
+  const registry = new Map();
+  const sourceEntries = lazyMode
+    ? expandWebSocketResponseEntries(getRawLines().map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean))
+    : entries.map(getFullEntry);
+  for (const entry of sourceEntries) {
+    const messages = getMessages(entry?.request?.body);
+    for (const message of messages) {
+      if (message?.role !== 'user') continue;
+      const images = imageBlocksForContent(message.content);
+      if (!images.length) continue;
+      const key = imageLookupKey(naturalTextForSessionContent(message.content));
+      if (!key) continue;
+      const bucket = registry.get(key) || [];
+      const seen = new Set(bucket.map(imageSourceKey));
+      for (const image of images) {
+        const imageKey = imageSourceKey(image);
+        if (!imageKey || seen.has(imageKey)) continue;
+        seen.add(imageKey);
+        bucket.push(image);
+      }
+      registry.set(key, bucket);
+    }
+  }
+  sessionImageRegistryCache = registry;
+  sessionImageRegistrySize = entries.length;
+  return registry;
+}
+
+function recoveredImagesForContent(content) {
+  if (!contentHasImagePlaceholder(content) || imageBlocksForContent(content).length) return [];
+  const key = imageLookupKey(naturalTextForSessionContent(content));
+  if (!key) return [];
+  return buildSessionImageRegistry().get(key) || [];
+}
+
 function renderImageElement(src, alt = 'image') {
-  return `<img class="content-image" src="${esc(src)}" alt="${esc(alt)}" />`;
+  return `<img class="content-image message-image" src="${esc(src)}" alt="${esc(alt)}" loading="lazy" />`;
+}
+
+function renderImageElementForBlock(block) {
+  const source = imageSourceFromBlock(block);
+  if (!source) return '';
+  return renderImageElement(source.src, source.alt);
+}
+
+function renderImageBlock(block, index = 0, total = 1, options = {}) {
+  const inner = renderImageElementForBlock(block);
+  return inner ? wrapContentBlock(inner, block, index, total, { ...options, extraClass: 'image-block' }) : '';
 }
 
 function renderContent(content, role, options = {}) {
   const blocks = normalizeDisplayContentBlocks(content);
-  return blocks.map((block, index) => {
+  const renderedBlocks = blocks.map((block, index) => {
     if (block.type === 'text' || block.type === 'input_text' || block.type === 'output_text') {
       const txt = block.text || '';
       if (!txt.trim()) return '';
@@ -4301,8 +4795,8 @@ function renderContent(content, role, options = {}) {
         const parts = rc.map(c => {
           if (c.type === 'text') return `<div class="pre-text">${esc(c.text)}</div>`;
           if (c.type === 'image' || c.type === 'input_image') {
-            const src = imageBlockSrc(c);
-            if (src) return renderImageElement(src);
+            const renderedImage = renderImageElementForBlock(c);
+            if (renderedImage) return renderedImage;
           }
           return `<pre>${esc(JSON.stringify(c))}</pre>`;
         }).join('');
@@ -4311,8 +4805,8 @@ function renderContent(content, role, options = {}) {
       return wrapContentBlock(`<pre>${esc(JSON.stringify(block, null, 2))}</pre>`, block, index, blocks.length, options);
     }
     if (block.type === 'image' || block.type === 'input_image') {
-      const src = imageBlockSrc(block);
-      if (src) return wrapContentBlock(renderImageElement(src), block, index, blocks.length, options);
+      const renderedImage = renderImageBlock(block, index, blocks.length, options);
+      if (renderedImage) return renderedImage;
       const source = block.source || {};
       const fileId = block.file_id || source.file_id;
       const hasUrl = block.image_url || source.url;
@@ -4322,6 +4816,10 @@ function renderContent(content, role, options = {}) {
     if (block.type === 'raw') return wrapContentBlock(`<pre>${esc(JSON.stringify(block.value, null, 2))}</pre>`, block, index, blocks.length, options);
     return wrapContentBlock(`<pre>${esc(JSON.stringify(block, null, 2))}</pre>`, block, index, blocks.length, options);
   }).join('');
+  const recovered = role === 'user'
+    ? recoveredImagesForContent(content).map((block, index, images) => renderImageBlock(block, index, images.length)).join('')
+    : '';
+  return renderedBlocks + recovered;
 }
 
 function renderTools(tools) {
@@ -4377,11 +4875,15 @@ function renderSSEEvents(events) {
 }
 
 /* ─── Section ─── */
+function encodeCopyText(text) {
+  return btoa(unescape(encodeURIComponent(text)));
+}
+
 function section(title, body, defaultOpen = true, copyText = null, badge = null) {
   const oc = defaultOpen ? 'open' : '', ac = defaultOpen ? 'chevron open' : 'chevron';
   let extra = '';
   if (badge) extra += `<span class="badge">${esc(badge)}</span>`;
-  if (copyText !== null) extra += `<button class="copy-btn" data-copy="${btoa(unescape(encodeURIComponent(copyText)))}">${t('copy')}</button>`;
+  if (copyText !== null) extra += `<button class="copy-btn" data-copy="${encodeCopyText(copyText)}">${t('copy')}</button>`;
   return `<div class="section"><div class="section-header"><span class="${ac}">&#9654;</span><span class="title">${title}</span>${extra}</div><div class="section-body ${oc}">${body}</div></div>`;
 }
 
@@ -4395,6 +4897,13 @@ function bindSections(container) {
       }
       h.nextElementSibling.classList.toggle('open');
       h.querySelector('.chevron').classList.toggle('open');
+    });
+  });
+  container.querySelectorAll('.trace-copy-btn').forEach(btn => {
+    btn.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const text = decodeURIComponent(escape(atob(btn.dataset.copy)));
+      copyToClipboard(text, btn);
     });
   });
   container.querySelectorAll('.tool-block-header').forEach(h => {

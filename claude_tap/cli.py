@@ -17,7 +17,6 @@ import urllib.error
 import urllib.request
 import webbrowser
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import aiohttp
@@ -26,11 +25,20 @@ from aiohttp import web
 from claude_tap.certs import CertificateAuthority, ensure_ca, is_macos_ca_trusted, trust_macos_ca
 from claude_tap.cursor_transcript import import_cursor_transcripts
 from claude_tap.forward_proxy import ForwardProxyServer
-from claude_tap.history import _cleanup_traces, _register_trace, _rel_posix
+from claude_tap.history import cleanup_trace_sessions, migrate_legacy_traces
 from claude_tap.live import LiveViewerServer
 from claude_tap.proxy import proxy_handler
+from claude_tap.shared_dashboard import (
+    DEFAULT_DASHBOARD_PORT,
+    dashboard_url,
+    ensure_shared_dashboard,
+    is_dashboard_healthy,
+    is_legacy_dashboard_healthy,
+    resolve_dashboard_port,
+)
 from claude_tap.trace import TraceWriter
-from claude_tap.viewer import _generate_html_viewer
+from claude_tap.trace_log_handler import SQLiteLogHandler
+from claude_tap.trace_store import get_trace_store, resolve_db_path
 
 # Force UTF-8 + line-buffered stdout/stderr so emoji output works on Windows
 # consoles (GBK/cp936) and `uv tool` doesn't fully buffer our progress prints.
@@ -52,6 +60,10 @@ except Exception:
 def _open_browser(url: str) -> None:
     """Open URL in browser without blocking. Silently ignores failures in headless environments."""
     threading.Thread(target=lambda: webbrowser.open(url), daemon=True).start()
+
+
+async def _is_dashboard_reusable(host: str, port: int) -> bool:
+    return await is_dashboard_healthy(host, port) or await is_legacy_dashboard_healthy(host, port)
 
 
 @dataclass(frozen=True)
@@ -568,15 +580,11 @@ def _ensure_ca_trust_for_forward_proxy(args: argparse.Namespace, ca_cert_path: P
 async def async_main(args: argparse.Namespace):
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    if not args.live_viewer:
+        migrate_legacy_traces(output_dir)
 
-    now = datetime.now()
-    date_str = now.strftime("%Y-%m-%d")
-    time_str = now.strftime("%H%M%S")
-    ts = now.strftime("%Y%m%d_%H%M%S")  # kept for manifest compatibility
-    date_dir = output_dir / date_str
-    date_dir.mkdir(parents=True, exist_ok=True)
-    trace_path = date_dir / f"trace_{time_str}.jsonl"
-    log_path = date_dir / f"trace_{time_str}.log"
+    store = get_trace_store()
+    trace_metadata = {"client": args.client, "proxy_mode": args.proxy_mode}
 
     ca_cert_path: Path | None = None
     ca_key_path: Path | None = None
@@ -586,33 +594,41 @@ async def async_main(args: argparse.Namespace):
         if trust_result != 0:
             return trust_result
 
-    # Start live viewer server if requested
-    live_server: LiveViewerServer | None = None
+    session_id = store.create_session(client=args.client, proxy_mode=args.proxy_mode)
+
+    # Ensure the shared dashboard is running (one port for all sessions).
+    dashboard_url_value: str | None = None
     if args.live_viewer:
-        live_server = LiveViewerServer(trace_path, port=args.live_port, host=args.host, output_dir=output_dir)
-        await live_server.start()
-        print(f"🌐 Live viewer: {live_server.url}")
-        if args.open_viewer:
-            _open_browser(live_server.url)
+        dashboard_host = args.host
+        dashboard_port = resolve_dashboard_port(args.live_port)
+        try:
+            dashboard_url_value, spawned = await ensure_shared_dashboard(
+                host=dashboard_host,
+                port=dashboard_port,
+                output_dir=output_dir,
+                open_browser=args.open_viewer,
+                open_browser_fn=_open_browser,
+            )
+            if spawned:
+                print(f"🌐 Dashboard: {dashboard_url_value}")
+            else:
+                print(f"🌐 Dashboard: {dashboard_url_value} (shared)")
+        except RuntimeError as exc:
+            print(f"⚠️  {exc}", file=sys.stderr)
 
-    trace_metadata = {"client": args.client, "proxy_mode": args.proxy_mode}
-    writer = TraceWriter(trace_path, live_server=live_server, metadata=trace_metadata)
+    writer = TraceWriter(session_id, live_server=None, metadata=trace_metadata, store=store)
 
-    # Proxy logs go to file, not terminal (avoids polluting Claude TUI)
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
-    log.addHandler(file_handler)
+    # Proxy logs go to SQLite, not terminal (avoids polluting Claude TUI)
+    sqlite_handler = SQLiteLogHandler(session_id, store=store)
+    sqlite_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
+    log.addHandler(sqlite_handler)
     log.setLevel(logging.DEBUG)
-    # Suppress aiohttp logs from polluting the terminal
     logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
-    # Redirect aiohttp.server errors (e.g. broken connections) to log file only
     aiohttp_server_log = logging.getLogger("aiohttp.server")
-    aiohttp_server_log.addHandler(file_handler)
+    aiohttp_server_log.addHandler(sqlite_handler)
     aiohttp_server_log.propagate = False
-    # uvloop emits TLS shutdown warnings through the asyncio logger.
-    # Keep them in the trace log rather than printing them into the client TUI.
     asyncio_log = logging.getLogger("asyncio")
-    asyncio_log.addHandler(file_handler)
+    asyncio_log.addHandler(sqlite_handler)
     asyncio_log.propagate = False
 
     # Honor system proxy env (HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY) for
@@ -624,65 +640,65 @@ async def async_main(args: argparse.Namespace):
     # Reverse proxy mode: aiohttp web app (current behavior)
     forward_server: ForwardProxyServer | None = None
     runner: web.AppRunner | None = None
-
-    if args.proxy_mode == "forward":
-        assert ca_cert_path is not None
-        assert ca_key_path is not None
-        ca = CertificateAuthority(ca_cert_path, ca_key_path)
-        forward_server = ForwardProxyServer(
-            host=args.host,
-            port=args.port,
-            ca=ca,
-            writer=writer,
-            session=session,
-            local_reverse_target=args.target,
-            local_reverse_allowed_path_prefixes=CLIENT_CONFIGS[args.client].forward_base_url_allowed_path_prefixes,
-        )
-        actual_port = await forward_server.start()
-        print(f"🔍 claude-tap v{__version__} forward proxy on http://{args.host}:{actual_port}")
-        print(f"   CA cert: {ca_cert_path}")
-    else:
-        app = web.Application(client_max_size=0)  # No body size limit (proxy must forward everything)
-        app["trace_ctx"] = {
-            "target_url": args.target,
-            "writer": writer,
-            "session": session,
-            "turn_counter": 0,
-            "extra_allowed_path_prefixes": tuple(args.extra_allowed_paths),
-            **_reverse_proxy_trace_options(args.client, args.target),
-        }
-        app.router.add_route("*", "/{path_info:.*}", proxy_handler)
-
-        runner = web.AppRunner(app)
-        await runner.setup()
-        site = web.TCPSite(runner, args.host, args.port)
-        await site.start()
-
-        # Resolve actual port (site._server is a private API; fall back to args.port)
-        try:
-            actual_port = site._server.sockets[0].getsockname()[1]
-        except (AttributeError, IndexError, OSError):
-            actual_port = args.port
-        print(f"🔍 claude-tap v{__version__} listening on http://{args.host}:{actual_port}")
-
-    print(f"📁 Trace file: {trace_path}")
-
-    # Background update check
-    if not args.no_update_check:
-        try:
-            latest = await _check_pypi_version()
-            if latest and _version_tuple(latest) > _version_tuple(__version__):
-                print(f"⬆️  Update available: {__version__} → {latest}")
-                if not args.no_auto_update:
-                    installer = _detect_installer()
-                    _start_background_update(installer)
-                    print(f"   Downloading update in background ({installer})...")
-        except Exception:
-            pass
-
     exit_code = 0
     client_started_at = time.time()
     try:
+        if args.proxy_mode == "forward":
+            assert ca_cert_path is not None
+            assert ca_key_path is not None
+            ca = CertificateAuthority(ca_cert_path, ca_key_path)
+            forward_server = ForwardProxyServer(
+                host=args.host,
+                port=args.port,
+                ca=ca,
+                writer=writer,
+                session=session,
+                local_reverse_target=args.target,
+                local_reverse_allowed_path_prefixes=CLIENT_CONFIGS[args.client].forward_base_url_allowed_path_prefixes,
+            )
+            actual_port = await forward_server.start()
+            print(f"🔍 claude-tap v{__version__} forward proxy on http://{args.host}:{actual_port}")
+            print(f"   CA cert: {ca_cert_path}")
+        else:
+            app = web.Application(client_max_size=0)  # No body size limit (proxy must forward everything)
+            app["trace_ctx"] = {
+                "target_url": args.target,
+                "writer": writer,
+                "session": session,
+                "turn_counter": 0,
+                "extra_allowed_path_prefixes": tuple(args.extra_allowed_paths),
+                **_reverse_proxy_trace_options(args.client, args.target),
+            }
+            app.router.add_route("*", "/{path_info:.*}", proxy_handler)
+
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, args.host, args.port)
+            await site.start()
+
+            # Resolve actual port (site._server is a private API; fall back to args.port)
+            try:
+                actual_port = site._server.sockets[0].getsockname()[1]
+            except (AttributeError, IndexError, OSError):
+                actual_port = args.port
+            print(f"🔍 claude-tap v{__version__} listening on http://{args.host}:{actual_port}")
+
+        print(f"📁 Trace session: {session_id}")
+        print(f"🗄️  Trace database: {resolve_db_path()}")
+
+        # Background update check
+        if not args.no_update_check:
+            try:
+                latest = await _check_pypi_version()
+                if latest and _version_tuple(latest) > _version_tuple(__version__):
+                    print(f"⬆️  Update available: {__version__} → {latest}")
+                    if not args.no_auto_update:
+                        installer = _detect_installer()
+                        _start_background_update(installer)
+                        print(f"   Downloading update in background ({installer})...")
+            except Exception:
+                pass
+
         if not args.no_launch:
             client_started_at = time.time()
             try:
@@ -716,12 +732,7 @@ async def async_main(args: argparse.Namespace):
             except Exception:
                 pass
 
-        # Stop live viewer server if running
-        if live_server:
-            try:
-                await live_server.stop()
-            except Exception:
-                pass
+        # Shared dashboard runs in a detached process; nothing to stop here.
         try:
             await asyncio.wait_for(session.close(), timeout=5)
         except asyncio.TimeoutError:
@@ -734,22 +745,12 @@ async def async_main(args: argparse.Namespace):
             if imported:
                 print(f"   Cursor transcript turns: {imported}")
 
-        # Close writer before generating HTML
         writer.close()
 
-        # Generate self-contained HTML viewer
-        html_path = trace_path.with_suffix(".html")
-        _generate_html_viewer(trace_path, html_path)
-
-        # Register trace and cleanup old ones
-        trace_files = [_rel_posix(trace_path, output_dir), _rel_posix(log_path, output_dir)]
-        if html_path.exists():
-            trace_files.append(_rel_posix(html_path, output_dir))
-        _register_trace(output_dir, ts, trace_files, metadata=trace_metadata)
         if args.max_traces > 0:
-            cleaned = _cleanup_traces(output_dir, args.max_traces)
+            cleaned = cleanup_trace_sessions(args.max_traces, protected_session_id=session_id)
             if cleaned:
-                print(f"\n🧹 Cleaned up {cleaned} old trace(s)")
+                print(f"\n🧹 Cleaned up {cleaned} old trace session(s)")
 
         # Print summary with cost estimation
         stats = writer.get_summary()
@@ -766,15 +767,10 @@ async def async_main(args: argparse.Namespace):
                 print(f" / {stats['cache_create_tokens']:,} cache_write", end="")
             print()
 
-        # Output files
-        print(f"   Trace: {trace_path}")
-        print(f"   Log:   {log_path}")
-        print(f"   View:  {html_path}")
-
-        # Open viewer in browser (default: auto-open unless --tap-no-open)
-        if args.open_viewer and html_path.exists():
-            print("\n🌐 Opening viewer in browser...")
-            _open_browser(html_path.absolute().as_uri())
+        print(f"   Session: {session_id}")
+        print(f"   Database: {resolve_db_path()}")
+        if dashboard_url_value:
+            print(f"   Dashboard: {dashboard_url_value}")
 
     return exit_code
 
@@ -1086,26 +1082,29 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         dest="live_viewer",
         default=True,
-        help="Start real-time viewer server while the client runs (default: on)",
+        help="Use the shared local dashboard while the client runs (default: on)",
     )
     viewer_group.add_argument(
         "--tap-no-live",
         action="store_false",
         dest="live_viewer",
-        help="Disable the real-time viewer server (restores pre-v0.1.75 behavior)",
+        help="Disable the shared dashboard (restores pre-v0.1.75 behavior)",
     )
     viewer_group.add_argument(
         "--tap-live-port",
         type=int,
         default=0,
         dest="live_port",
-        help="Port for live viewer server (default: auto)",
+        help=f"Port for the shared dashboard (default: {DEFAULT_DASHBOARD_PORT})",
     )
 
     # -- Storage & update options --
     storage_group = tap_parser.add_argument_group("storage and update options")
     storage_group.add_argument(
-        "--tap-output-dir", default="./.traces", dest="output_dir", help="Trace output directory (default: ./.traces)"
+        "--tap-output-dir",
+        default="./.traces",
+        dest="output_dir",
+        help="Legacy trace directory to import once (default: ./.traces)",
     )
     storage_group.add_argument(
         "--tap-max-traces",
@@ -1167,7 +1166,7 @@ def parse_dashboard_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--tap-output-dir",
         default="./.traces",
         dest="output_dir",
-        help="Trace output directory to browse (default: ./.traces)",
+        help="Legacy trace directory to import once (default: ./.traces)",
     )
     parser.add_argument(
         "--tap-live-port",
@@ -1197,17 +1196,38 @@ async def dashboard_main(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    now = datetime.now()
-    date_dir = output_dir / now.strftime("%Y-%m-%d")
-    date_dir.mkdir(parents=True, exist_ok=True)
-    trace_path = date_dir / f"dashboard_{now.strftime('%H%M%S')}.jsonl"
+    host = args.host
+    port = resolve_dashboard_port(args.live_port)
+    if await _is_dashboard_reusable(host, port):
+        migrate_legacy_traces(output_dir)
+        url = dashboard_url(host, port)
+        print(f"🌐 claude-tap dashboard already running: {url}")
+        print(f"🗄️  Trace database: {resolve_db_path()}")
+        if args.open_viewer:
+            _open_browser(url)
+        return 0
 
     server = LiveViewerServer(
-        trace_path, port=args.live_port, host=args.host, output_dir=output_dir, dashboard_mode=True
+        port=port,
+        host=host,
+        migrate_from=output_dir,
+        dashboard_mode=True,
     )
-    await server.start()
+    try:
+        await server.start()
+    except OSError:
+        if await _is_dashboard_reusable(host, port):
+            migrate_legacy_traces(output_dir)
+            url = dashboard_url(host, port)
+            print(f"🌐 claude-tap dashboard already running: {url}")
+            if args.open_viewer:
+                _open_browser(url)
+            return 0
+        raise
     print(f"🌐 claude-tap dashboard: {server.url}")
-    print(f"📁 Trace directory: {output_dir}")
+    print(f"🗄️  Trace database: {resolve_db_path()}")
+    if output_dir.exists():
+        print(f"📁 Legacy import dir: {output_dir}")
     print("Press Ctrl+C to stop.")
     if args.open_viewer:
         _open_browser(server.url)

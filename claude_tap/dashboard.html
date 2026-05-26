@@ -166,6 +166,18 @@ button { cursor: pointer; }
   flex-direction: column;
   min-height: 0;
 }
+body.detail-route .path-filter,
+body.detail-route .header > .divider,
+body.detail-route .trace-path-bar,
+body.detail-route .stats .stat-group {
+  display: none;
+}
+body.detail-route .stats {
+  margin-left: auto;
+}
+body.detail-route .main {
+  padding-top: 10px;
+}
 .dashboard-title-row {
   display: flex;
   align-items: center;
@@ -177,6 +189,13 @@ button { cursor: pointer; }
   font-size: 14px;
   font-weight: 600;
   letter-spacing: .02em;
+}
+.dashboard-load-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 .dashboard-clock {
   margin-left: auto;
@@ -228,6 +247,11 @@ button { cursor: pointer; }
   transition: color .15s, border-color .15s, background .15s;
 }
 .history-refresh:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+.history-refresh.loading,
+.history-refresh:disabled {
+  cursor: progress;
+  opacity: .68;
+}
 .overview-card {
   display: grid;
   grid-template-columns: repeat(4, max-content);
@@ -402,11 +426,40 @@ button { cursor: pointer; }
   border-color: var(--blue);
   background: var(--blue-bg);
 }
+.row-action:disabled {
+  cursor: progress;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+}
 .table-empty {
   padding: 28px 16px;
   text-align: center;
   color: var(--text-tertiary);
   font-size: 13px;
+}
+.loading-cell {
+  padding: 34px 16px;
+  color: var(--text-tertiary);
+}
+.loading-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+  flex: 0 0 auto;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .detail-page-head {
@@ -414,6 +467,9 @@ button { cursor: pointer; }
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+body.detail-route .detail-page-head {
+  margin-bottom: 8px;
 }
 .back-btn {
   display: inline-flex;
@@ -461,6 +517,7 @@ button { cursor: pointer; }
   background: var(--bg);
 }
 .viewer-frame-wrap {
+  position: relative;
   height: calc(100vh - 148px);
   min-height: 640px;
   border: 1px solid var(--border);
@@ -476,6 +533,14 @@ button { cursor: pointer; }
   display: block;
   background: var(--bg-card);
 }
+.viewer-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  background: var(--bg-card);
+}
 .detail-fallback-note {
   margin-bottom: 10px;
   padding: 8px 10px;
@@ -485,11 +550,41 @@ button { cursor: pointer; }
   color: var(--amber);
   font-size: 12px;
 }
+.detail-load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+.load-more-btn {
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--blue);
+  font-family: var(--mono);
+  font-size: 12px;
+  transition: background .15s, border-color .15s;
+}
+.load-more-btn:hover {
+  border-color: var(--blue);
+  background: var(--blue-bg);
+}
+.load-more-btn:disabled {
+  cursor: progress;
+  color: var(--text-tertiary);
+  background: var(--bg-hover);
+}
 .detail::-webkit-scrollbar { width: 6px; }
 .detail::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 .empty {
   display: grid; place-items: center; min-height: 360px;
   color: var(--text-tertiary); font-size: 13px;
+}
+.detail-loading {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
 }
 .detail-inspector-bar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -501,6 +596,9 @@ button { cursor: pointer; }
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: 0 4px 16px rgba(15, 23, 42, 0.07);
+}
+body.detail-route .detail-inspector-bar {
+  margin-bottom: 8px;
 }
 [data-theme="dark"] .detail-inspector-bar {
   background: rgba(22, 27, 34, 0.9);
@@ -534,26 +632,6 @@ button { cursor: pointer; }
   transition: all .15s;
 }
 .act-btn:hover { background: var(--bg-hover); color: var(--blue); }
-.session-summary {
-  margin-bottom: 8px; border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
-  background: var(--bg-card); box-shadow: var(--shadow-sm);
-}
-.session-summary-head {
-  display: flex; align-items: center; gap: 8px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--border-light);
-}
-.session-summary-title { font-size: 13px; font-weight: 600; color: var(--text); }
-.session-summary-path {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--text-tertiary); font-family: var(--mono); font-size: 11px; margin-left: auto;
-}
-.token-bar { display: flex; gap: 12px; font-size: 11px; padding: 8px 12px; flex-wrap: wrap; }
-.tok-item { display: flex; align-items: center; gap: 4px; }
-.tok-dot { width: 6px; height: 6px; border-radius: 50%; }
-.tok-label { color: var(--text-tertiary); font-size: 11px; }
-.tok-val { color: var(--text-secondary); font-weight: 600; font-family: var(--mono); font-size: 11px; }
 .badge {
   display: inline-flex; align-items: center;
   font-size: 11px; padding: 2px 8px; border-radius: 10px;
@@ -670,6 +748,7 @@ pre {
   <section id="list-view" class="list-view">
     <div class="dashboard-title-row">
       <h1 class="dashboard-title" data-i18n="dashboard_title">Conversation Log</h1>
+      <span class="dashboard-load-status" id="dashboard-load-status" hidden></span>
       <span class="dashboard-clock" id="dashboard-clock"></span>
     </div>
 
@@ -749,18 +828,44 @@ pre {
 </div>
 
 <script>
+const SESSION_DETAIL_ROUTE = /^\/dashboard\/session\/([^/]+)\/?$/;
+
 const state = {
   sessions: [],
   selectedAgent: "all",
   selectedSessionId: null,
+  pendingSessionId: initialSessionId(),
   view: "list",
   activeTab: "conversation",
   search: "",
   date: "all",
   status: "all",
+  loadingSessions: false,
+  loadingSessionId: null,
+  sessionRequestId: 0,
+  detailSessionId: null,
+  detailRecordsLoaded: 0,
+  detailRecordTotal: 0,
+  detailFingerprint: "",
+  detailSession: null,
 };
 
 const $ = selector => document.querySelector(selector);
+const MAX_INLINE_DETAIL_RECORDS = 10;
+
+function initialSessionId() {
+  const routeMatch = window.location.pathname.match(SESSION_DETAIL_ROUTE);
+  if (routeMatch) return decodeURIComponent(routeMatch[1]);
+  return new URLSearchParams(window.location.search).get("session_id") || null;
+}
+
+function sessionDetailUrl(sessionId) {
+  return `/dashboard/session/${encodeURIComponent(sessionId)}`;
+}
+
+function dashboardListUrl() {
+  return "/dashboard";
+}
 
 const DASHBOARD_I18N = {
   en: {
@@ -800,6 +905,12 @@ const DASHBOARD_I18N = {
     all_dates: "All dates",
     all_agents: "All agents",
     no_matching_sessions: "No matching trace sessions.",
+    loading_sessions: "Loading sessions...",
+    loading_session: "Loading session detail...",
+    loading_viewer: "Loading viewer...",
+    loading_more_records: "Loading more records...",
+    load_more_records: "Load more records",
+    limited_records: "Showing {shown} of {total} records.",
     no_user_prompt: "No captured user prompt.",
     unknown: "unknown",
     view_details: "View session details",
@@ -810,12 +921,15 @@ const DASHBOARD_I18N = {
     no_session_selected: "No session selected.",
     select_session: "Select a session to view details.",
     jsonl: "JSONL",
-    html: "HTML",
-    not_generated: "not generated",
+    log: "Log",
+    session_id: "Session",
+    export_jsonl: "Export JSONL",
+    export_log: "Export Log",
+    copy_session_id: "Copy session id",
     unable_load_session: "Unable to load session: {error}",
     unable_load_dashboard: "Unable to load dashboard: {error}",
-    fallback_viewer: "HTML viewer is not generated yet. Showing captured records.",
-    copy_path: "Copy path",
+    fallback_viewer: "Showing captured records from SQLite.",
+    copy_path: "Copy session id",
     records: "Records",
     turns: "Turns",
     input: "Input",
@@ -870,6 +984,12 @@ const DASHBOARD_I18N = {
     all_dates: "全部日期",
     all_agents: "全部 Agent",
     no_matching_sessions: "没有匹配的 trace 会话。",
+    loading_sessions: "正在加载会话...",
+    loading_session: "正在加载会话详情...",
+    loading_viewer: "正在加载 viewer...",
+    loading_more_records: "正在加载更多记录...",
+    load_more_records: "加载更多记录",
+    limited_records: "正在展示 {shown} / {total} 条记录。",
     no_user_prompt: "未捕获到用户 prompt。",
     unknown: "未知",
     view_details: "查看会话详情",
@@ -880,12 +1000,15 @@ const DASHBOARD_I18N = {
     no_session_selected: "未选择会话。",
     select_session: "选择一个会话查看详情。",
     jsonl: "JSONL",
-    html: "HTML",
-    not_generated: "尚未生成",
+    log: "日志",
+    session_id: "会话",
+    export_jsonl: "导出 JSONL",
+    export_log: "导出日志",
+    copy_session_id: "复制会话 ID",
     unable_load_session: "无法加载会话：{error}",
     unable_load_dashboard: "无法加载面板：{error}",
-    fallback_viewer: "HTML viewer 尚未生成，正在展示已捕获记录。",
-    copy_path: "复制路径",
+    fallback_viewer: "正在展示 SQLite 中已捕获的记录。",
+    copy_path: "复制会话 ID",
     records: "记录",
     turns: "轮次",
     input: "输入",
@@ -935,7 +1058,7 @@ function applyI18n() {
   });
   $("#live-label").textContent = t("live_watching");
   renderStatusOptions();
-  updateTracePathBar();
+  updateTracePathBar(state.view === "detail" ? state.detailSession : null);
 }
 
 function setLang(lang) {
@@ -945,8 +1068,8 @@ function setLang(lang) {
   renderFilters();
   renderAgents();
   renderSessions();
-  if (state.view === "detail" && state.selectedSessionId) {
-    loadSession(state.selectedSessionId).catch(console.error);
+  if (state.view === "detail" && state.detailSession) {
+    updateDetailI18n(state.detailSession);
   }
 }
 
@@ -991,6 +1114,25 @@ function esc(value) {
     .replaceAll("'", "&#039;");
 }
 
+function loadingMarkup(label) {
+  return `<span class="loading-state"><span class="spinner" aria-hidden="true"></span><span>${esc(label)}</span></span>`;
+}
+
+function setDashboardLoading(loading, label = t("loading_sessions")) {
+  state.loadingSessions = loading;
+  const status = $("#dashboard-load-status");
+  if (status) {
+    status.hidden = !loading;
+    status.innerHTML = loading ? loadingMarkup(label) : "";
+  }
+  const refresh = $("#refresh");
+  if (refresh) {
+    refresh.disabled = loading;
+    refresh.classList.toggle("loading", loading);
+    refresh.setAttribute("aria-busy", loading ? "true" : "false");
+  }
+}
+
 async function fetchJSON(url) {
   const response = await fetch(url, {cache: "no-store"});
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
@@ -1009,7 +1151,8 @@ function filteredSessions() {
       session.model,
       session.first_user,
       session.last_response,
-      session.rel_trace_path,
+      session.legacy_rel_path,
+      session.id,
       session.status,
     ].join(" ").toLowerCase();
     return haystack.includes(needle);
@@ -1035,11 +1178,9 @@ function renderStatusOptions() {
 function updateTracePathBar(session = null) {
   if (state.view === "detail" && session) {
     $("#trace-path-bar").innerHTML = `
-      <span class="tp-label">${esc(t("jsonl"))}</span>
-      <span class="tp-val">${esc(session.trace_path || session.rel_trace_path)}</span>
-      <span class="tp-sep"></span>
-      <span class="tp-label">${esc(t("html"))}</span>
-      <span class="tp-val">${esc(session.html_path || t("not_generated"))}</span>
+      <span class="tp-label">${esc(t("session_id"))}</span>
+      <span class="tp-val">${esc(session.id || "")}</span>
+      ${session.legacy_rel_path ? `<span class="tp-sep"></span><span class="tp-label">${esc(t("jsonl"))}</span><span class="tp-val">${esc(session.legacy_rel_path)}</span>` : ""}
     `;
     return;
   }
@@ -1049,24 +1190,56 @@ function updateTracePathBar(session = null) {
   `;
 }
 
-async function refreshSessions({preserveSelection = true} = {}) {
-  const payload = await fetchJSON("/api/sessions");
-  state.sessions = payload.sessions || [];
-  renderFilters();
-  renderAgents();
-
-  const visible = filteredSessions();
-  const stillVisible = visible.some(session => session.id === state.selectedSessionId);
-  if (!preserveSelection || !stillVisible) {
-    state.selectedSessionId = null;
-    state.view = "list";
+async function refreshSessions({preserveSelection = true, refreshDetail = false} = {}) {
+  const requestId = state.sessionRequestId + 1;
+  state.sessionRequestId = requestId;
+  setDashboardLoading(true);
+  if (!state.sessions.length) {
+    renderSessions();
   }
-  renderSessions();
-  if (state.view === "detail" && state.selectedSessionId) {
-    showDetailView();
-    await loadSession(state.selectedSessionId);
-  } else {
-    showListView();
+  try {
+    const payload = await fetchJSON("/api/sessions");
+    if (requestId !== state.sessionRequestId) return;
+    state.sessions = payload.sessions || [];
+    renderFilters();
+    renderAgents();
+
+    const visible = filteredSessions();
+    const pendingSessionId = state.pendingSessionId;
+    if (pendingSessionId && visible.some(session => session.id === pendingSessionId)) {
+      state.pendingSessionId = null;
+      state.selectedSessionId = pendingSessionId;
+      state.view = "detail";
+    } else {
+      if (pendingSessionId) state.pendingSessionId = null;
+      const stillVisible = visible.some(session => session.id === state.selectedSessionId);
+      if (!preserveSelection || !stillVisible) {
+        state.selectedSessionId = null;
+        state.view = "list";
+      }
+    }
+    if (state.view !== "detail") {
+      state.selectedSessionId = null;
+      state.view = "list";
+    }
+    renderSessions();
+    if (state.view === "detail" && state.selectedSessionId) {
+      showDetailView();
+      const selected = state.sessions.find(session => session.id === state.selectedSessionId);
+      if (!selected || !state.detailSessionId || refreshDetail) {
+        if (!state.detailSessionId) showDetailLoading(state.selectedSessionId);
+        await loadSession(state.selectedSessionId, {preserveLoaded: true});
+      } else {
+        updateDetailSessionSummary(selected);
+      }
+    } else {
+      showListView();
+    }
+  } finally {
+    if (requestId === state.sessionRequestId) {
+      setDashboardLoading(false);
+      renderSessions();
+    }
   }
 }
 
@@ -1116,6 +1289,10 @@ function renderAgents() {
 function renderSessions() {
   const sessions = filteredSessions();
   renderOverview(sessions);
+  if (state.loadingSessions && !state.sessions.length) {
+    $("#session-list").innerHTML = `<tr><td class="loading-cell" colspan="8">${loadingMarkup(t("loading_sessions"))}</td></tr>`;
+    return;
+  }
   if (!sessions.length) {
     $("#session-list").innerHTML = `<tr><td class="table-empty" colspan="8">${esc(t("no_matching_sessions"))}</td></tr>`;
     return;
@@ -1140,6 +1317,7 @@ function sessionRow(session) {
   const preview = session.first_user || "";
   const firstMessage = preview || t("no_user_prompt");
   const status = statusInfo(session);
+  const isLoading = state.loadingSessionId === session.id;
   return `
     <tr class="session-row ${state.selectedSessionId === session.id ? "active" : ""}" data-session="${esc(session.id)}" tabindex="0">
       <td class="mono-cell">${esc(fmtTableTime(session.started_at || session.updated_at))}</td>
@@ -1149,7 +1327,7 @@ function sessionRow(session) {
       <td><span class="model-pill" title="${esc(session.model || t("unknown"))}">${esc(session.model || t("unknown"))}</span></td>
       <td><span class="agent-pill">${esc(session.agent || t("unknown"))}</span></td>
       <td><span class="status-pill ${status.className}">${esc(status.label)}</span></td>
-      <td><button class="row-action" type="button" aria-label="${esc(t("view_details"))}">${esc(t("details"))}</button></td>
+      <td><button class="row-action" type="button" aria-label="${esc(t("view_details"))}" ${isLoading ? "disabled" : ""}>${esc(isLoading ? t("loading_session") : t("details"))}</button></td>
     </tr>
   `;
 }
@@ -1172,87 +1350,162 @@ function statusInfo(session) {
   return {label: "OK", className: "ok"};
 }
 
-async function openSession(sessionId) {
-  state.selectedSessionId = sessionId;
-  state.view = "detail";
-  renderSessions();
-  showDetailView();
-  await loadSession(sessionId);
+function openSession(sessionId) {
+  window.location.assign(sessionDetailUrl(sessionId));
 }
 
 function showListView() {
   state.view = "list";
+  state.detailSessionId = null;
+  state.detailRecordsLoaded = 0;
+  state.detailRecordTotal = 0;
+  state.detailFingerprint = "";
+  state.detailSession = null;
+  document.body.classList.remove("detail-route");
   $("#list-view").classList.remove("hidden");
   $("#detail-view").classList.add("hidden");
   updateTracePathBar();
 }
 
 function showDetailView() {
+  document.body.classList.add("detail-route");
   $("#list-view").classList.add("hidden");
   $("#detail-view").classList.remove("hidden");
 }
 
-async function loadSession(sessionId) {
+function showDetailLoading(sessionId) {
+  const session = state.sessions.find(item => item.id === sessionId);
+  $("#detail-title").textContent = session ? t("session_details", {agent: session.agent || t("session_detail")}) : t("session_detail");
+  $("#detail-subtitle").textContent = session?.legacy_rel_path || session?.id || "";
+  if (session) updateTracePathBar(session);
+  $("#detail").innerHTML = `<div class="detail-loading">${loadingMarkup(t("loading_session"))}</div>`;
+}
+
+function sessionRecordCount(session) {
+  const count = Number(session?.record_count || 0);
+  return Number.isFinite(count) && count > 0 ? count : 0;
+}
+
+function sessionDetailFingerprint(session) {
+  return [
+    session.id || "",
+    session.status || "",
+    session.record_count || 0,
+    session.turn_count || 0,
+    session.input_tokens || 0,
+    session.output_tokens || 0,
+    session.cache_read_tokens || 0,
+    session.cache_create_tokens || 0,
+    session.total_tokens || 0,
+    session.legacy_rel_path || "",
+  ].join("|");
+}
+
+function updateDetailSessionSummary(session) {
+  if (!session || state.detailSessionId !== session.id) return;
+  state.detailSession = {...(state.detailSession || {}), ...session};
+  state.detailFingerprint = sessionDetailFingerprint(session);
+  $("#detail-title").textContent = t("session_details", {agent: session.agent || t("session_detail")});
+  $("#detail-subtitle").textContent = session.legacy_rel_path || session.id || "";
+  updateTracePathBar(session);
+}
+
+function detailRecordFetchLimit(sessionId, preserveLoaded) {
+  const sameSession = preserveLoaded && state.detailSessionId === sessionId;
+  const loadedRecords = sameSession ? state.detailRecordsLoaded : 0;
+  const previousTotal = sameSession ? state.detailRecordTotal : 0;
+  const session = state.sessions.find(item => item.id === sessionId);
+  const knownTotal = sameSession ? sessionRecordCount(session) : 0;
+  let limit = Math.max(MAX_INLINE_DETAIL_RECORDS, loadedRecords || 0);
+  if (knownTotal > previousTotal && previousTotal <= loadedRecords) {
+    limit = Math.max(limit, knownTotal);
+  }
+  return limit;
+}
+
+async function loadSession(sessionId, {preserveLoaded = false} = {}) {
+  state.loadingSessionId = sessionId;
+  const limit = detailRecordFetchLimit(sessionId, preserveLoaded);
   try {
-    const payload = await fetchJSON(`/api/sessions/${encodeURIComponent(sessionId)}/records`);
+    const payload = await fetchJSON(`/api/sessions/${encodeURIComponent(sessionId)}/records?offset=0&limit=${limit}`);
+    if (state.selectedSessionId !== sessionId) return;
     renderDetail(payload.session, payload.records || []);
   } catch (error) {
+    if (state.selectedSessionId !== sessionId) return;
     showDetailView();
     $("#detail").innerHTML = `<div class="empty">${esc(t("unable_load_session", {error: error.message}))}</div>`;
+  } finally {
+    if (state.loadingSessionId === sessionId) {
+      state.loadingSessionId = null;
+      renderSessions();
+    }
+  }
+}
+
+async function loadMoreSessionRecords(session, records, button) {
+  const sessionId = session.id;
+  const offset = records.length;
+  button.disabled = true;
+  button.textContent = t("loading_more_records");
+  try {
+    const payload = await fetchJSON(
+      `/api/sessions/${encodeURIComponent(sessionId)}/records?offset=${offset}&limit=${MAX_INLINE_DETAIL_RECORDS}`
+    );
+    if (state.selectedSessionId !== sessionId) return;
+    const nextRecords = payload.records || [];
+    renderDetail(payload.session, records.concat(nextRecords));
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = t("load_more_records");
+    console.error(error);
   }
 }
 
 function renderDetail(session, records) {
-  const statusClass = ["active", "error", "empty"].includes(session.status) ? session.status : "";
+  const totalRecords = Number(session.record_count || records.length);
+  const hasHiddenRecords = totalRecords > records.length;
+  const alternateTab = state.activeTab === "conversation" ? "raw" : "conversation";
+  const alternateLabel = alternateTab === "conversation" ? t("tab_default") : t("tab_trace");
+  state.detailSessionId = session.id;
+  state.detailRecordsLoaded = records.length;
+  state.detailRecordTotal = totalRecords;
+  state.detailFingerprint = sessionDetailFingerprint(session);
+  state.detailSession = session;
   $("#detail-title").textContent = t("session_details", {agent: session.agent || t("session_detail")});
-  $("#detail-subtitle").textContent = session.rel_trace_path || session.trace_path || "";
+  $("#detail-subtitle").textContent = session.legacy_rel_path || session.id || "";
   updateTracePathBar(session);
-  if (session.html_path) {
-    $("#detail").innerHTML = `
-      <div class="viewer-frame-wrap">
-        <iframe
-          class="viewer-frame"
-          title="Trace viewer"
-          src="/api/sessions/${encodeURIComponent(session.id)}/html"
-        ></iframe>
-      </div>
-    `;
-    return;
-  }
   $("#detail").innerHTML = `
-    <div class="detail-fallback-note">${esc(t("fallback_viewer"))}</div>
     <div class="detail-inspector-bar">
       <div class="detail-tabs">
-        <button class="detail-tab ${state.activeTab === "conversation" ? "active" : ""}" data-tab="conversation">${esc(t("tab_default"))}</button>
-        <button class="detail-tab ${state.activeTab === "raw" ? "active" : ""}" data-tab="raw">${esc(t("tab_trace"))}</button>
+        <button class="detail-tab" data-tab="${alternateTab}">${esc(alternateLabel)}</button>
       </div>
       <div class="action-bar">
-        <button class="act-btn" data-copy-path="${esc(session.trace_path)}">${esc(t("copy_path"))}</button>
-      </div>
-    </div>
-    <div class="session-summary">
-      <div class="session-summary-head">
-        <span class="session-summary-title">${esc(session.agent)}</span>
-        <span class="badge ${statusClass}">${esc(session.status)}</span>
-        <span class="session-summary-path">${esc(session.rel_trace_path)}</span>
-      </div>
-      <div class="token-bar">
-        ${tokenItem("var(--blue)", t("records"), session.record_count)}
-        ${tokenItem("var(--purple)", t("turns"), session.turn_count)}
-        ${tokenItem("var(--blue)", t("input"), session.input_tokens)}
-        ${tokenItem("var(--green)", t("output"), session.output_tokens)}
-        ${tokenItem("var(--cyan)", t("cache_read"), session.cache_read_tokens)}
-        ${tokenItem("var(--amber)", t("cache_write"), session.cache_create_tokens)}
-        ${tokenItem("var(--text-tertiary)", t("total"), session.total_tokens)}
+        <a class="act-btn" data-detail-i18n="export_jsonl" href="/api/sessions/${encodeURIComponent(session.id)}/export/jsonl" download>${esc(t("export_jsonl"))}</a>
+        <a class="act-btn" data-detail-i18n="export_log" href="/api/sessions/${encodeURIComponent(session.id)}/export/log" download>${esc(t("export_log"))}</a>
+        <button class="act-btn" data-detail-i18n="copy_path" data-copy-path="${esc(session.id)}">${esc(t("copy_path"))}</button>
       </div>
     </div>
     <div id="conversation-tab" class="${state.activeTab === "conversation" ? "" : "hidden"}">
-      <div class="records">${records.map((record, index) => renderRecord(record, index)).join("") || emptyRecord()}</div>
+      <div class="viewer-frame-wrap">
+        <div class="viewer-loading" data-viewer-loading>${loadingMarkup(t("loading_viewer"))}</div>
+        <iframe
+          class="viewer-frame"
+          data-viewer-frame
+          src="/api/sessions/${encodeURIComponent(session.id)}/html"
+          title="${esc(t("session_details", {agent: session.agent || t("session_detail")}))}"
+        ></iframe>
+      </div>
     </div>
     <div id="raw-tab" class="${state.activeTab === "raw" ? "" : "hidden"}">
-      <div class="json-view open"><pre>${esc(JSON.stringify(records, null, 2))}</pre></div>
+      ${hasHiddenRecords ? `<div class="detail-fallback-note">${esc(t("limited_records", {shown: records.length, total: totalRecords}))}</div>` : ""}
+      <div class="records">${records.map((record, index) => renderRecord(record, index)).join("") || emptyRecord()}</div>
+      ${hasHiddenRecords ? `<div class="detail-load-more"><button class="load-more-btn" type="button" data-load-more>${esc(t("load_more_records"))}</button></div>` : ""}
     </div>
   `;
+
+  document.querySelector("[data-viewer-frame]")?.addEventListener("load", event => {
+    event.currentTarget?.parentElement?.querySelector("[data-viewer-loading]")?.remove();
+  });
 
   document.querySelectorAll("[data-tab]").forEach(button => {
     button.addEventListener("click", () => {
@@ -1263,22 +1516,33 @@ function renderDetail(session, records) {
   document.querySelectorAll("[data-json-toggle]").forEach(button => {
     button.addEventListener("click", () => {
       const panel = document.getElementById(button.dataset.jsonToggle);
+      const pre = panel?.querySelector("[data-json-index]");
+      if (pre && !pre.dataset.rendered) {
+        const index = Number(pre.dataset.jsonIndex);
+        pre.textContent = JSON.stringify(records[index] || {}, null, 2);
+        pre.dataset.rendered = "true";
+      }
       panel?.classList.toggle("open");
     });
+  });
+  document.querySelectorAll("[data-load-more]").forEach(button => {
+    button.addEventListener("click", () => loadMoreSessionRecords(session, records, button));
   });
   document.querySelectorAll("[data-copy-path]").forEach(button => {
     button.addEventListener("click", () => navigator.clipboard?.writeText(button.dataset.copyPath || ""));
   });
 }
 
-function tokenItem(color, label, value) {
-  return `
-    <span class="tok-item">
-      <span class="tok-dot" style="background:${esc(color)}"></span>
-      <span class="tok-label">${esc(label)}</span>
-      <span class="tok-val">${fmtNumber(value)}</span>
-    </span>
-  `;
+function updateDetailI18n(session) {
+  $("#detail-title").textContent = t("session_details", {agent: session.agent || t("session_detail")});
+  $("#detail-subtitle").textContent = session.legacy_rel_path || session.id || "";
+  updateTracePathBar(session);
+  document.querySelectorAll("[data-tab]").forEach(button => {
+    button.textContent = button.dataset.tab === "conversation" ? t("tab_default") : t("tab_trace");
+  });
+  document.querySelectorAll("[data-detail-i18n]").forEach(element => {
+    element.textContent = t(element.dataset.detailI18n);
+  });
 }
 
 function renderRecord(record, index) {
@@ -1310,7 +1574,7 @@ function renderRecord(record, index) {
             <div class="content-block">${esc(responseText)}</div>
           </div>
         </div>
-        <div id="${jsonId}" class="json-view"><pre>${esc(JSON.stringify(record, null, 2))}</pre></div>
+        <div id="${jsonId}" class="json-view"><pre data-json-index="${index}"></pre></div>
       </div>
     </article>
   `;
@@ -1453,11 +1717,9 @@ $("#status-filter").addEventListener("change", event => {
   showListView();
 });
 
-$("#refresh").addEventListener("click", () => refreshSessions({preserveSelection: true}).catch(console.error));
+$("#refresh").addEventListener("click", () => refreshSessions({preserveSelection: true, refreshDetail: true}).catch(console.error));
 $("#back-to-list").addEventListener("click", () => {
-  state.selectedSessionId = null;
-  renderSessions();
-  showListView();
+  window.location.assign(dashboardListUrl());
 });
 $("#theme-toggle").addEventListener("click", toggleTheme);
 $("#lang-select").addEventListener("change", event => setLang(event.target.value));

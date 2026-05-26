@@ -157,6 +157,14 @@ def _responses_record() -> dict[str, Any]:
     }
 
 
+def _responses_empty_input_record() -> dict[str, Any]:
+    record = _responses_record()
+    record["request_id"] = "req_responses_empty_input"
+    record["request"]["body"]["input"] = []
+    record["response"]["body"]["output"] = []
+    return record
+
+
 def _codex_websocket_record() -> dict[str, Any]:
     return {
         "timestamp": "2026-05-13T13:22:00+00:00",
@@ -293,6 +301,13 @@ def _content_block_boundary_record() -> dict[str, Any]:
             },
         },
     }
+
+
+def _codex_reverse_websocket_record() -> dict[str, Any]:
+    record = _codex_websocket_record()
+    record["request_id"] = "req_codex_reverse_ws_contract"
+    record["request"]["path"] = "/v1/responses"
+    return record
 
 
 def _chat_completions_record() -> dict[str, Any]:
@@ -936,6 +951,18 @@ def _contract_cases() -> tuple[ViewerContractCase, ...]:
             min_stream_events=3,
         ),
         ViewerContractCase(
+            name="codex_reverse_websocket",
+            records=(_codex_reverse_websocket_record(),),
+            expected_sections=("Tools", "System Prompt", "Request Context", "Response", "SSE Events"),
+            expected_system="You are Codex WebSocket contract system prompt.",
+            expected_roles=("developer", "user"),
+            expected_tools=("exec_command",),
+            expected_output_types=("tool_use", "text"),
+            expected_usage={"input_tokens": 140, "output_tokens": 8},
+            required_detail_text=("Continue after a tool call.", "exec_command", "WebSocket final OK."),
+            min_stream_events=3,
+        ),
+        ViewerContractCase(
             name="chat_completions",
             records=(_chat_completions_record(),),
             expected_sections=("Tools", "System Prompt", "Messages", "Response"),
@@ -1061,17 +1088,18 @@ def _sidebar_order_records() -> tuple[dict[str, Any], ...]:
         "response": {"status": 200, "headers": {}, "body": {"content": [{"type": "text", "text": "OK"}]}},
     }
     rows = [
-        ("req_order_unknown", 1, "other-model"),
-        ("req_order_sonnet", 2, "aws.claude-sonnet-4.6"),
-        ("req_order_opus", 3, "aws.claude-opus-4.6"),
+        ("req_order_unknown", 1, "other-model", "First sidebar task"),
+        ("req_order_sonnet", 2, "aws.claude-sonnet-4.6", "Second sidebar task"),
+        ("req_order_opus", 3, "aws.claude-opus-4.6", "Second sidebar task"),
     ]
     records = []
-    for request_id, turn, model in rows:
+    for request_id, turn, model, prompt in rows:
         record = json.loads(json.dumps(base))
         record["request_id"] = request_id
         record["turn"] = turn
         record["timestamp"] = f"2026-05-13T13:2{turn}:00+00:00"
         record["request"]["body"]["model"] = model
+        record["request"]["body"]["messages"] = [{"role": "user", "content": prompt}]
         records.append(record)
     return tuple(records)
 
@@ -1190,7 +1218,8 @@ def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Pa
         trace_state = page.evaluate(
             """() => ({
               sectionCount: document.querySelectorAll('#detail .section').length,
-              blockTitles: Array.from(document.querySelectorAll('#detail .trace-block-title span:first-child')).map(el => el.textContent),
+              blockTitles: Array.from(document.querySelectorAll('#detail .trace-block-title .trace-title')).map(el => el.textContent),
+              copyButtons: Array.from(document.querySelectorAll('#detail .trace-copy-btn')).map(el => el.textContent),
               formats: Array.from(document.querySelectorAll('#detail .trace-format-btn')).map(el => ({
                 format: el.dataset.format,
                 label: el.textContent,
@@ -1199,6 +1228,19 @@ def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Pa
               text: document.querySelector('#detail')?.innerText || '',
             })"""
         )
+        page.evaluate(
+            """() => {
+              window.__copiedTraceText = '';
+              window.copyToClipboard = (text, btn) => {
+                window.__copiedTraceText = text;
+                if (btn) btn.textContent = t('copied');
+                return Promise.resolve();
+              };
+            }"""
+        )
+        page.locator("#detail .trace-copy-btn").first.click()
+        page.wait_for_function("window.__copiedTraceText.includes('Run pwd.')")
+        copied_trace_text = page.evaluate("window.__copiedTraceText")
 
         page.locator('#detail .trace-format-btn[data-format="yaml"]').click()
         page.wait_for_selector('#detail .trace-format-btn[data-format="yaml"].active', timeout=5000)
@@ -1236,6 +1278,9 @@ def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Pa
     assert "Diff with Prev" in default_state["text"]
     assert trace_state["sectionCount"] == 0
     assert trace_state["blockTitles"] == ["Input", "Output", "Metadata"]
+    assert trace_state["copyButtons"] == ["Copy", "Copy", "Copy"]
+    assert '"messages"' in copied_trace_text
+    assert "Run pwd." in copied_trace_text
     assert trace_state["formats"] == [
         {"format": "json", "label": "JSON", "active": True},
         {"format": "yaml", "label": "YAML", "active": False},
@@ -1255,7 +1300,33 @@ def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Pa
     assert remaining_tabs == ["default", "trace"]
 
 
-def test_viewer_sidebar_order_can_switch_between_model_groups_and_turn_sequence(
+def test_viewer_does_not_synthesize_messages_for_empty_responses_input(tmp_path: Path, chromium_browser) -> None:
+    html_path = _generate_case_html(tmp_path, "responses_empty_input", (_responses_empty_input_record(),))
+
+    page = chromium_browser.new_page()
+    try:
+        errors = _open_viewer_with_error_capture(page, html_path)
+        page.locator(".sidebar-item").first.click()
+        page.wait_for_selector("#detail .section", timeout=5000)
+        state = page.evaluate(
+            """() => ({
+              roles: getMessages(entries[0].request.body).map(message => message.role),
+              sectionTitles: Array.from(document.querySelectorAll('#detail .section .title')).map(el => el.textContent),
+              detailText: document.querySelector('#detail')?.innerText || '',
+            })"""
+        )
+    finally:
+        page.close()
+
+    assert errors == []
+    assert state["roles"] == []
+    assert "System Prompt" in state["sectionTitles"]
+    assert "Tools" in state["sectionTitles"]
+    assert "Messages" not in state["sectionTitles"]
+    assert "You are Codex contract system prompt." in state["detailText"]
+
+
+def test_viewer_sidebar_order_can_switch_between_model_turn_and_session_sequence(
     tmp_path: Path, chromium_browser
 ) -> None:
     html_path = _generate_case_html(tmp_path, "sidebar_order", _sidebar_order_records())
@@ -1290,6 +1361,21 @@ def test_viewer_sidebar_order_can_switch_between_model_groups_and_turn_sequence(
               turns: Array.from(document.querySelectorAll('.sidebar-item .si-turn')).map(el => el.textContent),
             })"""
         )
+
+        page.locator('.sidebar-sort-btn[data-sort-mode="session"]').click()
+        page.wait_for_selector('.sidebar-sort-btn[data-sort-mode="session"].active', timeout=5000)
+        session_state = page.evaluate(
+            """() => ({
+              buttons: Array.from(document.querySelectorAll('.sidebar-sort-btn')).map(el => ({
+                mode: el.dataset.sortMode,
+                label: el.textContent,
+                active: el.classList.contains('active'),
+              })),
+              groups: Array.from(document.querySelectorAll('.sidebar-group-header .group-name')).map(el => el.textContent),
+              counts: Array.from(document.querySelectorAll('.sidebar-group-header .group-count')).map(el => el.textContent),
+              turns: Array.from(document.querySelectorAll('.sidebar-item .si-turn')).map(el => el.textContent),
+            })"""
+        )
     finally:
         page.close()
 
@@ -1298,15 +1384,173 @@ def test_viewer_sidebar_order_can_switch_between_model_groups_and_turn_sequence(
     assert model_state["buttons"] == [
         {"mode": "model", "label": "Model", "active": True},
         {"mode": "turn", "label": "Turn", "active": False},
+        {"mode": "session", "label": "Session", "active": False},
     ]
     assert model_state["groups"] == ["aws.claude-opus-4.6", "aws.claude-sonnet-4.6", "other-model"]
     assert model_state["turns"] == ["Turn 3", "Turn 2", "Turn 1"]
     assert turn_state["buttons"] == [
         {"mode": "model", "label": "Model", "active": False},
         {"mode": "turn", "label": "Turn", "active": True},
+        {"mode": "session", "label": "Session", "active": False},
     ]
     assert turn_state["groupCount"] == 0
     assert turn_state["turns"] == ["Turn 1", "Turn 2", "Turn 3"]
+    assert session_state["buttons"] == [
+        {"mode": "model", "label": "Model", "active": False},
+        {"mode": "turn", "label": "Turn", "active": False},
+        {"mode": "session", "label": "Session", "active": True},
+    ]
+    assert session_state["groups"] == [
+        "Session 1 - First sidebar task",
+        "Session 2 - Second sidebar task",
+        "Session 3 - Second sidebar task",
+    ]
+    assert session_state["counts"] == ["1", "1", "1"]
+    assert session_state["turns"] == ["Turn 1", "Turn 2", "Turn 3"]
+
+
+def test_viewer_session_group_hover_shows_full_truncated_user_input(tmp_path: Path, chromium_browser) -> None:
+    long_prompt = (
+        "Investigate why the dashboard session group title is truncated, then preserve this full original "
+        "user input in a hover tooltip so maintainers can read the complete request without opening the turn."
+    )
+    record = {
+        "request_id": "req_long_session_prompt",
+        "turn": 1,
+        "timestamp": "2026-05-13T13:21:00+00:00",
+        "duration_ms": 100,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages",
+            "headers": {},
+            "body": {
+                "model": "aws.claude-sonnet-4.6",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "<system-reminder>\nskip injected context\n</system-reminder>"},
+                            {"type": "text", "text": long_prompt},
+                            {"type": "text", "text": "[Image: source: /tmp/screenshot.png]"},
+                        ],
+                    }
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "headers": {},
+            "body": {"content": [{"type": "text", "text": "OK"}]},
+        },
+    }
+    injected_continuation = json.loads(json.dumps(record))
+    injected_continuation["request_id"] = "req_injected_context_only"
+    injected_continuation["turn"] = 2
+    injected_continuation["request"]["body"]["messages"] = [
+        {"role": "user", "content": "<system-reminder>\nThe following skills are available...\n</system-reminder>"}
+    ]
+    json_title_record = json.loads(json.dumps(record))
+    json_title_record["request_id"] = "req_json_title"
+    json_title_record["turn"] = 3
+    json_title_record["request"]["body"]["messages"] = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": '{"title":"Fix login button on mobile"}'},
+                {"type": "text", "text": "<system-reminder>\nInjected context\n</system-reminder>"},
+            ],
+        }
+    ]
+    html_path = _generate_case_html(
+        tmp_path,
+        "session_hover_tooltip",
+        (record, injected_continuation, json_title_record),
+    )
+
+    page = chromium_browser.new_page()
+    page.add_init_script("localStorage.setItem('claude-tap-sidebar-order', 'session')")
+    try:
+        errors = _open_viewer_with_error_capture(page, html_path)
+        header = page.locator(".sidebar-group-header").nth(0)
+        assert header.locator(".group-name").inner_text().endswith("...")
+        assert "<system-reminder>" not in header.locator(".group-name").inner_text()
+        assert header.locator(".group-count").inner_text() == "2"
+        json_title_header = page.locator(".sidebar-group-header").nth(1)
+        json_title_name = json_title_header.locator(".group-name").inner_text()
+        assert "fix login button on mobile" in json_title_name.lower()
+        assert "{" not in json_title_name
+
+        header.hover()
+        page.wait_for_selector(".session-hover-tooltip.visible", timeout=5000)
+        tooltip_text = page.locator(".session-hover-tooltip.visible").inner_text()
+    finally:
+        page.close()
+
+    assert errors == []
+    assert tooltip_text == long_prompt
+
+
+def test_viewer_recovers_session_title_image_placeholders(tmp_path: Path, chromium_browser) -> None:
+    prompt = "My local TNTCloud nodes all time out, but the same account works on another computer."
+    image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    title_record = {
+        "timestamp": "2026-05-13T13:21:00+00:00",
+        "request_id": "req_title_image_placeholder",
+        "turn": 1,
+        "duration_ms": 100,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages",
+            "headers": {},
+            "body": {
+                "model": "aws.claude-sonnet-4.6",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": f"<session>\n[Image #1] {prompt}\n</session>"}],
+                    }
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "headers": {},
+            "body": {"content": [{"type": "text", "text": '{"title":"TNTCloud timeout"}'}]},
+        },
+    }
+    actual_record = json.loads(json.dumps(title_record))
+    actual_record["request_id"] = "req_actual_image"
+    actual_record["turn"] = 2
+    actual_record["request"]["body"]["messages"] = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": f"[Image #1] {prompt}"},
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": image_data}},
+            ],
+        }
+    ]
+
+    html_path = _generate_case_html(tmp_path, "image-placeholder-recovery", (title_record, actual_record))
+    page = chromium_browser.new_page()
+    try:
+        errors = _open_viewer_with_error_capture(page, html_path)
+        page.locator(".sidebar-item").nth(0).click()
+        page.wait_for_selector("#detail .msg.user img.message-image", timeout=5000)
+        result = page.evaluate(
+            """() => ({
+              imageCount: document.querySelectorAll('#detail .msg.user img.message-image').length,
+              imageSrc: document.querySelector('#detail .msg.user img.message-image')?.getAttribute('src') || '',
+              text: document.querySelector('#detail .msg.user')?.textContent || ''
+            })"""
+        )
+    finally:
+        page.close()
+
+    assert errors == []
+    assert result["imageCount"] == 1
+    assert result["imageSrc"].startswith("data:image/png;base64,")
+    assert "[Image #1]" in result["text"]
 
 
 def test_viewer_runtime_smoke_handles_degenerate_records_without_js_errors(tmp_path: Path, chromium_browser) -> None:
@@ -1368,6 +1612,21 @@ def test_viewer_empty_embedded_trace_renders_explicit_no_api_calls_state(tmp_pat
     assert state["fileInputPresent"] is True
 
 
+def test_viewer_trace_path_copy_handles_apostrophes(tmp_path: Path, chromium_browser) -> None:
+    html_path = _generate_case_html(tmp_path, "user's_trace", (_anthropic_messages_record(),))
+
+    page = chromium_browser.new_page()
+    try:
+        errors = _open_viewer_with_error_capture(page, html_path)
+        copy_button = page.locator("#trace-path-bar .tp-copy").first
+        assert copy_button.get_attribute("onclick") is None
+        assert "user's_trace.jsonl" in (copy_button.get_attribute("data-copy-path") or "")
+    finally:
+        page.close()
+
+    assert errors == []
+
+
 def test_viewer_v8_coverage_exercises_core_inline_js_functions(tmp_path: Path, chromium_browser) -> None:
     records = tuple(record for case in _contract_cases() for record in case.records)
     html_path = _generate_case_html(tmp_path, "v8_coverage", records)
@@ -1382,9 +1641,13 @@ def test_viewer_v8_coverage_exercises_core_inline_js_functions(tmp_path: Path, c
         "geminiMessages",
         "geminiResponseOutput",
         "renderTools",
+        "renderImageBlock",
+        "sessionTurnDiscriminator",
+        "showSessionTooltip",
     }
 
     page = chromium_browser.new_page()
+    page.add_init_script("window.__TRACE_SESSION_EXPORTS__ = {jsonl: 'coverage.jsonl', log: 'coverage.log'};")
     try:
         session = page.context.new_cdp_session(page)
         session.send("Profiler.enable")
@@ -1415,6 +1678,40 @@ def test_viewer_v8_coverage_exercises_core_inline_js_functions(tmp_path: Path, c
                 }""",
                 index,
             )
+
+        page.evaluate(
+            """() => {
+              const imageBlock = {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: 'image/png',
+                  data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
+                }
+              };
+              imageLookupKey('<session>[Image #1] coverage prompt</session>');
+              isInlineImageUrl('data:image/png;base64,abc');
+              imageSourceFromBlock(imageBlock);
+              imageBlocksForContent([{ type: 'text', text: '[Image #1] coverage prompt' }, imageBlock]);
+              imageSourceKey(imageBlock);
+              buildSessionImageRegistry();
+              naturalTextFromPromptPayload({ prompt: 'coverage prompt' });
+              if (entries.length) {
+                sessionTurnDiscriminator(entries[0]);
+                sessionKeyForEntry(entries[0], null);
+              }
+              renderImageElement('data:image/png;base64,abc', 'coverage image');
+              renderImageElementForBlock(imageBlock);
+              document.body.insertAdjacentHTML('beforeend', renderImageBlock(imageBlock, 0, 1, { frameBlocks: true }));
+              renderViewerActions();
+              const tooltipTrigger = document.querySelector('.sidebar-group-header') || document.createElement('div');
+              if (!tooltipTrigger.isConnected) document.body.appendChild(tooltipTrigger);
+              tooltipTrigger.dataset.fullUserInput = 'coverage tooltip prompt';
+              sessionTooltip();
+              showSessionTooltip(tooltipTrigger);
+              hideSessionTooltip(tooltipTrigger);
+            }"""
+        )
 
         coverage = session.send("Profiler.takePreciseCoverage")
         session.send("Profiler.stopPreciseCoverage")
