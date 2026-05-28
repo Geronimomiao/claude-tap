@@ -3171,6 +3171,7 @@ function cleanUserPromptText(text) {
   const injectedTags = new Set([
     'artifacts',
     'environment_context',
+    'local-command-caveat',
     'session_context',
     'skills',
     'slash_commands',
@@ -3179,6 +3180,7 @@ function cleanUserPromptText(text) {
     'user_information',
   ]);
   if (firstTag && injectedTags.has(firstTag[1].toLowerCase())) return '';
+  if (/^\[SUGGESTION MODE:/i.test(value)) return '';
   if (/^(web page content|page content|网页内容)\s*[:：]/i.test(value)) return '';
   if (/^\[Image:\s*source:/i.test(value)) return '';
   return value.replace(/^\[Image #\d+\]\s*/i, '').trim();
@@ -3307,14 +3309,18 @@ function isToolResultOnlyMessage(message) {
 }
 
 function latestUserInputText(entry) {
+  return latestUserInputInfo(entry).userText;
+}
+
+function latestUserInputInfo(entry) {
   const msgs = getMessages(entry?.request?.body);
   for (let i = msgs.length - 1; i >= 0; i--) {
     const message = msgs[i];
     if (message?.role !== 'user' || isToolResultOnlyMessage(message)) continue;
     const text = naturalTextForSessionContent(message.content);
-    if (text) return text;
+    if (text) return { userText: text, userIndex: i, messageCount: msgs.length };
   }
-  return '';
+  return { userText: '', userIndex: -1, messageCount: msgs.length };
 }
 
 function finalResponseText(entry) {
@@ -3331,13 +3337,36 @@ function isContinuationWithoutUserInput(entry) {
   return Array.isArray(input) && input.length > 0 && input.every(isResponseToolResultItem);
 }
 
+function isTitleGenerationEntry(entry) {
+  const sys = extractSystem(entry?.request?.body) || '';
+  return /generate a concise/i.test(sys) && /single\s+"title"\s+field/i.test(sys);
+}
+
+function shouldContinueSessionGroup(entry, info, currentGroup) {
+  if (!currentGroup || !info.userText || currentGroup.userText !== info.userText) return false;
+  if (currentGroup.metadataOnly || isTitleGenerationEntry(entry)) return true;
+  if (info.messageCount > 1 && info.userIndex === currentGroup.userIndex) return true;
+  return false;
+}
+
 function sessionKeyForEntry(entry, currentGroup) {
-  const userText = latestUserInputText(entry);
-  if (userText) return { key: 'user:' + sessionTurnDiscriminator(entry) + ':' + userText, userText };
-  if (currentGroup) return { key: currentGroup.key, userText: '' };
+  const info = latestUserInputInfo(entry);
+  const metadataOnly = isTitleGenerationEntry(entry);
+  if (info.userText) {
+    if (shouldContinueSessionGroup(entry, info, currentGroup)) {
+      return { key: currentGroup.key, userText: info.userText, userIndex: info.userIndex, metadataOnly };
+    }
+    return {
+      key: 'user:' + sessionTurnDiscriminator(entry) + ':' + info.userIndex + ':' + info.userText,
+      userText: info.userText,
+      userIndex: info.userIndex,
+      metadataOnly,
+    };
+  }
+  if (currentGroup) return { key: currentGroup.key, userText: '', userIndex: currentGroup.userIndex, metadataOnly };
   const rootTurn = String(entry?.turn ?? '').split('.')[0];
-  if (rootTurn) return { key: 'turn:' + rootTurn, userText: '' };
-  return { key: 'request:' + (entry?.request_id || ''), userText: '' };
+  if (rootTurn) return { key: 'turn:' + rootTurn, userText: '', userIndex: -1, metadataOnly };
+  return { key: 'request:' + (entry?.request_id || ''), userText: '', userIndex: -1, metadataOnly };
 }
 
 function sessionTurnDiscriminator(entry) {
@@ -3353,11 +3382,20 @@ function buildSessionGroups(items) {
     const info = sessionKeyForEntry(item.entry, current);
     let group = current && current.key === info.key ? current : null;
     if (!group) {
-      group = { key: info.key, userText: info.userText, responseText: '', items: [] };
+      group = {
+        key: info.key,
+        userText: info.userText,
+        userIndex: info.userIndex,
+        metadataOnly: !!info.metadataOnly,
+        responseText: '',
+        items: [],
+      };
       groups.push(group);
     } else if (!group.userText && info.userText) {
       group.userText = info.userText;
+      group.userIndex = info.userIndex;
     }
+    if (!info.metadataOnly) group.metadataOnly = false;
     const responseText = finalResponseText(item.entry);
     if (responseText) group.responseText = responseText;
     group.items.push(item);

@@ -1104,6 +1104,120 @@ def _sidebar_order_records() -> tuple[dict[str, Any], ...]:
     return tuple(records)
 
 
+def _claude_code_session_round_records() -> tuple[dict[str, Any], ...]:
+    model = "aws.claude-opus-4.6"
+
+    def make_record(
+        request_id: str,
+        turn: int,
+        messages: list[dict[str, Any]],
+        response_content: list[dict[str, Any]],
+        *,
+        system: str | None = None,
+        stop_reason: str = "end_turn",
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {"model": model, "messages": messages}
+        if system is not None:
+            body["system"] = system
+        return {
+            "request_id": request_id,
+            "turn": turn,
+            "timestamp": f"2026-05-13T13:{20 + turn:02d}:00+00:00",
+            "duration_ms": 100,
+            "request": {"method": "POST", "path": "/v1/messages", "headers": {}, "body": body},
+            "response": {
+                "status": 200,
+                "headers": {},
+                "body": {"stop_reason": stop_reason, "content": response_content},
+            },
+        }
+
+    first_prompt = "Check configured MCP settings"
+    second_prompt = "Diagnose portfolio holdings"
+    third_prompt = "Add portfolio positions"
+    title_system = 'Generate a concise, sentence-case title for the session. Return JSON with a single "title" field.'
+    first_tool = {"type": "tool_use", "id": "tool_1", "name": "ListMcpResourcesTool", "input": {}}
+    second_tool = {"type": "tool_use", "id": "tool_2", "name": "portfolio", "input": {}}
+    third_tool = {"type": "tool_use", "id": "tool_3", "name": "search_stock_by_name", "input": {"query": "ACME"}}
+
+    return (
+        make_record(
+            "req_title",
+            1,
+            [{"role": "user", "content": [{"type": "text", "text": f"<session>\n{first_prompt}\n</session>"}]}],
+            [{"type": "text", "text": '{"title": "Check configured MCP settings"}'}],
+            system=title_system,
+        ),
+        make_record(
+            "req_first_tool",
+            2,
+            [{"role": "user", "content": first_prompt}],
+            [first_tool],
+            stop_reason="tool_use",
+        ),
+        make_record(
+            "req_first_final",
+            3,
+            [
+                {"role": "user", "content": first_prompt},
+                {"role": "assistant", "content": [first_tool]},
+                {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tool_1", "content": "mcp list"}]},
+            ],
+            [{"type": "text", "text": "Configured MCP server: wyckoff."}],
+        ),
+        make_record(
+            "req_second_tool",
+            4,
+            [
+                {"role": "user", "content": first_prompt},
+                {"role": "assistant", "content": "Configured MCP server: wyckoff."},
+                {"role": "user", "content": second_prompt},
+            ],
+            [second_tool],
+            stop_reason="tool_use",
+        ),
+        make_record(
+            "req_second_final",
+            5,
+            [
+                {"role": "user", "content": first_prompt},
+                {"role": "assistant", "content": "Configured MCP server: wyckoff."},
+                {"role": "user", "content": second_prompt},
+                {"role": "assistant", "content": [second_tool]},
+                {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "tool_2", "content": "empty"}]},
+            ],
+            [{"type": "text", "text": "No holdings found."}],
+        ),
+        make_record(
+            "req_third_tool",
+            6,
+            [
+                {"role": "user", "content": first_prompt},
+                {"role": "assistant", "content": "Configured MCP server: wyckoff."},
+                {"role": "user", "content": second_prompt},
+                {"role": "assistant", "content": "No holdings found."},
+                {"role": "user", "content": third_prompt},
+            ],
+            [third_tool],
+            stop_reason="tool_use",
+        ),
+        make_record(
+            "req_third_suggestion",
+            7,
+            [
+                {"role": "user", "content": first_prompt},
+                {"role": "assistant", "content": "Configured MCP server: wyckoff."},
+                {"role": "user", "content": second_prompt},
+                {"role": "assistant", "content": "No holdings found."},
+                {"role": "user", "content": third_prompt},
+                {"role": "assistant", "content": "Portfolio diagnosis complete."},
+                {"role": "user", "content": "[SUGGESTION MODE: Suggest what the user might naturally type next.]"},
+            ],
+            [{"type": "text", "text": "Give me an action plan."}],
+        ),
+    )
+
+
 def _write_trace(trace_path: Path, records: tuple[dict[str, Any], ...]) -> None:
     trace_path.write_text(
         "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records),
@@ -1409,6 +1523,35 @@ def test_viewer_sidebar_order_can_switch_between_model_turn_and_session_sequence
     assert session_state["turns"] == ["Turn 1", "Turn 2", "Turn 3"]
 
 
+def test_viewer_session_order_groups_claude_code_tool_loop_rounds(tmp_path: Path, chromium_browser) -> None:
+    html_path = _generate_case_html(tmp_path, "claude_code_session_rounds", _claude_code_session_round_records())
+
+    page = chromium_browser.new_page()
+    page.add_init_script("localStorage.setItem('claude-tap-sidebar-order', 'session')")
+    try:
+        errors = _open_viewer_with_error_capture(page, html_path)
+        state = page.evaluate(
+            """() => ({
+              groups: Array.from(document.querySelectorAll('.sidebar-group-header .group-name')).map(el => el.textContent),
+              counts: Array.from(document.querySelectorAll('.sidebar-group-header .group-count')).map(el => el.textContent),
+              turns: Array.from(document.querySelectorAll('.sidebar-item .si-turn')).map(el => el.textContent),
+              headerText: document.querySelector('#sidebar')?.innerText || '',
+            })"""
+        )
+    finally:
+        page.close()
+
+    assert errors == []
+    assert state["groups"] == [
+        "Session 1 - Check configured MCP settings",
+        "Session 2 - Diagnose portfolio holdings",
+        "Session 3 - Add portfolio positions",
+    ]
+    assert state["counts"] == ["3", "2", "2"]
+    assert state["turns"] == ["Turn 1", "Turn 2", "Turn 3", "Turn 4", "Turn 5", "Turn 6", "Turn 7"]
+    assert "SUGGESTION MODE" not in state["headerText"]
+
+
 def test_viewer_session_group_hover_shows_full_truncated_user_input(tmp_path: Path, chromium_browser) -> None:
     long_prompt = (
         "Investigate why the dashboard session group title is truncated, then preserve this full original "
@@ -1430,6 +1573,10 @@ def test_viewer_session_group_hover_shows_full_truncated_user_input(tmp_path: Pa
                         "role": "user",
                         "content": [
                             {"type": "text", "text": "<system-reminder>\nskip injected context\n</system-reminder>"},
+                            {
+                                "type": "text",
+                                "text": "<local-command-caveat>\nskip local command context\n</local-command-caveat>",
+                            },
                             {"type": "text", "text": long_prompt},
                             {"type": "text", "text": "[Image: source: /tmp/screenshot.png]"},
                         ],
