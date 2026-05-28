@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Breaking change:** raw SSE and WebSocket stream event arrays are no longer persisted by default. Pass `--tap-store-stream-events` when capturing a trace to store those raw event arrays in trace storage and viewer/export output; traces captured without the flag cannot recover the omitted raw events later.
 
 ## [0.1.85] - 2026-05-28
 

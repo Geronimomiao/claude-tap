@@ -135,6 +135,7 @@ class ForwardProxyServer:
         session: aiohttp.ClientSession,
         local_reverse_target: str | None = None,
         local_reverse_allowed_path_prefixes: tuple[str, ...] = (),
+        store_stream_events: bool = False,
     ) -> None:
         self.host = host
         self.port = port
@@ -143,6 +144,7 @@ class ForwardProxyServer:
         self._session = session
         self._local_reverse_target = local_reverse_target
         self._local_reverse_allowed_path_prefixes = local_reverse_allowed_path_prefixes
+        self._store_stream_events = store_stream_events
         self._server: asyncio.Server | None = None
         self._client_tasks: set[asyncio.Task] = set()
         self._client_writers: set[asyncio.StreamWriter] = set()
@@ -505,7 +507,7 @@ class ForwardProxyServer:
         client_writer.write(b"\r\n")
         await client_writer.drain()
 
-        reassembler = SSEReassembler()
+        reassembler = SSEReassembler(store_events=self._store_stream_events)
 
         try:
             async for chunk in upstream_resp.content.iter_any():
@@ -802,28 +804,34 @@ class ForwardProxyServer:
             pass
 
         duration_ms = int((time.monotonic() - t0) * 1000)
+        request_record = {
+            "method": "WEBSOCKET",
+            "path": path,
+            "headers": filter_headers(headers, redact_keys=True),
+            "body": reconstruct_ws_request_body(client_messages),
+        }
+        response_events = [json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in server_messages]
+        response_record = {
+            "status": 101,
+            "headers": {},
+            "body": reconstruct_ws_response_body(response_events),
+        }
+        if self._store_stream_events:
+            request_record["ws_events"] = [
+                json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in client_messages
+            ]
+            response_record["ws_events"] = response_events
+
         record = {
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "request_id": req_id,
             "turn": turn,
             "duration_ms": duration_ms,
             "transport": "websocket",
-            "request": {
-                "method": "WEBSOCKET",
-                "path": path,
-                "headers": filter_headers(headers, redact_keys=True),
-                "body": reconstruct_ws_request_body(client_messages),
-                "ws_events": [json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in client_messages],
-            },
-            "response": {
-                "status": 101,
-                "headers": {},
-                "body": None,
-                "ws_events": [json.loads(msg) if msg.startswith("{") else {"raw": msg} for msg in server_messages],
-            },
+            "request": request_record,
+            "response": response_record,
             "upstream_base_url": upstream_base_url,
         }
-        record["response"]["body"] = reconstruct_ws_response_body(record["response"]["ws_events"])
         await self._writer.write(record)
         log.info(
             f"{log_prefix} <- WS closed ({duration_ms}ms, "

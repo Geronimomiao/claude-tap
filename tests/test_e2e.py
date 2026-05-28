@@ -73,6 +73,7 @@ req_body2 = json.dumps({
     "model": "claude-test-model",
     "max_tokens": 100,
     "stream": True,
+    "system": "streaming system prompt must remain stored when raw stream events are omitted",
     "messages": [{"role": "user", "content": "count to 3"}],
 }).encode()
 req2 = urllib.request.Request(url, data=req_body2, headers={
@@ -237,7 +238,17 @@ def test_e2e():
         stop_upstream()
 
 
-def _run_test(upstream_port):
+def test_e2e_store_stream_events_flag():
+    stop_upstream, upstream_port = run_fake_upstream_in_thread()
+    print(f"[test] Fake upstream on :{upstream_port}")
+
+    try:
+        _run_test(upstream_port, store_stream_events=True)
+    finally:
+        stop_upstream()
+
+
+def _run_test(upstream_port, store_stream_events=False):
     project_dir = PROJECT_ROOT
     trace_dir = tempfile.mkdtemp(prefix="claude_tap_test_")
 
@@ -255,17 +266,20 @@ def _run_test(upstream_port):
     print("[test] Running: python -m claude_tap ...")
 
     try:
+        cmd = [
+            sys.executable,
+            "-m",
+            "claude_tap",
+            "--tap-output-dir",
+            trace_dir,
+            "--tap-no-open",
+            "--tap-target",
+            f"http://127.0.0.1:{upstream_port}",
+        ]
+        if store_stream_events:
+            cmd.append("--tap-store-stream-events")
         proc = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "claude_tap",
-                "--tap-output-dir",
-                trace_dir,
-                "--tap-no-open",
-                "--tap-target",
-                f"http://127.0.0.1:{upstream_port}",
-            ],
+            cmd,
             cwd=str(project_dir),
             env=env,
             capture_output=True,
@@ -313,13 +327,21 @@ def _run_test(upstream_port):
     r2 = records[1]
     assert r2["turn"] == 2
     assert r2["request"]["body"]["stream"] is True
+    assert r2["request"]["body"]["system"] == (
+        "streaming system prompt must remain stored when raw stream events are omitted"
+    )
+    assert r2["request"]["body"]["messages"][0]["content"] == "count to 3"
     assert r2["response"]["status"] == 200
     assert r2["response"]["body"]["content"][0]["text"] == "1, 2, 3"
     assert r2["response"]["body"]["usage"]["output_tokens"] == 8
     assert r2["response"]["body"]["stop_reason"] == "end_turn"
-    assert "sse_events" in r2["response"]
-    assert len(r2["response"]["sse_events"]) == 8
-    print("  ✅ Turn 2 (streaming, SSE reassembly): OK")
+    if store_stream_events:
+        assert "sse_events" in r2["response"]
+        assert len(r2["response"]["sse_events"]) == 8
+        print("  ✅ Turn 2 (streaming, opt-in raw SSE event storage): OK")
+    else:
+        assert "sse_events" not in r2["response"]
+        print("  ✅ Turn 2 (streaming, SSE reassembly without raw event storage): OK")
 
     # ── Terminal output is clean ──
     assert "Trace summary" in proc.stdout
@@ -677,11 +699,10 @@ def test_malformed_sse():
         assert r["response"]["status"] == 200
         assert r["request"]["body"]["stream"] is True
 
-        # The SSE events list should contain the events the reassembler parsed
-        # (both valid and malformed ones that had an event: prefix)
-        sse_events = r["response"]["sse_events"]
-        assert len(sse_events) >= 5, f"Expected at least 5 SSE events, got {len(sse_events)}"
-        print(f"  OK: recorded {len(sse_events)} SSE events (including malformed)")
+        # Raw SSE events are not persisted by default, but the reconstructed
+        # body should still be usable.
+        assert "sse_events" not in r["response"]
+        print("  OK: raw SSE events omitted by default")
 
         # The reconstructed body should still have the partial text from valid events
         body = r["response"]["body"]
@@ -1162,6 +1183,7 @@ def test_parse_args(monkeypatch, tmp_path):
     assert a.no_launch is False
     assert a.live_viewer is True
     assert a.open_viewer is True
+    assert a.store_stream_events is False
     print("  OK: defaults")
 
     # Codex defaults
@@ -1199,6 +1221,11 @@ def test_parse_args(monkeypatch, tmp_path):
     assert a.live_viewer is False
     assert a.claude_args == []
     print("  OK: --tap-no-live disables live viewer")
+
+    a = parse_args(["--tap-store-stream-events"])
+    assert a.store_stream_events is True
+    assert a.claude_args == []
+    print("  OK: --tap-store-stream-events enables raw event storage")
 
     # Mix: tap flags + claude flags
     a = parse_args(["--tap-port", "9999", "-c", "--model", "sonnet"])
@@ -3024,6 +3051,7 @@ async def test_forward_proxy_connect_websocket():
             ca=ca,
             writer=writer,
             session=session,
+            store_stream_events=True,
         )
         proxy_port = await server.start()
         print(f"  Forward proxy on port {proxy_port}")
@@ -3076,6 +3104,8 @@ async def test_forward_proxy_connect_websocket():
             assert records[0]["response"]["status"] == 101
             assert records[0]["response"]["body"]["status"] == "completed"
             assert records[0]["response"]["body"]["output"][0]["content"][0]["text"] == "Hello over WSS"
+            assert records[0]["request"]["ws_events"][0]["model"] == "gpt-test"
+            assert len(records[0]["response"]["ws_events"]) == 3
             print("  OK: WS trace recorded correctly")
         finally:
             await server.stop()
