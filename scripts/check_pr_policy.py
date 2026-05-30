@@ -114,8 +114,14 @@ def _raw_image_paths(urls: list[str]) -> list[str]:
     return paths
 
 
+def _body_without_image_references(body: str) -> str:
+    stripped = MARKDOWN_IMAGE_RE.sub("", body)
+    stripped = HTML_IMAGE_RE.sub("", stripped)
+    return PLAIN_IMAGE_URL_RE.sub("", stripped)
+
+
 def _has_real_evidence_source(body: str) -> bool:
-    lower = body.lower()
+    lower = _body_without_image_references(body).lower()
     return any(marker in lower for marker in REAL_EVIDENCE_MARKERS)
 
 

@@ -2802,6 +2802,7 @@ def test_forward_proxy_trace_skip_rules_are_narrow():
 
     json_headers = {"Content-Type": "application/json"}
     binary_headers = {"Content-Type": "application/octet-stream"}
+    npm_headers = {"User-Agent": "npm/10.8.2 node/v22.0.0 linux x64 workspaces/false"}
 
     assert _should_skip_trace_record("https://registry.npmjs.org:443/effect", "/effect", json_headers)
     assert _should_skip_trace_record(
@@ -2814,6 +2815,13 @@ def test_forward_proxy_trace_skip_rules_are_narrow():
         "/effect/-/effect-4.0.0-beta.59.tgz",
         binary_headers,
     )
+    assert _should_skip_trace_record(
+        "https://npm.mycorp.internal:443/private-pkg",
+        "/private-pkg",
+        json_headers,
+        npm_headers,
+        "GET",
+    )
 
     assert not _should_skip_trace_record("https://api.anthropic.com:443/v1/messages", "/v1/messages", json_headers)
     assert not _should_skip_trace_record(
@@ -2821,6 +2829,61 @@ def test_forward_proxy_trace_skip_rules_are_narrow():
         "/backend-api/codex/responses",
         json_headers,
     )
+    assert not _should_skip_trace_record(
+        "https://npm.mycorp.internal:443/private-pkg",
+        "/private-pkg",
+        json_headers,
+    )
+    assert not _should_skip_trace_record(
+        "https://api.anthropic.com:443/v1/messages",
+        "/v1/messages",
+        json_headers,
+        npm_headers,
+        "POST",
+    )
+
+
+@pytest.mark.asyncio
+async def test_forward_proxy_unrecorded_response_closes_upstream_on_client_disconnect():
+    from claude_tap.forward_proxy import ForwardProxyServer
+
+    class FakeContent:
+        async def iter_chunked(self, size):
+            assert size == 65536
+            yield b"package-bytes"
+
+    class FakeResponse:
+        status = 200
+        reason = "OK"
+        headers = {"Content-Type": "application/json"}
+        content = FakeContent()
+
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class DisconnectingWriter:
+        def __init__(self) -> None:
+            self.drain_calls = 0
+            self.writes: list[bytes] = []
+
+        def write(self, data: bytes) -> None:
+            self.writes.append(data)
+
+        async def drain(self) -> None:
+            self.drain_calls += 1
+            if self.drain_calls > 1:
+                raise ConnectionError("client disconnected")
+
+    upstream_resp = FakeResponse()
+    writer = DisconnectingWriter()
+
+    with pytest.raises(ConnectionError, match="client disconnected"):
+        await ForwardProxyServer._relay_unrecorded_response(object(), upstream_resp, writer)
+
+    assert upstream_resp.closed is True
 
 
 @pytest.mark.asyncio

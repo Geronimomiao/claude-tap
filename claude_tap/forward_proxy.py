@@ -71,6 +71,13 @@ DEFAULT_TRACE_IGNORED_BINARY_CONTENT_TYPES = frozenset(
         "binary/octet-stream",
     }
 )
+DEFAULT_TRACE_IGNORED_PACKAGE_METADATA_CONTENT_TYPES = frozenset(
+    {
+        "application/json",
+        "application/vnd.npm.install-v1+json",
+    }
+)
+PACKAGE_MANAGER_USER_AGENT_MARKERS = ("npm/", "yarn/", "pnpm/", "bun/")
 
 
 def _matches_path_prefix(path: str, prefixes: tuple[str, ...]) -> bool:
@@ -90,7 +97,20 @@ def _header_value(headers: Mapping[str, str], name: str) -> str:
     return ""
 
 
-def _should_skip_trace_record(upstream_url: str, path: str, response_headers: Mapping[str, str]) -> bool:
+def _has_package_manager_user_agent(headers: Mapping[str, str] | None) -> bool:
+    if headers is None:
+        return False
+    user_agent = _header_value(headers, "User-Agent").lower()
+    return any(marker in user_agent for marker in PACKAGE_MANAGER_USER_AGENT_MARKERS)
+
+
+def _should_skip_trace_record(
+    upstream_url: str,
+    path: str,
+    response_headers: Mapping[str, str],
+    request_headers: Mapping[str, str] | None = None,
+    method: str = "GET",
+) -> bool:
     """Return whether a non-model upstream response should be forwarded without persisting."""
     parsed = urlparse(upstream_url)
     hostname = (parsed.hostname or "").lower()
@@ -104,6 +124,13 @@ def _should_skip_trace_record(upstream_url: str, path: str, response_headers: Ma
     media_type = _header_value(response_headers, "Content-Type").split(";", 1)[0].strip().lower()
     if clean_path.endswith(DEFAULT_TRACE_IGNORED_ARCHIVE_SUFFIXES):
         return media_type in DEFAULT_TRACE_IGNORED_BINARY_CONTENT_TYPES
+
+    if (
+        method.upper() in {"GET", "HEAD"}
+        and _has_package_manager_user_agent(request_headers)
+        and media_type in DEFAULT_TRACE_IGNORED_PACKAGE_METADATA_CONTENT_TYPES
+    ):
+        return True
 
     return False
 
@@ -621,7 +648,7 @@ class ForwardProxyServer:
         upstream_url: str,
     ) -> None:
         """Handle a non-streaming response."""
-        if _should_skip_trace_record(upstream_url, path, upstream_resp.headers):
+        if _should_skip_trace_record(upstream_url, path, upstream_resp.headers, req_headers, method):
             total_bytes = await self._relay_unrecorded_response(upstream_resp, client_writer)
             duration_ms = int((time.monotonic() - t0) * 1000)
             log.info(f"{log_prefix} <- {upstream_resp.status} ({duration_ms}ms, {total_bytes} bytes, trace skipped)")
@@ -687,34 +714,37 @@ class ForwardProxyServer:
         upstream_resp: aiohttp.ClientResponse,
         client_writer: asyncio.StreamWriter,
     ) -> int:
-        status_line = f"HTTP/1.1 {upstream_resp.status} {upstream_resp.reason}\r\n"
-        client_writer.write(status_line.encode())
-        skip_headers = HOP_BY_HOP | {"content-length"}
-        content_length = _header_value(upstream_resp.headers, "Content-Length")
-        for key, value in upstream_resp.headers.items():
-            if key.lower() not in skip_headers:
-                client_writer.write(f"{key}: {value}\r\n".encode())
-        if content_length:
-            client_writer.write(f"Content-Length: {content_length}\r\n".encode())
-            chunked = False
-        else:
-            client_writer.write(b"Transfer-Encoding: chunked\r\n")
-            chunked = True
-        client_writer.write(b"\r\n")
-        await client_writer.drain()
-
         total_bytes = 0
-        async for chunk in upstream_resp.content.iter_chunked(65536):
-            total_bytes += len(chunk)
-            if chunked:
-                client_writer.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
+        try:
+            status_line = f"HTTP/1.1 {upstream_resp.status} {upstream_resp.reason}\r\n"
+            client_writer.write(status_line.encode())
+            skip_headers = HOP_BY_HOP | {"content-length"}
+            content_length = _header_value(upstream_resp.headers, "Content-Length")
+            for key, value in upstream_resp.headers.items():
+                if key.lower() not in skip_headers:
+                    client_writer.write(f"{key}: {value}\r\n".encode())
+            if content_length:
+                client_writer.write(f"Content-Length: {content_length}\r\n".encode())
+                chunked = False
             else:
-                client_writer.write(chunk)
+                client_writer.write(b"Transfer-Encoding: chunked\r\n")
+                chunked = True
+            client_writer.write(b"\r\n")
             await client_writer.drain()
-        if chunked:
-            client_writer.write(b"0\r\n\r\n")
-            await client_writer.drain()
-        return total_bytes
+
+            async for chunk in upstream_resp.content.iter_chunked(65536):
+                total_bytes += len(chunk)
+                if chunked:
+                    client_writer.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
+                else:
+                    client_writer.write(chunk)
+                await client_writer.drain()
+            if chunked:
+                client_writer.write(b"0\r\n\r\n")
+                await client_writer.drain()
+            return total_bytes
+        finally:
+            upstream_resp.close()
 
     async def _forward_websocket(
         self,
