@@ -2174,10 +2174,12 @@ let vsFilteredItems = []; // {entry, idx} pairs for virtual scroll
 const globalSearchState = {
   open: false,
   query: '',
+  queries: [],
   matchCounts: [],
   totalMatches: 0,
   currentMatch: -1,
   textCache: new Map(),
+  recalcTimer: 0,
 };
 const TRACE_JSONL_PATH = typeof __TRACE_JSONL_PATH__ !== 'undefined' ? __TRACE_JSONL_PATH__ : '';
 const TRACE_HTML_PATH = typeof __TRACE_HTML_PATH__ !== 'undefined' ? __TRACE_HTML_PATH__ : '';
@@ -2948,7 +2950,7 @@ function initGlobalSearch() {
   $('#global-search-close').onclick = () => closeGlobalSearch();
   input.addEventListener('input', () => {
     globalSearchState.query = input.value.trim();
-    recalcGlobalSearchMatches();
+    scheduleGlobalSearchRecalc();
   });
 }
 
@@ -2966,9 +2968,14 @@ function openGlobalSearch() {
 function closeGlobalSearch() {
   globalSearchState.open = false;
   globalSearchState.query = '';
+  globalSearchState.queries = [];
   globalSearchState.matchCounts = [];
   globalSearchState.totalMatches = 0;
   globalSearchState.currentMatch = -1;
+  if (globalSearchState.recalcTimer) {
+    cancelAnimationFrame(globalSearchState.recalcTimer);
+    globalSearchState.recalcTimer = 0;
+  }
   $('#global-search-input').value = '';
   $('#global-search-overlay').classList.remove('open');
   clearGlobalSearchHighlights($('#detail'));
@@ -2990,11 +2997,63 @@ function normalizeFiltersForGlobalSearch() {
   if (changed) applyFilter(true);
 }
 
+function uniqueSearchQueries(values) {
+  const out = [];
+  const seen = new Set();
+  values.forEach(value => {
+    const q = String(value || '').toLowerCase();
+    if (!q || seen.has(q)) return;
+    seen.add(q);
+    out.push(q);
+  });
+  return out;
+}
+
+function buildGlobalSearchQueries(query) {
+  const base = String(query || '').toLowerCase().trim();
+  if (!base) return [];
+  const variants = [base];
+  const keyMatch = base.match(/^([a-z0-9_$.-]+):(\s*.*)$/i);
+  if (keyMatch) {
+    const key = keyMatch[1];
+    const tail = keyMatch[2] || '';
+    const compactTail = tail.trimStart();
+    variants.push(`"${key}":${compactTail}`);
+    variants.push(`"${key}":${tail}`);
+    variants.push(`"${key}": ${compactTail}`);
+    variants.push(`${key}":${compactTail}`);
+    variants.push(`${key}":${tail}`);
+    variants.push(`${key}": ${compactTail}`);
+  }
+  variants.slice().forEach(value => {
+    if (value.includes('"')) variants.push(value.replaceAll('"', '\\"'));
+  });
+  return uniqueSearchQueries(variants);
+}
+
+function buildGlobalHighlightQueries(query) {
+  const base = String(query || '').toLowerCase().trim();
+  if (!base) return [];
+  const variants = buildGlobalSearchQueries(base);
+  const keyMatch = base.match(/^([a-z0-9_$.-]+):(\s*.*)$/i);
+  if (keyMatch) {
+    const key = keyMatch[1];
+    variants.push(`"${key}"`, key);
+  }
+  return uniqueSearchQueries(variants);
+}
+
 function getEntrySearchText(entry) {
   if (!entry?.request_id) return '';
   if (globalSearchState.textCache.has(entry.request_id)) return globalSearchState.textCache.get(entry.request_id);
-  // For stubs, parse the full entry first
-  const resolved = entry._isStub ? getFullEntry(entry) : entry;
+  if (entry._isStub) {
+    const lines = getRawLines();
+    const raw = lines[entry._rawIdx] || '';
+    const text = raw.toLowerCase();
+    globalSearchState.textCache.set(entry.request_id, text);
+    return text;
+  }
+  const resolved = entry;
   const body = resolved.request?.body;
   const parts = [];
   parts.push(body?.model || '');
@@ -3004,28 +3063,49 @@ function getEntrySearchText(entry) {
   const output = getResponseOutput(resolved);
   if (output?.content) parts.push(msgToText({ role: 'assistant', content: output.content }));
   getResponseEvents(resolved).forEach(ev => parts.push(JSON.stringify(ev)));
-  parts.push(JSON.stringify(resolved));
+  parts.push(JSON.stringify(resolved, null, 2));
   const text = parts.join('\n').toLowerCase();
   globalSearchState.textCache.set(entry.request_id, text);
   return text;
 }
 
-function countMatchesInText(text, query) {
-  if (!text || !query) return 0;
-  let count = 0, from = 0;
-  while (true) {
+function countOneQueryInText(text, query) {
+  let count = 0;
+  let from = 0;
+  while (query) {
     const idx = text.indexOf(query, from);
-    if (idx === -1) break;
-    count++;
+    if (idx === -1) return count;
+    count += 1;
     from = idx + query.length;
   }
   return count;
 }
 
+function countMatchesInText(text, queries) {
+  if (!text || !queries.length) return 0;
+  return Math.max(...queries.map(query => countOneQueryInText(text, query)));
+}
+
+function scheduleGlobalSearchRecalc() {
+  if (globalSearchState.recalcTimer) cancelAnimationFrame(globalSearchState.recalcTimer);
+  globalSearchState.recalcTimer = requestAnimationFrame(() => {
+    globalSearchState.recalcTimer = 0;
+    recalcGlobalSearchMatches();
+  });
+}
+
+function flushGlobalSearchRecalc() {
+  if (!globalSearchState.recalcTimer) return;
+  cancelAnimationFrame(globalSearchState.recalcTimer);
+  globalSearchState.recalcTimer = 0;
+  recalcGlobalSearchMatches();
+}
+
 function recalcGlobalSearchMatches() {
   clearGlobalSearchHighlights($('#detail'));
-  const query = globalSearchState.query.toLowerCase();
-  if (!query) {
+  const queries = buildGlobalSearchQueries(globalSearchState.query);
+  globalSearchState.queries = queries;
+  if (!queries.length) {
     globalSearchState.matchCounts = [];
     globalSearchState.totalMatches = 0;
     globalSearchState.currentMatch = -1;
@@ -3035,7 +3115,7 @@ function recalcGlobalSearchMatches() {
   const counts = [];
   let total = 0;
   entries.forEach(entry => {
-    const c = countMatchesInText(getEntrySearchText(entry), query);
+    const c = countMatchesInText(getEntrySearchText(entry), queries);
     if (c > 0) counts.push({ requestId: entry.request_id, count: c });
     total += c;
   });
@@ -3085,6 +3165,7 @@ function ensureEntryVisibleForSearch(requestId) {
 }
 
 function navigateGlobalSearch(delta) {
+  flushGlobalSearchRecalc();
   if (!globalSearchState.totalMatches) return;
   const total = globalSearchState.totalMatches;
   globalSearchState.currentMatch = (globalSearchState.currentMatch + delta + total) % total;
@@ -3097,7 +3178,8 @@ function revealCurrentSearchMatch() {
   if (!target) return;
   const filteredIdx = ensureEntryVisibleForSearch(target.requestId);
   if (filteredIdx < 0) return;
-  selectEntry(filteredIdx);
+  const sameEntry = currentDetailRequestId === target.requestId;
+  selectEntry(filteredIdx, { force: !sameEntry });
   applyGlobalSearchHighlights(target.localIndex);
 }
 
@@ -3105,9 +3187,9 @@ function applyGlobalSearchHighlights(targetLocalIndex) {
   const detail = $('#detail');
   if (!detail) return;
   clearGlobalSearchHighlights(detail);
-  const query = globalSearchState.query.toLowerCase();
-  if (!query) return;
-  const marks = highlightSearchInContainer(detail, query);
+  const queries = buildGlobalHighlightQueries(globalSearchState.query);
+  if (!queries.length) return;
+  const marks = highlightSearchInContainer(detail, queries);
   autoExpandSearchMatches(marks);
   if (!marks.length) return;
   let idx = targetLocalIndex;
@@ -3124,8 +3206,20 @@ function clearGlobalSearchHighlights(container) {
   container.normalize();
 }
 
-function highlightSearchInContainer(container, query) {
-  if (!query) return [];
+function findNextSearchMatch(text, queries, from) {
+  let best = null;
+  queries.forEach(query => {
+    const idx = text.indexOf(query, from);
+    if (idx === -1) return;
+    if (!best || idx < best.index || (idx === best.index && query.length > best.query.length)) {
+      best = { index: idx, query };
+    }
+  });
+  return best;
+}
+
+function highlightSearchInContainer(container, queries) {
+  if (!queries.length) return [];
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       if (!node.nodeValue || !node.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
@@ -3142,18 +3236,18 @@ function highlightSearchInContainer(container, query) {
     const value = node.nodeValue;
     const lower = value.toLowerCase();
     let from = 0;
-    let found = lower.indexOf(query, from);
-    if (found === -1) return;
+    let found = findNextSearchMatch(lower, queries, from);
+    if (!found) return;
     const frag = document.createDocumentFragment();
-    while (found !== -1) {
-      if (found > from) frag.appendChild(document.createTextNode(value.slice(from, found)));
+    while (found) {
+      if (found.index > from) frag.appendChild(document.createTextNode(value.slice(from, found.index)));
       const mark = document.createElement('mark');
       mark.className = 'global-search-hit';
-      mark.textContent = value.slice(found, found + query.length);
+      mark.textContent = value.slice(found.index, found.index + found.query.length);
       frag.appendChild(mark);
       marks.push(mark);
-      from = found + query.length;
-      found = lower.indexOf(query, from);
+      from = found.index + found.query.length;
+      found = findNextSearchMatch(lower, queries, from);
     }
     if (from < value.length) frag.appendChild(document.createTextNode(value.slice(from)));
     node.parentNode.replaceChild(frag, node);
