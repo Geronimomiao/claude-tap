@@ -115,6 +115,28 @@ async def test_run_client_uses_wrapper_provided_claude_binary(monkeypatch, tmp_p
     assert cmd[3:] == ("--output-format", "stream-json")
 
 
+@pytest.mark.asyncio
+async def test_run_client_does_not_execute_wrapper_directory(monkeypatch, tmp_path: Path) -> None:
+    async def fail_create_subprocess_exec(*cmd, **kwargs):
+        raise AssertionError(f"directory path should not be executed: {cmd}")
+
+    wrapped_dir = tmp_path / "claude"
+    wrapped_dir.mkdir()
+    _strip_sigtstp(monkeypatch)
+    monkeypatch.setattr("claude_tap.cli.shutil.which", lambda _: None)
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", fail_create_subprocess_exec)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+
+    code = await run_client(
+        43123,
+        ["--output-format", "stream-json"],
+        client="claude",
+        proxy_mode="reverse",
+        client_cmd=str(wrapped_dir),
+    )
+    assert code == 1
+
+
 def test_module_import_reconfigures_stdout_to_utf8() -> None:
     import claude_tap.cli  # noqa: F401
 

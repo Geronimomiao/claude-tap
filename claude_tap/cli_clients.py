@@ -222,9 +222,7 @@ async def run_client(
     # asyncio.create_subprocess_exec uses CreateProcess on Windows, which only
     # auto-appends `.exe`; resolve here so npm `.cmd`/`.bat` shims also work.
     display_cmd = client_cmd or cfg.cmd
-    resolved_cmd = (
-        str(Path(client_cmd)) if client_cmd and Path(client_cmd).is_file() else shutil.which(display_cmd)
-    )
+    resolved_cmd = str(Path(client_cmd)) if client_cmd and Path(client_cmd).is_file() else shutil.which(display_cmd)
     if resolved_cmd is None:
         if client_cmd:
             print(f"\nError: '{client_cmd}' command not found.\nPlease check the wrapper-provided {cfg.label} path.\n")

@@ -1226,6 +1226,13 @@ def test_parse_args(monkeypatch, tmp_path):
     assert a.claude_args == ["--output-format", "stream-json", "--verbose"]
     print("  OK: VSCode wrapper Claude binary path consumed")
 
+    prompt_dir_named_claude = tmp_path / "context" / "claude"
+    prompt_dir_named_claude.mkdir(parents=True)
+    a = parse_args([str(prompt_dir_named_claude), "--output-format", "stream-json"])
+    assert a.client_cmd is None
+    assert a.claude_args == [str(prompt_dir_named_claude), "--output-format", "stream-json"]
+    print("  OK: directory named claude is not consumed as wrapper binary")
+
     a = parse_args(["--tap-no-live"])
     assert a.live_viewer is False
     assert a.claude_args == []
