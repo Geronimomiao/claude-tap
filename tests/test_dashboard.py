@@ -319,6 +319,69 @@ def test_dashboard_recomputes_stale_first_message_summary_cache(trace_db) -> Non
     assert cached["summary_version"] == DASHBOARD_SUMMARY_VERSION
 
 
+def test_dashboard_recomputes_stale_active_summary_cache_on_append(trace_db) -> None:
+    store = get_trace_store()
+    session_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 5, 20, 10, 15, tzinfo=timezone.utc),
+    )
+    first_record = {
+        "timestamp": "2026-05-20T10:15:00+00:00",
+        "turn": 1,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages",
+            "body": {
+                "model": "claude-sonnet-4-6",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "<system-reminder>\nInjected context\n</system-reminder>"},
+                            {"type": "tool_result", "content": "stale tool output"},
+                            {"type": "text", "text": "Fix the active dashboard prompt preview."},
+                        ],
+                    }
+                ],
+            },
+        },
+        "response": {"status": 200, "body": {"model": "claude-sonnet-4-6", "usage": {"input_tokens": 1}}},
+    }
+    store.append_record(session_id, first_record)
+
+    stale_summary = {
+        "id": session_id,
+        "status": "active",
+        "record_count": 1,
+        "updated_at": "2026-05-20T10:15:00+00:00",
+        "first_user": "stale tool output",
+    }
+    conn = store._connect()
+    conn.execute(
+        "UPDATE sessions SET status = 'active', summary_json = ? WHERE id = ?",
+        (json.dumps(stale_summary, ensure_ascii=False, separators=(",", ":")), session_id),
+    )
+    conn.commit()
+    store.append_record(
+        session_id,
+        {
+            "timestamp": "2026-05-20T10:16:00+00:00",
+            "turn": 2,
+            "request": {"method": "POST", "path": "/v1/messages", "body": {"model": "claude-sonnet-4-6"}},
+            "response": {"status": 200, "body": {"model": "claude-sonnet-4-6", "usage": {"input_tokens": 1}}},
+        },
+    )
+
+    summary = list_trace_sessions(current_session_id=session_id)[0]
+    cached = json.loads(store.load_session_row(session_id)["summary_json"])
+
+    assert summary["first_user"] == "Fix the active dashboard prompt preview."
+    assert cached["first_user"] == "Fix the active dashboard prompt preview."
+    assert cached["summary_version"] == DASHBOARD_SUMMARY_VERSION
+    assert cached["record_count"] == 2
+
+
 def test_dashboard_loads_session_by_id(trace_db, tmp_path: Path) -> None:
     trace_path = tmp_path / "2026-05-20" / "trace_080000.jsonl"
     _write_jsonl(trace_path, [_anthropic_record()])
@@ -480,6 +543,22 @@ def test_dashboard_extracts_usage_models_errors_and_text() -> None:
                         }
                     ]
                 }
+            }
+        )
+        == "--print-timeout"
+    )
+    assert (
+        _request_user_text(
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "<USER_REQUEST>\n--print-timeout\n</USER_REQUEST>"},
+                            {"type": "text", "text": "<ADDITIONAL_METADATA>time</ADDITIONAL_METADATA>"},
+                        ],
+                    }
+                ]
             }
         )
         == "--print-timeout"

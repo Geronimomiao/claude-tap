@@ -183,6 +183,33 @@ def merge_record_into_summary(
     return summary
 
 
+def is_dashboard_summary_current(summary: Any, session_id: str) -> bool:
+    return (
+        isinstance(summary, dict)
+        and summary.get("id") == session_id
+        and summary.get("summary_version") == DASHBOARD_SUMMARY_VERSION
+    )
+
+
+def build_stored_session_summary(row: sqlite3.Row, records: list[dict[str, Any]]) -> dict[str, Any]:
+    manifest_entry = {
+        "client": row["client"] or "",
+        "proxy_mode": row["proxy_mode"] or "",
+    }
+    return _summarize_session(
+        session_id=row["id"],
+        date_key=row["date_key"] or "legacy",
+        legacy_rel_path=row["legacy_rel_path"],
+        records=records,
+        manifest_entry=manifest_entry,
+        status=row["status"] or "complete",
+        started_at=row["started_at"] or "",
+        updated_at=row["updated_at"] or "",
+        is_current=row["status"] == "active",
+        record_count=int(row["record_count"] or len(records)),
+    )
+
+
 def build_imported_session_summary(
     row: sqlite3.Row,
     records: list[dict[str, Any]],
@@ -210,11 +237,7 @@ def _session_summary_from_row(store: TraceStore, row: sqlite3.Row) -> dict[str, 
             cached = json.loads(summary_json)
         except json.JSONDecodeError:
             cached = None
-        if (
-            isinstance(cached, dict)
-            and cached.get("id") == row["id"]
-            and cached.get("summary_version") == DASHBOARD_SUMMARY_VERSION
-        ):
+        if is_dashboard_summary_current(cached, row["id"]):
             if row["status"] != "active":
                 return cached
             cached = dict(cached)
@@ -737,8 +760,11 @@ def _clean_user_content_text(value: Any) -> str:
         for item in value:
             if _is_auxiliary_user_content_block(item):
                 continue
-            prompt = _clean_user_prompt_text(_content_text(item))
+            text = _content_text(item)
+            prompt = _clean_user_prompt_text(text)
             if prompt:
+                if re.search(r"<USER_REQUEST>\s*.*?\s*</USER_REQUEST>", text, flags=re.DOTALL | re.IGNORECASE):
+                    return prompt
                 parts.append(prompt)
         return "\n".join(parts).strip()
     if _is_auxiliary_user_content_block(value):
@@ -776,6 +802,7 @@ def _clean_user_prompt_text(text: str) -> str:
     first_tag = re.match(r"^<([A-Za-z_-]+)>", text)
     if first_tag and first_tag.group(1).lower() in {
         "artifacts",
+        "additional_metadata",
         "environment_context",
         "session_context",
         "skills",
