@@ -245,6 +245,8 @@ def test_dashboard_rejects_missing_session_ids(trace_db) -> None:
     assert "DASHBOARD_I18N" in template
     assert 'data-i18n="table_first_message"' in template
     assert "export_jsonl" in template
+    assert "export_html" in template
+    assert "export_menu" in template
     assert load_trace_session("not-a-valid-session-id") is None
 
 
@@ -529,6 +531,8 @@ async def test_dashboard_server_serves_session_api_and_exports(trace_db, tmp_pat
                 html = await resp.text()
                 assert "session-list" in html
                 assert "export_jsonl" in html
+                assert "export_html" in html
+                assert "export_menu" in html
 
             async with session.get(f"http://127.0.0.1:{port}/api/sessions") as resp:
                 assert resp.status == 200
@@ -557,6 +561,7 @@ async def test_dashboard_server_serves_session_api_and_exports(trace_db, tmp_pat
                 assert f"/api/sessions/{session_id}/export/jsonl" in html
                 assert f"/api/sessions/{session_id}/export/compact" in html
                 assert f"/api/sessions/{session_id}/export/log" in html
+                assert f"/api/sessions/{session_id}/export/html" in html
                 assert "session-list" not in html
                 assert "back-to-list" not in html
 
@@ -582,6 +587,7 @@ async def test_dashboard_server_serves_session_api_and_exports(trace_db, tmp_pat
                 assert f'const __TRACE_HTML_PATH__ = "/dashboard/session/{session_id}";' in html
                 assert f"session-{session_id[:8]}.jsonl" not in html
                 assert f"session-{session_id[:8]}.html" not in html
+                assert f"/api/sessions/{session_id}/export/html" in html
 
             async with session.get(
                 f"http://127.0.0.1:{port}/api/sessions/{second_session_id}/records?offset=1&limit=1"
@@ -609,6 +615,18 @@ async def test_dashboard_server_serves_session_api_and_exports(trace_db, tmp_pat
                 assert resp.charset == "utf-8"
                 body = await resp.text()
                 assert body == "10:00:00 proxy log\n"
+
+            async with session.get(f"http://127.0.0.1:{port}/api/sessions/{session_id}/export/html") as resp:
+                assert resp.status == 200
+                assert resp.content_type == "text/html"
+                assert resp.charset == "utf-8"
+                assert f'filename="trace_{session_id[:8]}.html"' in resp.headers["Content-Disposition"]
+                html = await resp.text()
+                assert "EMBEDDED_TRACE_DATA" in html
+                assert "req_claude" in html
+                assert f'const __TRACE_JSONL_PATH__ = "/api/sessions/{session_id}/export/jsonl";' in html
+                assert f'const __TRACE_HTML_PATH__ = "/api/sessions/{session_id}/export/html";' in html
+                assert f"session-{session_id[:8]}.jsonl" not in html
 
             async with session.get(f"http://127.0.0.1:{port}/api/sessions/bad/records") as resp:
                 assert resp.status == 404
@@ -663,7 +681,7 @@ async def test_dashboard_session_route_serves_standalone_viewer(trace_db, tmp_pa
         async with playwright.async_playwright() as pw:
             browser = await pw.chromium.launch(headless=True)
             try:
-                page = await browser.new_page()
+                page = await browser.new_page(accept_downloads=True)
                 await page.goto(
                     f"http://127.0.0.1:{port}/dashboard/session/{session_id}",
                     wait_until="domcontentloaded",
@@ -674,12 +692,82 @@ async def test_dashboard_session_route_serves_standalone_viewer(trace_db, tmp_pa
                 assert await page.locator("#back-to-list").count() == 0
                 assert await page.locator("#session-list").count() == 0
                 assert await page.locator(".sidebar-item").count() >= 10
-                export_links = page.locator("#viewer-actions .viewer-action")
-                assert await export_links.count() == 3
-                hrefs = await export_links.evaluate_all("(links) => links.map((link) => link.getAttribute('href'))")
+                export_button = page.locator("#viewer-actions .export-menu > summary")
+                assert await export_button.count() == 1
+                assert await export_button.inner_text() == "Export"
+                assert await page.locator("#viewer-actions > .viewer-action").count() == 0
+                assert await page.locator("#viewer-actions .export-menu-item").count() == 4
+                hrefs = await page.locator("#viewer-actions .export-menu-item").evaluate_all(
+                    "(links) => links.map((link) => link.getAttribute('href'))"
+                )
                 assert f"/api/sessions/{session_id}/export/jsonl" in hrefs
                 assert f"/api/sessions/{session_id}/export/compact" in hrefs
                 assert f"/api/sessions/{session_id}/export/log" in hrefs
+                assert f"/api/sessions/{session_id}/export/html" in hrefs
+
+                async with page.expect_download() as download_info:
+                    await export_button.click()
+                    await page.locator('#viewer-actions .export-menu-item[href$="/export/html"]').click()
+                download = await download_info.value
+                assert download.suggested_filename == f"trace_{session_id[:8]}.html"
+                download_path = await download.path()
+                assert download_path is not None
+                exported_html = Path(download_path).read_text(encoding="utf-8")
+                assert "EMBEDDED_TRACE_DATA" in exported_html
+                assert "req_claude" in exported_html
+            finally:
+                await browser.close()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_session_export_menu_is_not_clipped_on_mobile(trace_db, tmp_path: Path) -> None:
+    playwright = pytest.importorskip("playwright.async_api")
+    trace_path = tmp_path / "2026-05-20" / "trace_080000.jsonl"
+    _write_jsonl(trace_path, [_anthropic_record()])
+    _seed_legacy(tmp_path)
+    session_id = list_trace_sessions()[0]["id"]
+
+    server = LiveViewerServer(port=0, migrate_from=tmp_path, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with playwright.async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(viewport={"width": 390, "height": 900})
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/session/{session_id}",
+                    wait_until="domcontentloaded",
+                )
+                await page.wait_for_selector("#viewer-actions .export-menu > summary", timeout=5000)
+
+                await page.locator("#viewer-actions .export-menu > summary").click()
+                menu = page.locator("#viewer-actions .export-menu-list")
+                assert await menu.is_visible()
+                assert await page.locator("#viewer-actions .export-menu-item").count() == 4
+
+                layout = await page.evaluate(
+                    """() => {
+                      const actions = document.querySelector('#viewer-actions');
+                      const menu = document.querySelector('#viewer-actions .export-menu-list');
+                      const actionsBox = actions.getBoundingClientRect();
+                      const menuBox = menu.getBoundingClientRect();
+                      const actionStyles = getComputedStyle(actions);
+                      const menuStyles = getComputedStyle(menu);
+                      return {
+                        actionsBottom: actionsBox.bottom,
+                        menuBottom: menuBox.bottom,
+                        menuHeight: menuBox.height,
+                        overflowX: actionStyles.overflowX,
+                        menuPosition: menuStyles.position,
+                      };
+                    }"""
+                )
+                assert layout["overflowX"] == "visible"
+                assert layout["menuPosition"] == "static"
+                assert layout["menuHeight"] > 80
+                assert layout["menuBottom"] <= layout["actionsBottom"] + 1
             finally:
                 await browser.close()
     finally:
