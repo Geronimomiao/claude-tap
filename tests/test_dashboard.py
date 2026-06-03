@@ -429,6 +429,20 @@ def test_dashboard_detail_navigation_uses_standalone_viewer_route() -> None:
     assert "state.detailFingerprint = sessionDetailFingerprint(session)" in template
 
 
+def test_dashboard_template_exposes_session_delete_controls() -> None:
+    template = read_dashboard_template()
+
+    assert 'data-i18n="table_actions"' in template
+    assert "delete-session-modal" in template
+    assert "data-delete-session" in template
+    assert "delete_active_session_title" in template
+    assert "session.active" in template
+    assert "function isSessionRowActionTarget(target)" in template
+    assert "event.target !== row" in template
+    assert "function confirmDeleteSession()" in template
+    assert 'method: "DELETE"' in template
+
+
 def test_dashboard_summarize_session_and_migration(trace_db, tmp_path: Path) -> None:
     assert dashboard_trace_snapshot() == {}
 
@@ -867,6 +881,20 @@ async def test_dashboard_server_serves_session_api_and_exports(trace_db, tmp_pat
                 assert f'const __TRACE_HTML_PATH__ = "/api/sessions/{session_id}/export/html";' in html
                 assert f"session-{session_id[:8]}.jsonl" not in html
 
+            async with session.delete(f"http://127.0.0.1:{port}/api/sessions/{second_session_id}") as resp:
+                assert resp.status == 200
+                payload = await resp.json()
+                assert payload["deleted_sessions"] == 1
+                assert payload["deleted_records"] == 2
+
+            async with session.get(f"http://127.0.0.1:{port}/api/sessions/{second_session_id}/records") as resp:
+                assert resp.status == 404
+
+            async with session.get(f"http://127.0.0.1:{port}/api/sessions") as resp:
+                assert resp.status == 200
+                payload = await resp.json()
+                assert [item["id"] for item in payload["sessions"]] == [session_id]
+
             async with session.get(f"http://127.0.0.1:{port}/api/sessions/bad/records") as resp:
                 assert resp.status == 404
     finally:
@@ -1009,6 +1037,87 @@ async def test_dashboard_session_export_menu_is_not_clipped_on_mobile(trace_db, 
                 assert layout["menuBottom"] <= layout["actionsBottom"] + 1
             finally:
                 await browser.close()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_delete_button_keyboard_focuses_confirmation_dialog(trace_db) -> None:
+    playwright = pytest.importorskip("playwright.async_api")
+    store = get_trace_store()
+    session_id = store.create_session(client="claude", proxy_mode="reverse")
+    store.append_record(session_id, _anthropic_record())
+    store.finalize_session(session_id, {"api_calls": 1})
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with playwright.async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.goto(f"http://127.0.0.1:{port}/dashboard", wait_until="domcontentloaded")
+                delete_button = page.locator(f'[data-delete-session="{session_id}"]')
+                await delete_button.wait_for(state="visible", timeout=5000)
+
+                for key in ("Enter", "Space"):
+                    await delete_button.focus()
+                    await page.keyboard.press(key)
+                    await page.wait_for_selector("#delete-session-modal:not(.hidden)", timeout=5000)
+                    assert page.url == f"http://127.0.0.1:{port}/dashboard"
+                    assert await page.evaluate("document.activeElement && document.activeElement.id") == (
+                        "delete-session-cancel"
+                    )
+
+                    await page.keyboard.press("Enter")
+                    await page.wait_for_selector("#delete-session-modal.hidden", state="attached", timeout=5000)
+                    assert await page.locator(f'[data-session="{session_id}"]').count() == 1
+            finally:
+                await browser.close()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_delete_current_live_session_is_protected(trace_db) -> None:
+    store = get_trace_store()
+    session_id = store.create_session(client="claude", proxy_mode="reverse")
+
+    server = LiveViewerServer(port=0, session_id=session_id, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.delete(f"http://127.0.0.1:{port}/api/sessions/{session_id}") as resp:
+                assert resp.status == 409
+                payload = await resp.json()
+                assert payload["error"] == "Live session cannot be deleted"
+        assert store.load_session_row(session_id) is not None
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_delete_active_session_is_protected(trace_db) -> None:
+    store = get_trace_store()
+    session_id = store.create_session(client="claude", proxy_mode="reverse")
+    store.append_record(session_id, _anthropic_record())
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://127.0.0.1:{port}/api/sessions") as resp:
+                assert resp.status == 200
+                payload = await resp.json()
+                active_session = next(item for item in payload["sessions"] if item["id"] == session_id)
+                assert active_session["active"] is True
+                assert active_session["status"] == "active"
+
+            async with session.delete(f"http://127.0.0.1:{port}/api/sessions/{session_id}") as resp:
+                assert resp.status == 409
+                payload = await resp.json()
+                assert payload["error"] == "Active session cannot be deleted"
+        assert store.load_session_row(session_id) is not None
     finally:
         await server.stop()
 
