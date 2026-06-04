@@ -1069,6 +1069,7 @@ async def test_dashboard_mobile_session_list_uses_cards_without_horizontal_overf
                           const actions = document.querySelector('.row-actions');
                           const first = document.querySelector('.first-message');
                           const firstLabel = document.querySelector('.session-first-cell');
+                          const refresh = document.querySelector('#refresh');
                           const rowBox = row.getBoundingClientRect();
                           return {
                             overflowX: document.documentElement.scrollWidth - window.innerWidth,
@@ -1079,6 +1080,8 @@ async def test_dashboard_mobile_session_list_uses_cards_without_horizontal_overf
                             actionsDisplay: getComputedStyle(actions).display,
                             firstWhiteSpace: getComputedStyle(first).whiteSpace,
                             firstLabel: getComputedStyle(firstLabel, '::before').content,
+                            refreshText: refresh.textContent.trim(),
+                            refreshLabel: refresh.getAttribute('aria-label'),
                           };
                         }"""
                     )
@@ -1090,6 +1093,8 @@ async def test_dashboard_mobile_session_list_uses_cards_without_horizontal_overf
                     assert layout["actionsDisplay"] == "grid"
                     assert layout["firstWhiteSpace"] == "normal"
                     assert "First Message" in layout["firstLabel"]
+                    assert layout["refreshText"] != "R"
+                    assert layout["refreshLabel"] == "Refresh"
             finally:
                 await browser.close()
     finally:

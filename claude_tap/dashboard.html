@@ -1276,7 +1276,7 @@ pre {
       <div class="session-search" role="search">
         <input id="search" type="search" placeholder="Search messages, agents, models, paths..." data-i18n-placeholder="search_placeholder">
       </div>
-      <button id="refresh" class="history-refresh" title="Refresh" data-i18n-title="refresh">R</button>
+      <button id="refresh" class="history-refresh" title="Refresh" aria-label="Refresh" data-i18n-title="refresh" data-i18n-aria-label="refresh">&#8635;</button>
     </div>
 
     <section class="overview-card" aria-label="Dashboard summary">
@@ -1608,6 +1608,9 @@ function applyI18n() {
   });
   document.querySelectorAll("[data-i18n-title]").forEach(element => {
     element.setAttribute("title", t(element.dataset.i18nTitle));
+  });
+  document.querySelectorAll("[data-i18n-aria-label]").forEach(element => {
+    element.setAttribute("aria-label", t(element.dataset.i18nAriaLabel));
   });
   document.querySelectorAll("[data-i18n-placeholder]").forEach(element => {
     element.setAttribute("placeholder", t(element.dataset.i18nPlaceholder));

@@ -1761,25 +1761,25 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); widt
   .action-bar {
     position: sticky;
     top: 0;
-    width: max-content;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
     max-width: 100%;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    overflow-x: visible;
     padding: 5px;
-    border-radius: 999px;
-    scrollbar-width: none;
-  }
-  .action-bar::-webkit-scrollbar {
-    display: none;
+    border-radius: 16px;
   }
   .act-btn {
-    flex: 0 0 auto;
-    width: auto;
+    width: 100%;
+    min-width: 0;
     min-height: 38px;
     justify-content: center;
-    padding: 8px 11px;
-    white-space: nowrap;
+    padding: 8px 9px;
+    white-space: normal;
+    text-align: center;
+  }
+  .act-btn:last-child:nth-child(3) {
+    grid-column: 1 / -1;
   }
   .section-header {
     align-items: flex-start;

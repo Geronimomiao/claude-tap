@@ -2292,6 +2292,7 @@ def test_viewer_visual_layout_contracts_cover_css_modes(tmp_path: Path, chromium
                     return { width: r.width, height: r.height, left: r.left, right: r.right, top: r.top, bottom: r.bottom };
                   };
                   const color = selector => getComputedStyle(document.querySelector(selector)).backgroundColor;
+                  const actionBar = document.querySelector('.action-bar');
                   return {
                     overflowX: document.documentElement.scrollWidth - window.innerWidth,
                     bodyBg: getComputedStyle(document.body).backgroundColor,
@@ -2304,6 +2305,17 @@ def test_viewer_visual_layout_contracts_cover_css_modes(tmp_path: Path, chromium
                     toolBlock: rect('.tool-block'),
                     response: rect('.section-body.open .content-block'),
                     sectionCount: document.querySelectorAll('#detail .section').length,
+                    actionBar: rect('.action-bar'),
+                    actionBarOverflow: actionBar ? actionBar.scrollWidth - actionBar.clientWidth : null,
+                    actionButtons: actionBar ? Array.from(actionBar.querySelectorAll('.act-btn')).map(el => {
+                      const box = el.getBoundingClientRect();
+                      return {
+                        text: el.textContent.trim(),
+                        clipped: el.scrollWidth - el.clientWidth,
+                        left: box.left,
+                        right: box.right,
+                      };
+                    }) : [],
                   };
                 }"""
             )
@@ -2395,6 +2407,13 @@ def test_viewer_visual_layout_contracts_cover_css_modes(tmp_path: Path, chromium
     assert mobile_narrow_detail["sidebar"]["width"] == 0
     assert mobile_narrow_detail["detail"]["width"] == 320
     assert mobile_narrow_detail["detail"]["left"] == 0
+    assert mobile_narrow_detail["actionBarOverflow"] <= 2
+    assert mobile_narrow_detail["actionButtons"]
+    assert any(button["text"] == "Diff with Prev" for button in mobile_narrow_detail["actionButtons"])
+    for button in mobile_narrow_detail["actionButtons"]:
+        assert button["clipped"] <= 2
+        assert button["left"] >= mobile_narrow_detail["actionBar"]["left"] - 1
+        assert button["right"] <= mobile_narrow_detail["actionBar"]["right"] + 1
 
 
 def test_viewer_session_identical_prompts_image_tags_and_early_title_generation(
