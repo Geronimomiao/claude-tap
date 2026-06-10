@@ -402,6 +402,9 @@ claude-tap --tap-no-live
 # 不启动客户端，直接浏览历史 trace
 claude-tap dashboard
 
+# 停止共享 dashboard 服务
+claude-tap dashboard stop
+
 # 从已有 JSONL trace 重新生成自包含 HTML 查看器
 claude-tap export .traces/2026-02-28/trace_141557.jsonl -o trace.html
 

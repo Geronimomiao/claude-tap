@@ -464,6 +464,21 @@ def test_dashboard_template_exposes_session_delete_controls() -> None:
     assert 'method: "DELETE"' in template
 
 
+def test_dashboard_template_exposes_quit_control() -> None:
+    template = read_dashboard_template()
+
+    assert 'id="dashboard-quit"' in template
+    assert "quit_dashboard_confirm" in template
+    assert "Stop dashboard service" in template
+    assert "function quitDashboard()" in template
+    assert 'const DASHBOARD_QUIT_TOKEN = "";' in template
+    assert "const DASHBOARD_CAN_STOP = false;" in template
+    assert '"X-Claude-Tap-Dashboard-Token": DASHBOARD_QUIT_TOKEN' in template
+    assert "let dashboardEvents = null;" in template
+    assert "function closeDashboardEvents()" in template
+    assert "if (state.quittingDashboard) return;" in template
+
+
 def test_dashboard_summarize_session_and_migration(trace_db, tmp_path: Path) -> None:
     assert dashboard_trace_snapshot() == {}
 
@@ -951,6 +966,114 @@ async def test_dashboard_server_sse_events(trace_db) -> None:
                 assert await asyncio.wait_for(resp.content.readline(), timeout=1) == b"event: refresh\n"
                 refresh_data = await asyncio.wait_for(resp.content.readline(), timeout=1)
                 assert b'"type":"refresh"' in refresh_data
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_server_quit_route_stops_dashboard(trace_db) -> None:
+    from claude_tap.shared_dashboard import is_dashboard_healthy, wait_for_dashboard_stopped
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        timeout = aiohttp.ClientTimeout(total=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(f"http://127.0.0.1:{port}/dashboard") as resp:
+                assert resp.status == 200
+                html = await resp.text()
+                assert f'const DASHBOARD_QUIT_TOKEN = "{server._dashboard_quit_token}";' in html
+                assert "const DASHBOARD_CAN_STOP = true;" in html
+
+            async with session.post(f"http://127.0.0.1:{port}/dashboard/quit") as resp:
+                assert resp.status == 403
+                payload = await resp.json()
+                assert payload["ok"] is False
+
+            async with session.get(f"http://127.0.0.1:{port}/dashboard/health") as resp:
+                assert resp.status == 200
+                health = await resp.json()
+                assert health["quit_token"] == server._dashboard_quit_token
+
+            async with session.post(
+                f"http://127.0.0.1:{port}/dashboard/quit",
+                headers={"X-Claude-Tap-Dashboard-Token": health["quit_token"]},
+            ) as resp:
+                assert resp.status == 200
+                assert await resp.json() == {"ok": True}
+
+        assert await wait_for_dashboard_stopped("127.0.0.1", port, timeout=2.0) is True
+        assert await is_dashboard_healthy("127.0.0.1", port, require_current_db=False) is False
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_quit_token_requires_trusted_host_and_origin(trace_db) -> None:
+    from claude_tap.shared_dashboard import is_dashboard_healthy
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        timeout = aiohttp.ClientTimeout(total=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(
+                f"http://127.0.0.1:{port}/dashboard",
+                headers={"Host": f"attacker.example:{port}", "Origin": f"http://attacker.example:{port}"},
+            ) as resp:
+                assert resp.status == 200
+                html = await resp.text()
+                assert 'const DASHBOARD_QUIT_TOKEN = "";' in html
+                assert "const DASHBOARD_CAN_STOP = false;" in html
+                assert "session-list" in html
+
+            async with session.get(
+                f"http://127.0.0.1:{port}/dashboard/health",
+                headers={"Host": f"attacker.example:{port}", "Origin": f"http://attacker.example:{port}"},
+            ) as resp:
+                assert resp.status == 200
+                payload = await resp.json()
+                assert payload["ok"] is True
+                assert payload["dashboard_mode"] is True
+                assert "quit_token" not in payload
+
+            async with session.get(f"http://127.0.0.1:{port}/dashboard/health") as resp:
+                assert resp.status == 200
+                health = await resp.json()
+                token = health["quit_token"]
+
+            for headers in (
+                {"Host": f"attacker.example:{port}", "X-Claude-Tap-Dashboard-Token": token},
+                {
+                    "Origin": f"http://attacker.example:{port}",
+                    "X-Claude-Tap-Dashboard-Token": token,
+                },
+                {
+                    "Origin": f"http://127.0.0.1:{port + 1}",
+                    "X-Claude-Tap-Dashboard-Token": token,
+                },
+            ):
+                async with session.post(f"http://127.0.0.1:{port}/dashboard/quit", headers=headers) as resp:
+                    assert resp.status == 403
+                    payload = await resp.json()
+                    assert payload["ok"] is False
+
+        assert await is_dashboard_healthy("127.0.0.1", port, require_current_db=False) is True
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_quit_route_rejects_non_dashboard_server(trace_db) -> None:
+    server = LiveViewerServer(port=0, dashboard_mode=False)
+    port = await server.start()
+    try:
+        timeout = aiohttp.ClientTimeout(total=3)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(f"http://127.0.0.1:{port}/dashboard/quit") as resp:
+                assert resp.status == 403
+                payload = await resp.json()
+                assert payload["ok"] is False
     finally:
         await server.stop()
 

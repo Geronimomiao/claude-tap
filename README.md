@@ -405,6 +405,9 @@ claude-tap --tap-no-live
 # Browse saved traces without launching a client
 claude-tap dashboard
 
+# Stop the shared dashboard service
+claude-tap dashboard stop
+
 # Regenerate a self-contained HTML viewer from JSONL
 claude-tap export .traces/2026-02-28/trace_141557.jsonl -o trace.html
 
