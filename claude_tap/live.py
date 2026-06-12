@@ -16,6 +16,7 @@ from aiohttp import web
 
 from claude_tap.compact_trace import build_compact_trace_bundle
 from claude_tap.dashboard import (
+    build_session_query,
     dashboard_trace_snapshot,
     ensure_trace_store,
     list_trace_agents,
@@ -35,6 +36,9 @@ from claude_tap.viewer import (
 )
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DEFAULT_SESSION_PAGE_LIMIT = 100
+MAX_SESSION_PAGE_LIMIT = 500
+
 _DASHBOARD_QUIT_TOKEN_HEADER = "X-Claude-Tap-Dashboard-Token"
 
 
@@ -130,6 +134,37 @@ def _record_offset_from_request(request: web.Request) -> int:
     return max(0, offset)
 
 
+def _session_limit_from_request(request: web.Request) -> int:
+    value = request.query.get("limit")
+    if value is None:
+        return DEFAULT_SESSION_PAGE_LIMIT
+    try:
+        limit = int(value)
+    except ValueError:
+        return DEFAULT_SESSION_PAGE_LIMIT
+    return max(1, min(MAX_SESSION_PAGE_LIMIT, limit))
+
+
+def _session_offset_from_request(request: web.Request) -> int:
+    value = request.query.get("offset")
+    if value is None:
+        return 0
+    try:
+        offset = int(value)
+    except ValueError:
+        return 0
+    return max(0, offset)
+
+
+def _session_query_from_request(request: web.Request):
+    return build_session_query(
+        date=request.query.get("date", ""),
+        status=request.query.get("status", ""),
+        search=request.query.get("search", ""),
+        agent=request.query.get("agent", ""),
+    )
+
+
 class LiveViewerServer:
     """HTTP server for real-time trace viewing via SSE."""
 
@@ -182,6 +217,7 @@ class LiveViewerServer:
         app.router.add_delete("/api/traces/{date}", self._handle_delete_traces_by_date)
         app.router.add_get("/api/agents", self._handle_agents)
         app.router.add_get("/api/sessions", self._handle_sessions)
+        app.router.add_delete("/api/sessions", self._handle_delete_sessions)
         app.router.add_delete("/api/sessions/{session_id}", self._handle_delete_session)
         app.router.add_get("/api/sessions/{session_id}/records", self._handle_session_records)
         app.router.add_get("/api/sessions/{session_id}/html", self._handle_session_html_compat)
@@ -292,8 +328,10 @@ class LiveViewerServer:
         return web.Response(text=html, content_type="text/html")
 
     async def _handle_dashboard_session_detail(self, request: web.Request) -> web.Response:
-        """Serve a dashboard session as the standalone trace viewer page."""
-        return await self._session_html_response(request.match_info["session_id"])
+        """Serve the dashboard shell for a session detail route."""
+        if ensure_trace_store().load_session_row(request.match_info["session_id"]) is None:
+            return web.Response(status=404, text="Session not found")
+        return await self._handle_dashboard_index(request)
 
     async def _handle_dashboard_health(self, request: web.Request) -> web.Response:
         payload = {"ok": True, "db_path": str(resolve_db_path()), "dashboard_mode": self.dashboard_mode}
@@ -443,7 +481,36 @@ class LiveViewerServer:
     async def _handle_sessions(self, request: web.Request) -> web.Response:
         """Return trace history sessions."""
         live_count = await self._current_live_record_count()
-        return web.json_response({"sessions": list_trace_sessions(self.session_id, live_record_count=live_count)})
+        offset = _session_offset_from_request(request)
+        limit = _session_limit_from_request(request)
+        query = _session_query_from_request(request)
+        aggregates = get_trace_store().get_session_aggregates(query)
+        total = aggregates["total_sessions"]
+        total_records = aggregates["total_records"]
+        total_tokens = aggregates["total_tokens"]
+        total_errors = aggregates["total_errors"]
+        sessions = list_trace_sessions(
+            self.session_id,
+            live_record_count=live_count,
+            limit=limit,
+            offset=offset,
+            query=query,
+        )
+        dates, has_legacy = get_trace_store().list_dates()
+        return web.json_response(
+            {
+                "sessions": sessions,
+                "total": total,
+                "total_records": total_records,
+                "total_tokens": total_tokens,
+                "total_errors": total_errors,
+                "offset": offset,
+                "limit": limit,
+                "has_more": offset + len(sessions) < total,
+                "dates": dates,
+                "has_legacy": has_legacy,
+            }
+        )
 
     async def _handle_session_records(self, request: web.Request) -> web.Response:
         """Return one session's summary and records."""
@@ -549,6 +616,55 @@ class LiveViewerServer:
         if (row["status"] or "") == "active":
             return web.json_response({"error": "Active session cannot be deleted"}, status=409)
         result = store.delete_session(session_id)
+        await self._broadcast_dashboard_event({"type": "refresh"})
+        return web.json_response(result)
+
+    async def _handle_delete_sessions(self, request: web.Request) -> web.Response:
+        """Delete multiple stored trace sessions."""
+        try:
+            payload = await request.json()
+        except (json.JSONDecodeError, web.HTTPBadRequest):
+            return web.json_response({"error": "Invalid JSON body"}, status=400)
+        raw_ids = payload.get("session_ids") if isinstance(payload, dict) else None
+        if not isinstance(raw_ids, list):
+            return web.json_response({"error": "session_ids must be a list"}, status=400)
+        session_ids = [item for item in raw_ids if isinstance(item, str) and item]
+        if not session_ids:
+            return web.json_response({"error": "No sessions selected"}, status=400)
+
+        store = ensure_trace_store()
+        deletable_ids = []
+        skipped_active = []
+        missing_ids = []
+        for session_id in dict.fromkeys(session_ids):
+            row = store.load_session_row(session_id)
+            if row is None:
+                missing_ids.append(session_id)
+                continue
+            if self.session_id and session_id == self.session_id:
+                skipped_active.append(session_id)
+                continue
+            if (row["status"] or "") == "active":
+                skipped_active.append(session_id)
+                continue
+            deletable_ids.append(session_id)
+
+        if not deletable_ids:
+            return web.json_response(
+                {
+                    "error": "No selected sessions can be deleted",
+                    "deleted_sessions": 0,
+                    "deleted_records": 0,
+                    "deleted_logs": 0,
+                    "missing_sessions": missing_ids,
+                    "skipped_active_sessions": skipped_active,
+                },
+                status=409,
+            )
+
+        result = store.delete_sessions(deletable_ids)
+        result["missing_sessions"] = [*missing_ids, *result.get("missing_sessions", [])]
+        result["skipped_active_sessions"] = skipped_active
         await self._broadcast_dashboard_event({"type": "refresh"})
         return web.json_response(result)
 
