@@ -14,7 +14,6 @@ from urllib.parse import quote, urlsplit
 
 from aiohttp import web
 
-from claude_tap.compact_trace import build_compact_trace_bundle
 from claude_tap.dashboard import (
     build_session_query,
     dashboard_trace_snapshot,
@@ -23,6 +22,7 @@ from claude_tap.dashboard import (
     list_trace_sessions,
     load_trace_session,
     read_dashboard_template,
+    redact_dashboard_summary,
 )
 from claude_tap.history import delete_trace_history, migrate_legacy_traces
 from claude_tap.shared_dashboard import dashboard_url
@@ -30,8 +30,9 @@ from claude_tap.trace_store import get_trace_store, resolve_db_path
 from claude_tap.viewer import (
     VIEWER_SCRIPT_ANCHOR,
     VIEWER_TEMPLATE_PATH,
+    _extract_metadata_from_record,
     _generate_html_viewer,
-    _generate_html_viewer_from_compact_bundle,
+    _generate_html_viewer_from_metadata,
     _read_viewer_template,
 )
 
@@ -307,6 +308,11 @@ class LiveViewerServer:
         """Return the viewer URL."""
         return dashboard_url(self.host, self._actual_port)
 
+    def _finalize_stale_active_sessions(self) -> None:
+        """Release abandoned active sessions while protecting the current writer."""
+        protected = {self.session_id} if self.session_id else set()
+        ensure_trace_store().finalize_stale_active_sessions(protected_session_ids=protected)
+
     async def _handle_dashboard_index(self, request: web.Request) -> web.Response:
         """Serve the session-first dashboard."""
         if session_id := request.query.get("session_id"):
@@ -475,11 +481,13 @@ class LiveViewerServer:
 
     async def _handle_agents(self, request: web.Request) -> web.Response:
         """Return trace history agent buckets."""
+        self._finalize_stale_active_sessions()
         live_count = await self._current_live_record_count()
         return web.json_response({"agents": list_trace_agents(self.session_id, live_record_count=live_count)})
 
     async def _handle_sessions(self, request: web.Request) -> web.Response:
         """Return trace history sessions."""
+        self._finalize_stale_active_sessions()
         live_count = await self._current_live_record_count()
         offset = _session_offset_from_request(request)
         limit = _session_limit_from_request(request)
@@ -542,11 +550,17 @@ class LiveViewerServer:
                 "log": f"/api/sessions/{quote(session_id)}/export/log",
                 "html": f"/api/sessions/{quote(session_id)}/export/html",
             }
-            _generate_html_viewer_from_compact_bundle(
-                build_compact_trace_bundle(store.load_records(session_id)),
+            metadata = [
+                redact_dashboard_summary(item)
+                for record in store.load_records(session_id)
+                if (item := _extract_metadata_from_record(record)) is not None
+            ]
+            _generate_html_viewer_from_metadata(
+                metadata,
                 html_path,
                 display_trace_path=export_urls["compact"],
                 display_html_path=f"/dashboard/session/{quote(session_id)}",
+                records_api_path=f"/api/sessions/{quote(session_id)}/records",
             )
             if not html_path.exists():
                 return web.Response(status=500, text="Failed to generate session viewer")
@@ -607,6 +621,7 @@ class LiveViewerServer:
     async def _handle_delete_session(self, request: web.Request) -> web.Response:
         """Delete one stored trace session."""
         session_id = request.match_info["session_id"]
+        self._finalize_stale_active_sessions()
         store = ensure_trace_store()
         row = store.load_session_row(session_id)
         if row is None:
@@ -632,6 +647,7 @@ class LiveViewerServer:
         if not session_ids:
             return web.json_response({"error": "No sessions selected"}, status=400)
 
+        self._finalize_stale_active_sessions()
         store = ensure_trace_store()
         deletable_ids = []
         skipped_active = []
@@ -732,6 +748,7 @@ class LiveViewerServer:
         date_key = request.match_info["date"]
         if date_key != "legacy" and not _DATE_RE.match(date_key):
             return web.json_response({"error": "Invalid date format"}, status=400)
+        self._finalize_stale_active_sessions()
         protected: set[str] = set()
         force = request.query.get("force", "").lower() in {"1", "true", "yes"}
         if self.session_id:

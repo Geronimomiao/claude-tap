@@ -8,7 +8,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunsplit
 
 from claude_tap.bedrock import bedrock_model_from_path
 from claude_tap.trace_store import SessionQuery, TraceStore, get_trace_store
@@ -23,6 +23,7 @@ CLIENT_LABELS = {
     "antigravity": "Antigravity",
     "claude": "Claude Code",
     "codex": "Codex",
+    "codexapp": "Codex App",
     "cursor": "Cursor",
     "gemini": "Gemini",
     "hermes": "Hermes",
@@ -34,6 +35,24 @@ CLIENT_LABELS = {
 }
 DASHBOARD_SUMMARY_VERSION = 2
 VALID_SESSION_STATUSES = {"active", "complete", "error", "empty"}
+_REDACTED_VALUE = "REDACTED"
+_SENSITIVE_KEY_NAMES = {
+    "apikey",
+    "authorization",
+    "clientsecret",
+    "cookie",
+    "idtoken",
+    "password",
+    "passwd",
+    "refreshtoken",
+    "secret",
+    "secretkey",
+    "setcookie",
+    "token",
+    "xapikey",
+}
+_FORM_KEY_RE = re.compile(r"^[A-Za-z0-9_.\-\[\]]{1,128}$")
+_MAX_TEXT_REDACTION_DEPTH = 8
 
 
 def read_dashboard_template() -> str:
@@ -78,13 +97,23 @@ def list_trace_sessions(
     """Return trace sessions sorted by most recent activity."""
     store = ensure_trace_store()
     try:
-        sessions = [
+        rows = store.list_session_rows(limit=limit, offset=offset, query=query)
+    except (OSError, sqlite3.Error, ValueError):
+        return []
+
+    sessions: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            summary = _session_summary_from_row(
+                store,
+                row,
+                repair_stale_summary=repair_stale_summaries,
+            )
+        except (OSError, sqlite3.Error, json.JSONDecodeError, ValueError):
+            summary = _minimal_session_summary_from_row(row)
+        sessions.append(
             _apply_current_session_state(
-                _session_summary_from_row(
-                    store,
-                    row,
-                    repair_stale_summary=repair_stale_summaries,
-                ),
+                summary,
                 current_session_id,
                 live_record_count=(
                     live_record_count
@@ -92,10 +121,7 @@ def list_trace_sessions(
                     else None
                 ),
             )
-            for row in store.list_session_rows(limit=limit, offset=offset, query=query)
-        ]
-    except (OSError, sqlite3.Error, json.JSONDecodeError, ValueError):
-        return []
+        )
     sessions.sort(key=lambda item: (_timestamp_sort_value(item.get("updated_at")), item.get("id") or ""), reverse=True)
     return sessions
 
@@ -175,8 +201,19 @@ def load_trace_session(
             else None
         ),
     )
-    records = store.load_records(session_id, limit=record_limit, offset=record_offset)
+    summary = redact_dashboard_summary(summary)
+    records = redact_dashboard_records(store.load_records(session_id, limit=record_limit, offset=record_offset))
     return {"session": summary, "records": records}
+
+
+def redact_dashboard_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return records safe for dashboard rendering without mutating stored traces."""
+    return [_redact_sensitive_value(record) for record in records]
+
+
+def redact_dashboard_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    """Return a session summary safe for dashboard rendering."""
+    return _redact_sensitive_value(summary)
 
 
 def merge_record_into_summary(
@@ -248,7 +285,7 @@ def merge_record_into_summary(
         summary["error"] = summary.get("error") or _first_error([record])
     elif summary.get("status") != "error":
         summary["status"] = "active"
-    return summary
+    return redact_dashboard_summary(summary)
 
 
 def is_dashboard_summary_current(summary: Any, session_id: str) -> bool:
@@ -346,7 +383,7 @@ def _session_summary_from_row(
         summary["active"] = row["status"] == "active"
         if row["status"] != "active":
             store.store_summary(row["id"], summary)
-        return summary
+        return redact_dashboard_summary(summary)
 
     if not allow_record_scan:
         if row["status"] == "error":
@@ -384,7 +421,7 @@ def _session_summary_from_row(
     summary["active"] = row["status"] == "active"
     if row["status"] != "active":
         store.store_summary(row["id"], summary)
-    return summary
+    return redact_dashboard_summary(summary)
 
 
 def _minimal_session_summary_from_row(row: sqlite3.Row) -> dict[str, Any]:
@@ -407,7 +444,7 @@ def _minimal_session_summary_from_row(row: sqlite3.Row) -> dict[str, Any]:
     )
     if record_count > 0 and summary["status"] == "empty":
         summary["status"] = row["status"] if row["status"] in {"active", "complete", "error"} else "complete"
-    return summary
+    return redact_dashboard_summary(summary)
 
 
 def _summary_from_boundary_records(
@@ -432,7 +469,7 @@ def _summary_from_boundary_records(
     summary["summary_version"] = DASHBOARD_SUMMARY_VERSION
     summary["record_count"] = int(row["record_count"] or summary.get("record_count") or 0)
     summary["turn_count"] = max(int(summary.get("turn_count") or 0), summary["record_count"])
-    return summary
+    return redact_dashboard_summary(summary)
 
 
 def _normalize_cached_session_summary(row: sqlite3.Row, cached: dict[str, Any]) -> dict[str, Any]:
@@ -468,7 +505,7 @@ def _normalize_cached_session_summary(row: sqlite3.Row, cached: dict[str, Any]) 
         + int(summary.get("cache_create_tokens") or 0)
     )
     summary["total_tokens"] = token_total if token_total else int(cached.get("total_tokens") or 0)
-    return summary
+    return redact_dashboard_summary(summary)
 
 
 def _apply_current_session_state(
@@ -546,31 +583,33 @@ def _summarize_session(
     error_display_records = error_records or (auxiliary_error_records if has_error else [])
     preview_records = _preview_records(records)
     count = record_count if record_count is not None else len(records)
-    return {
-        "id": session_id,
-        "summary_version": DASHBOARD_SUMMARY_VERSION,
-        "date": date_key if _DATE_RE.match(date_key) else "legacy",
-        "agent": agent,
-        "agent_key": _agent_key(agent),
-        "status": resolved_status,
-        "active": is_current or status == "active",
-        "live": is_current,
-        "legacy_rel_path": legacy_rel_path,
-        "started_at": started_at,
-        "updated_at": updated_at,
-        "record_count": count,
-        "turn_count": len(turns) if turns else count,
-        "duration_ms": duration_ms,
-        "input_tokens": input_tokens,
-        "output_tokens": output_tokens,
-        "cache_read_tokens": cache_read_tokens,
-        "cache_create_tokens": cache_create_tokens,
-        "total_tokens": input_tokens + output_tokens + cache_read_tokens + cache_create_tokens,
-        "model": _top_key(models) or _record_model(last_record) or "unknown",
-        "first_user": _first_user_preview(preview_records),
-        "last_response": _last_response_preview(preview_records),
-        "error": _first_error(error_display_records),
-    }
+    return redact_dashboard_summary(
+        {
+            "id": session_id,
+            "summary_version": DASHBOARD_SUMMARY_VERSION,
+            "date": date_key if _DATE_RE.match(date_key) else "legacy",
+            "agent": agent,
+            "agent_key": _agent_key(agent),
+            "status": resolved_status,
+            "active": is_current or status == "active",
+            "live": is_current,
+            "legacy_rel_path": legacy_rel_path,
+            "started_at": started_at,
+            "updated_at": updated_at,
+            "record_count": count,
+            "turn_count": len(turns) if turns else count,
+            "duration_ms": duration_ms,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_create_tokens": cache_create_tokens,
+            "total_tokens": input_tokens + output_tokens + cache_read_tokens + cache_create_tokens,
+            "model": _top_key(models) or _record_model(last_record) or "unknown",
+            "first_user": _first_user_preview(preview_records),
+            "last_response": _last_response_preview(preview_records),
+            "error": _first_error(error_display_records),
+        }
+    )
 
 
 def _iso_now() -> str:
@@ -812,6 +851,118 @@ def _preview_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if primary:
         return primary
     return [record for record in records if not _is_auxiliary_record(record)]
+
+
+def _redact_sensitive_value(value: Any, key: str = "") -> Any:
+    if key and _is_sensitive_key(key):
+        return None if value is None else _REDACTED_VALUE
+    if isinstance(value, dict):
+        return {
+            str(item_key): _redact_sensitive_value(item_value, str(item_key)) for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive_value(item) for item in value]
+    if isinstance(value, str):
+        return _redact_sensitive_text(value)
+    return value
+
+
+def _redact_sensitive_text(value: str, depth: int = 0) -> str:
+    stripped = value.strip()
+    if not stripped:
+        return value
+    if stripped[0] in "{[":
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            parsed = None
+        if parsed is not None:
+            redacted = _redact_sensitive_value(parsed)
+            if redacted != parsed:
+                return json.dumps(redacted, ensure_ascii=False, separators=(",", ":"))
+    redacted_url = _redact_url_query(value, depth)
+    if redacted_url is not None:
+        return redacted_url
+    redacted_form = _redact_form_text(value, depth)
+    return value if redacted_form is None else redacted_form
+
+
+def _redact_url_query(value: str, depth: int = 0) -> str | None:
+    if "?" not in value:
+        return None
+    parsed = urlsplit(value)
+    if not parsed.query or not _looks_like_url_or_path(value, parsed.path):
+        return None
+    redacted_query = _redact_query_string(parsed.query, depth)
+    if redacted_query is None:
+        return None
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, redacted_query, parsed.fragment))
+
+
+def _redact_form_text(value: str, depth: int = 0) -> str | None:
+    if "=" not in value:
+        return None
+    pairs = parse_qsl(value, keep_blank_values=True)
+    if not pairs or not all(_looks_like_form_key(item_key) for item_key, _item_value in pairs):
+        return None
+    redacted_pairs = [
+        (
+            item_key,
+            _REDACTED_VALUE if _is_sensitive_key(item_key) else _redact_nested_sensitive_text(item_value, depth),
+        )
+        for item_key, item_value in pairs
+    ]
+    if redacted_pairs == pairs:
+        return None
+    return urlencode(redacted_pairs)
+
+
+def _redact_query_string(query: str, depth: int = 0) -> str | None:
+    pairs = parse_qsl(query, keep_blank_values=True)
+    if not pairs:
+        return None
+    redacted_pairs = [
+        (
+            item_key,
+            _REDACTED_VALUE if _is_sensitive_key(item_key) else _redact_nested_sensitive_text(item_value, depth),
+        )
+        for item_key, item_value in pairs
+    ]
+    if redacted_pairs == pairs:
+        return None
+    return urlencode(redacted_pairs)
+
+
+def _looks_like_url_or_path(value: str, path: str) -> bool:
+    parsed = urlsplit(value)
+    return bool(parsed.scheme or parsed.netloc or value.startswith(("/", "?")) or ("/" in path and "=" not in path))
+
+
+def _looks_like_form_key(key: str) -> bool:
+    return bool(key and _FORM_KEY_RE.fullmatch(key))
+
+
+def _redact_nested_sensitive_text(value: str, depth: int) -> str:
+    if depth >= _MAX_TEXT_REDACTION_DEPTH or not _may_contain_sensitive_text(value):
+        return value
+    return _redact_sensitive_text(value, depth + 1)
+
+
+def _may_contain_sensitive_text(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", value.lower())
+    return any(name in normalized for name in _SENSITIVE_KEY_NAMES) or any(
+        marker in normalized for marker in ("token", "secret", "password")
+    )
+
+
+def _is_sensitive_key(key: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", key.lower())
+    return (
+        normalized in _SENSITIVE_KEY_NAMES
+        or normalized.endswith("token")
+        or normalized.endswith("secret")
+        or normalized.endswith("password")
+    )
 
 
 def _is_primary_model_record(record: dict[str, Any]) -> bool:

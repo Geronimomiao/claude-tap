@@ -773,15 +773,135 @@ def _tool_display_name(tool: dict) -> str:
     return ""
 
 
-def _extract_metadata(record_json: str) -> dict | None:
-    """Extract sidebar-relevant metadata from a raw JSON record string.
+def _clean_session_user_text(text: str) -> str:
+    value = text.strip()
+    if not value:
+        return ""
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, str) and decoded.strip():
+            value = decoded.strip()
 
-    Returns a lightweight dict with only the fields needed for sidebar
-    rendering, filtering, and search — avoiding full parse of large records.
-    """
+    request = re.search(r"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>", value, flags=re.DOTALL | re.IGNORECASE)
+    if request:
+        return request.group(1).strip()
+
+    codex_request = re.search(
+        r"^#+\s*My request for Codex:\s*(.*?)\s*$",
+        value,
+        flags=re.DOTALL | re.IGNORECASE | re.MULTILINE,
+    )
+    if codex_request:
+        return codex_request.group(1).strip()
+
+    session = re.fullmatch(r"<session>\s*(.*?)\s*</session>", value, flags=re.DOTALL | re.IGNORECASE)
+    if session:
+        return session.group(1).strip()
+
+    first_tag = re.match(r"^<([A-Za-z_-]+)", value)
+    if first_tag and first_tag.group(1).lower() in {
+        "artifacts",
+        "codex_internal_context",
+        "environment_context",
+        "local-command-caveat",
+        "session_context",
+        "skills",
+        "slash_commands",
+        "subagents",
+        "system-reminder",
+        "user_information",
+    }:
+        return ""
+
+    if value.startswith(("# AGENTS.md instructions", "<INSTRUCTIONS>")):
+        return ""
+    if value.startswith("# Files mentioned by the user:"):
+        return ""
+    if re.match(r"^</?image(_input)?(\s+[^>]*)?>$", value, flags=re.IGNORECASE):
+        return ""
+    if re.match(r"^\[SUGGESTION MODE:", value, flags=re.IGNORECASE):
+        return ""
+    if re.match(r"^(web page content|page content|网页内容)\s*[:：]", value, flags=re.IGNORECASE):
+        return ""
+    if re.match(r"^\[Image:\s*source:", value, flags=re.IGNORECASE):
+        return ""
+    return re.sub(r"^\[Image #\d+\]\s*", "", value, flags=re.IGNORECASE).strip()
+
+
+def _session_text_from_content(content: object) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return _clean_session_user_text(content)
+    if isinstance(content, dict):
+        item_type = content.get("type")
+        if item_type in {"tool_result", "function_call_output"}:
+            return ""
+        for key in ("text", "output"):
+            value = content.get(key)
+            if isinstance(value, str):
+                cleaned = _clean_session_user_text(value)
+                if cleaned:
+                    return cleaned
+        if "content" in content:
+            return _session_text_from_content(content.get("content"))
+        return ""
+    if isinstance(content, list):
+        for item in content:
+            text = _session_text_from_content(item)
+            if text:
+                return text
+    return ""
+
+
+def _is_tool_result_only_message(message: dict) -> bool:
+    content = message.get("content")
+    if not isinstance(content, list) or not content:
+        return False
+    return all(
+        isinstance(block, dict) and block.get("type") in {"tool_result", "function_call_output"} for block in content
+    )
+
+
+def _first_user_text(messages: list[dict]) -> str:
+    for message in messages:
+        if message.get("role") != "user" or _is_tool_result_only_message(message):
+            continue
+        text = _session_text_from_content(message.get("content"))
+        if text:
+            return text
+    return ""
+
+
+def _latest_user_text(messages: list[dict]) -> str:
+    for message in reversed(messages):
+        if message.get("role") != "user" or _is_tool_result_only_message(message):
+            continue
+        text = _session_text_from_content(message.get("content"))
+        if text:
+            return text
+    return ""
+
+
+def _extract_metadata(record_json: str) -> dict | None:
+    """Extract sidebar-relevant metadata from a raw JSON record string."""
     try:
         r = json.loads(record_json)
     except (json.JSONDecodeError, TypeError):
+        return None
+    return _extract_metadata_from_record(r)
+
+
+def _extract_metadata_from_record(r: dict) -> dict | None:
+    """Extract sidebar metadata from a raw record without embedding full payloads.
+
+    The returned dict contains only fields needed for sidebar rendering,
+    filtering, and search previews.
+    """
+    if not isinstance(r, dict):
         return None
 
     req = _dict_or_empty(r.get("request"))
@@ -833,6 +953,12 @@ def _extract_metadata(record_json: str) -> dict | None:
 
     # Messages
     msgs = _extract_request_messages(body)
+
+    metadata = _dict_or_empty(body.get("metadata"))
+    headers = _dict_or_empty(req.get("headers"))
+    codex_app_session_id = metadata.get("codex_app_session_id") or headers.get("x-codex-app-session-id")
+    if not isinstance(codex_app_session_id, str):
+        codex_app_session_id = ""
 
     # Tool names from request
     tools = _extract_gemini_tools(body) or body.get("tools") or []
@@ -897,6 +1023,8 @@ def _extract_metadata(record_json: str) -> dict | None:
         "cache_creation_input_tokens": usage.get("cache_creation_input_tokens", 0),
         "has_system": bool(sys_text),
         "message_count": len(msgs),
+        "session_user_text": _latest_user_text(msgs) or _first_user_text(msgs),
+        "codex_app_session_id": codex_app_session_id,
         "sys_hint": sys_text[:200],
         "tool_names": tool_names,
         "response_tool_names": response_tool_names,
@@ -964,6 +1092,43 @@ def _generate_html_viewer_from_compact_bundle(
         f"const EMBEDDED_TRACE_COMPACT_DATA = {compact_js};\n"
         f"const __TRACE_JSONL_PATH__ = {jsonl_path_js};\n"
         f"const __TRACE_HTML_PATH__ = {html_path_js};\n"
+        f"const __CLAUDE_TAP_VERSION__ = {version_js};\n"
+    )
+
+    html = _read_viewer_template()
+    html = html.replace(
+        VIEWER_SCRIPT_ANCHOR,
+        f"<script>\n{data_js}</script>\n{VIEWER_SCRIPT_ANCHOR}",
+        1,
+    )
+    html_path.write_text(html, encoding="utf-8")
+
+
+def _generate_html_viewer_from_metadata(
+    metadata: list[dict],
+    html_path: Path,
+    *,
+    display_trace_path: str | Path,
+    display_html_path: str | Path,
+    records_api_path: str | Path,
+) -> None:
+    """Write an online viewer that fetches full records on demand."""
+    if not VIEWER_TEMPLATE_PATH.exists():
+        return
+
+    trace_path_label = str(display_trace_path)
+    html_path_label = str(display_html_path)
+    records_api_label = str(records_api_path)
+    meta_js = json.dumps(metadata, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    jsonl_path_js = json.dumps(trace_path_label)
+    html_path_js = json.dumps(html_path_label)
+    records_api_js = json.dumps(records_api_label)
+    version_js = json.dumps(CLAUDE_TAP_VERSION)
+    data_js = (
+        f"const EMBEDDED_TRACE_META = {meta_js};\n"
+        f"const __TRACE_JSONL_PATH__ = {jsonl_path_js};\n"
+        f"const __TRACE_HTML_PATH__ = {html_path_js};\n"
+        f"const __TRACE_RECORDS_API__ = {records_api_js};\n"
         f"const __CLAUDE_TAP_VERSION__ = {version_js};\n"
     )
 

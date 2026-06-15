@@ -98,6 +98,9 @@ class ClientConfig:
     # local proxy and let the forward proxy bridge selected paths to target.
     forward_base_url_envs: tuple[str, ...] = ()
     forward_base_url_allowed_path_prefixes: tuple[str, ...] = ()
+    # Transcript-only clients are observed from local session logs instead of a
+    # spawned process and do not need a reverse or forward proxy.
+    transcript_only: bool = False
 
     @property
     def missing_help(self) -> str:
@@ -158,6 +161,16 @@ CLIENT_CONFIGS: dict[str, ClientConfig] = {
         base_url_config_key="openai_base_url",
         strip_path_prefix="/v1",
         strip_path_prefix_unless_target_contains=("api.openai.com",),
+    ),
+    "codexapp": ClientConfig(
+        cmd="codex",
+        label="Codex App",
+        install_url="https://openai.com/codex",
+        base_url_env="CODEX_HOME",
+        base_url_suffix="",
+        default_target="codex-app://sessions",
+        default_proxy_mode="transcript",
+        transcript_only=True,
     ),
     "kimi": ClientConfig(
         cmd="kimi",
@@ -1411,8 +1424,12 @@ def _merge_kimi_code_session_index(source_home: Path, sandbox: Path) -> None:
             if not isinstance(session_id, str) or not session_id:
                 continue
             session_dir = entry.get("sessionDir")
-            if isinstance(session_dir, str) and from_sandbox:
-                entry["sessionDir"] = _translate_kimi_code_home_path(session_dir, sandbox_prefix, source_prefix)
+            if isinstance(session_dir, str):
+                entry["sessionDir"] = (
+                    _translate_kimi_code_home_path(session_dir, sandbox_prefix, source_prefix)
+                    if from_sandbox
+                    else _normalize_kimi_code_fs_path(session_dir)
+                )
             entries[session_id] = entry
 
     if source_index.is_file():

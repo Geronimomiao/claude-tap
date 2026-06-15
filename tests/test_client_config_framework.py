@@ -13,6 +13,7 @@ SUPPORTED_CLIENTS = {
     "agy",
     "claude",
     "codex",
+    "codexapp",
     "gemini",
     "kimi",
     "kimi-code",
@@ -25,12 +26,13 @@ SUPPORTED_CLIENTS = {
     "codebuddy",
 }
 
-SINGLE_REVERSE_ENV_CLIENTS = SUPPORTED_CLIENTS - {"claude", "gemini", "kimi-code", "openclaw"}
+SINGLE_REVERSE_ENV_CLIENTS = SUPPORTED_CLIENTS - {"claude", "gemini", "kimi-code", "openclaw", "codexapp"}
 
 SUPPORTED_DEFAULT_PROXY_MODES = {
     "agy": "forward",
     "claude": "reverse",
     "codex": "reverse",
+    "codexapp": "transcript",
     "gemini": "forward",
     "kimi": "reverse",
     "kimi-code": "reverse",
@@ -114,6 +116,25 @@ def test_agy_declares_cloud_code_bridge_env() -> None:
     assert cfg.default_target == "https://daily-cloudcode-pa.googleapis.com"
     assert cfg.forward_base_url_envs == ("CLOUD_CODE_URL",)
     assert cfg.forward_base_url_allowed_path_prefixes == ("/v1internal",)
+
+
+def test_codexapp_declares_transcript_only_mode() -> None:
+    cfg = CLIENT_CONFIGS["codexapp"]
+
+    assert cfg.label == "Codex App"
+    assert cfg.default_target == "codex-app://sessions"
+    assert cfg.default_proxy_mode == "transcript"
+    assert cfg.transcript_only is True
+
+
+def test_parse_args_codexapp_rejects_proxy_mode() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(["--tap-client", "codexapp", "--tap-proxy-mode", "forward"])
+
+
+def test_parse_args_codexapp_rejects_trust_ca() -> None:
+    with pytest.raises(SystemExit):
+        parse_args(["--tap-client", "codexapp", "--tap-trust-ca"])
 
 
 def test_openclaw_declares_multi_provider_reverse_envs() -> None:

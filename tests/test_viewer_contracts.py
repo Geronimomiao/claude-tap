@@ -1333,6 +1333,113 @@ def _claude_code_session_round_records() -> tuple[dict[str, Any], ...]:
     )
 
 
+def _codex_app_large_session_records() -> tuple[dict[str, Any], ...]:
+    records: list[dict[str, Any]] = []
+    session_id = "codex-session-alpha"
+    prompts = [
+        "Write Codex App runtime wiki",
+        "Review live dashboard capture",
+        "Fix duplicate Codex App trace rows",
+    ]
+    for turn in range(1, 61):
+        prompt_index = (turn - 1) // 20
+        prompt = prompts[prompt_index]
+        step = (turn - 1) % 20
+        hour = 10 + (turn - 1) // 60
+        minute = (turn - 1) % 60
+        injected_user_messages = [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "# AGENTS.md instructions\nSkip maintainer automation notes."}
+                ],
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "<environment_context>\nskip cwd\n</environment_context>"}],
+            },
+        ]
+        prior_messages: list[dict[str, Any]] = []
+        for prior_prompt in prompts[:prompt_index]:
+            prior_messages.extend(
+                [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": prior_prompt}],
+                    },
+                    {
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": f"Finished {prior_prompt}."}],
+                    },
+                ]
+            )
+        user_message = {
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": prompt}],
+        }
+        continuation_messages: list[dict[str, Any]] = []
+        if step:
+            continuation_messages = [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": f"Working on {prompt} step {step}."}],
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": f"call-{turn}",
+                    "output": f"step {step} output",
+                },
+            ]
+        records.append(
+            {
+                "timestamp": f"2026-06-13T{hour:02d}:{minute:02d}:00+00:00",
+                "request_id": f"req_codexapp_{turn}",
+                "turn": turn,
+                "duration_ms": 0,
+                "transport": "codex-app-transcript",
+                "request": {
+                    "method": "CODEX_APP_TRANSCRIPT",
+                    "path": "/v1/responses",
+                    "headers": {"x-codex-app-session-id": session_id},
+                    "body": {
+                        "model": "gpt-5.5",
+                        "metadata": {"codex_app_session_id": session_id},
+                        "input": [
+                            *injected_user_messages,
+                            *prior_messages,
+                            user_message,
+                            *continuation_messages,
+                        ],
+                    },
+                },
+                "response": {
+                    "status": 200,
+                    "headers": {},
+                    "body": {
+                        "id": f"resp_codexapp_{turn}",
+                        "status": "completed",
+                        "model": "gpt-5.5",
+                        "output": [
+                            {
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [{"type": "output_text", "text": f"Answer {turn}."}],
+                            }
+                        ],
+                        "usage": {"input_tokens": turn, "output_tokens": 1, "total_tokens": turn + 1},
+                    },
+                },
+            }
+        )
+    return tuple(records)
+
+
 def _codex_display_turn_records() -> tuple[dict[str, Any], ...]:
     return (
         {
@@ -2095,26 +2202,26 @@ def test_viewer_sidebar_order_can_switch_between_model_turn_and_session_sequence
     assert model_state["buttons"] == [
         {"mode": "model", "label": "Model", "active": True},
         {"mode": "turn", "label": "Turn", "active": False},
-        {"mode": "session", "label": "Session", "active": False},
+        {"mode": "session", "label": "Query", "active": False},
     ]
     assert model_state["groups"] == ["aws.claude-opus-4.6", "aws.claude-sonnet-4.6", "other-model"]
     assert model_state["turns"] == ["Turn 3", "Turn 2", "Turn 1"]
     assert turn_state["buttons"] == [
         {"mode": "model", "label": "Model", "active": False},
         {"mode": "turn", "label": "Turn", "active": True},
-        {"mode": "session", "label": "Session", "active": False},
+        {"mode": "session", "label": "Query", "active": False},
     ]
     assert turn_state["groupCount"] == 0
     assert turn_state["turns"] == ["Turn 1", "Turn 2", "Turn 3"]
     assert session_state["buttons"] == [
         {"mode": "model", "label": "Model", "active": False},
         {"mode": "turn", "label": "Turn", "active": False},
-        {"mode": "session", "label": "Session", "active": True},
+        {"mode": "session", "label": "Query", "active": True},
     ]
     assert session_state["groups"] == [
-        "Session 1 - First sidebar task",
-        "Session 2 - Second sidebar task",
-        "Session 3 - Second sidebar task",
+        "Query 1 - First sidebar task",
+        "Query 2 - Second sidebar task",
+        "Query 3 - Second sidebar task",
     ]
     assert session_state["counts"] == ["1", "1", "1"]
     assert session_state["turns"] == ["Turn 1", "Turn 2", "Turn 3"]
@@ -2140,13 +2247,52 @@ def test_viewer_session_order_groups_claude_code_tool_loop_rounds(tmp_path: Path
 
     assert errors == []
     assert state["groups"] == [
-        "Session 1 - Check configured MCP settings",
-        "Session 2 - Diagnose portfolio holdings",
-        "Session 3 - Add portfolio positions",
+        "Query 1 - Check configured MCP settings",
+        "Query 2 - Diagnose portfolio holdings",
+        "Query 3 - Add portfolio positions",
     ]
     assert state["counts"] == ["3", "2", "2"]
     assert state["turns"] == ["Turn 1", "Turn 2", "Turn 3", "Turn 4", "Turn 5", "Turn 6", "Turn 7"]
     assert "SUGGESTION MODE" not in state["headerText"]
+
+
+def test_viewer_session_order_groups_large_codex_app_sessions_in_virtual_mode(tmp_path: Path, chromium_browser) -> None:
+    html_path = _generate_case_html(tmp_path, "codex_app_large_sessions", _codex_app_large_session_records())
+
+    page = chromium_browser.new_page()
+    page.add_init_script("localStorage.setItem('claude-tap-sidebar-order', 'session')")
+    try:
+        errors = _open_viewer_with_error_capture(page, html_path)
+        state = page.evaluate(
+            """() => ({
+              virtualMode,
+              groups: Array.from(document.querySelectorAll('.sidebar-group-header .group-name')).map(el => el.textContent),
+              counts: Array.from(document.querySelectorAll('.sidebar-group-header .group-count')).map(el => el.textContent),
+              virtualGroups: vsFilteredItems
+                .filter(row => row.type === 'group')
+                .map(row => row.group.userText),
+              virtualCounts: vsFilteredItems
+                .filter(row => row.type === 'group')
+                .map(row => String(row.group.items.length)),
+              rowCount: vsFilteredItems.length,
+              visualCount: visualOrder.length,
+            })"""
+        )
+    finally:
+        page.close()
+
+    assert errors == []
+    assert state["virtualMode"] is True
+    assert state["groups"] == ["Query 1 - Write Codex App runtime wiki"]
+    assert state["counts"] == ["20"]
+    assert state["virtualGroups"] == [
+        "Write Codex App runtime wiki",
+        "Review live dashboard capture",
+        "Fix duplicate Codex App trace rows",
+    ]
+    assert state["virtualCounts"] == ["20", "20", "20"]
+    assert state["rowCount"] == 63
+    assert state["visualCount"] == 60
 
 
 def test_viewer_codex_display_turns_skip_capture_control_records(tmp_path: Path, chromium_browser) -> None:
@@ -3044,9 +3190,9 @@ def test_viewer_session_identical_prompts_image_tags_and_early_title_generation(
 
     assert errors == []
     assert state["groups"] == [
-        "Session 1 - 继续",
-        "Session 2 - 继续",
-        "Session 3 - Analyze the flowchart",
+        "Query 1 - 继续",
+        "Query 2 - 继续",
+        "Query 3 - Analyze the flowchart",
     ]
     assert state["counts"] == ["2", "2", "1"]
 
