@@ -78,11 +78,14 @@ function cleanUserPromptText(text) {
   }
   const userRequest = value.match(/<USER_REQUEST>\s*([\s\S]*?)\s*<\/USER_REQUEST>/i);
   if (userRequest) return userRequest[1].trim();
+  const codexRequest = value.match(/^#+\s*My request for Codex:\s*([\s\S]*?)\s*$/im);
+  if (codexRequest) return codexRequest[1].trim();
   const session = value.match(/^<session>\s*([\s\S]*?)\s*<\/session>$/i);
   if (session) return session[1].trim();
-  const firstTag = value.match(/^<([A-Za-z_-]+)>/);
+  const firstTag = value.match(/^<([A-Za-z_-]+)(?:\s|>)/);
   const injectedTags = new Set([
     'artifacts',
+    'codex_internal_context',
     'environment_context',
     'local-command-caveat',
     'session_context',
@@ -93,6 +96,8 @@ function cleanUserPromptText(text) {
     'user_information',
   ]);
   if (firstTag && injectedTags.has(firstTag[1].toLowerCase())) return '';
+  if (value.startsWith('# AGENTS.md instructions') || value.startsWith('<INSTRUCTIONS>')) return '';
+  if (value.startsWith('# Files mentioned by the user:')) return '';
   if (/^<\/?image(_input)?(\s+[^>]*)?>$/i.test(value)) return '';
   if (/^\[SUGGESTION MODE:/i.test(value)) return '';
   if (/^(web page content|page content|网页内容)\s*[:：]/i.test(value)) return '';
@@ -226,6 +231,17 @@ function latestUserInputText(entry) {
   return latestUserInputInfo(entry).userText;
 }
 
+function firstUserInputInfo(entry) {
+  const msgs = getMessages(entry?.request?.body);
+  for (let i = 0; i < msgs.length; i++) {
+    const message = msgs[i];
+    if (message?.role !== 'user' || isToolResultOnlyMessage(message)) continue;
+    const text = naturalTextForSessionContent(message.content);
+    if (text) return { userText: text, userIndex: i, messageCount: msgs.length };
+  }
+  return { userText: '', userIndex: -1, messageCount: msgs.length };
+}
+
 function latestUserInputInfo(entry) {
   const msgs = getMessages(entry?.request?.body);
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -235,6 +251,20 @@ function latestUserInputInfo(entry) {
     if (text) return { userText: text, userIndex: i, messageCount: msgs.length };
   }
   return { userText: '', userIndex: -1, messageCount: msgs.length };
+}
+
+function codexAppSessionInfo(entry) {
+  const metadata = entry?.request?.body?.metadata || {};
+  const headers = entry?.request?.headers || {};
+  const sessionId = metadata.codex_app_session_id || headers['x-codex-app-session-id'] || '';
+  if (!sessionId) return null;
+  const first = firstUserInputInfo(entry);
+  return {
+    sessionId,
+    userText: first.userText || entry._session_user_text || '',
+    userIndex: first.userIndex,
+    messageCount: first.messageCount,
+  };
 }
 
 function finalResponseText(entry) {
@@ -270,9 +300,33 @@ function shouldContinueSessionGroup(entry, info, currentGroup) {
 }
 
 function sessionKeyForEntry(entry, currentGroup) {
+  const codexApp = codexAppSessionInfo(entry);
   const info = latestUserInputInfo(entry);
   const metadataOnly = isTitleGenerationEntry(entry);
   const rootTurn = sessionRootTurn(entry);
+  if (codexApp) {
+    const userText = info.userText || codexApp.userText;
+    const userIndex = info.userText ? info.userIndex : codexApp.userIndex;
+    if (userText) {
+      if (shouldContinueSessionGroup(entry, { ...info, userText, userIndex }, currentGroup)) {
+        return { key: currentGroup.key, userText, userIndex, metadataOnly, rootTurn };
+      }
+      return {
+        key: 'codexapp-user:' + codexApp.sessionId + ':' + userIndex + ':' + userText,
+        userText,
+        userIndex,
+        metadataOnly,
+        rootTurn,
+      };
+    }
+    return {
+      key: 'codexapp:' + codexApp.sessionId,
+      userText: codexApp.userText,
+      userIndex: codexApp.userIndex,
+      metadataOnly,
+      rootTurn,
+    };
+  }
   if (info.userText) {
     if (shouldContinueSessionGroup(entry, info, currentGroup)) {
       return { key: currentGroup.key, userText: info.userText, userIndex: info.userIndex, metadataOnly, rootTurn };
@@ -299,7 +353,12 @@ function sessionTurnDiscriminator(entry) {
 
 function buildSessionGroups(items) {
   const groups = [];
+  const groupsByKey = new Map();
   const titleGenerationItems = [];
+
+  function canMergeNonContiguousSession(info) {
+    return typeof info.key === 'string' && info.key.startsWith('codexapp:');
+  }
 
   function createGroup(info, item) {
     const group = {
@@ -313,6 +372,7 @@ function buildSessionGroups(items) {
       items: [],
     };
     groups.push(group);
+    if (canMergeNonContiguousSession(info)) groupsByKey.set(info.key, group);
     return group;
   }
 
@@ -355,6 +415,7 @@ function buildSessionGroups(items) {
     const current = groups[groups.length - 1] || null;
     const info = sessionKeyForEntry(item.entry, current);
     let group = current && current.key === info.key ? current : null;
+    if (!group && canMergeNonContiguousSession(info)) group = groupsByKey.get(info.key) || null;
     if (!group) group = createGroup(info, item);
     addItemToGroup(group, item, info);
   });
@@ -371,17 +432,33 @@ function buildSessionGroups(items) {
   return groups;
 }
 
+function sessionGroupKey(group, groupIdx) {
+  return 'session:' + groupIdx + ':' + group.key;
+}
+
+function sessionRowsForItems(items) {
+  const rows = [];
+  buildSessionGroups(items).forEach((group, groupIdx) => {
+    const groupKey = sessionGroupKey(group, groupIdx);
+    rows.push({ type: 'group', group, groupIdx, groupKey });
+    if (!collapsedGroups.has(groupKey)) {
+      group.items.forEach(item => rows.push({ type: 'entry', ...item }));
+    }
+  });
+  return rows;
+}
+
 function sidebarItemsForMode() {
   const items = filtered.map((entry, idx) => ({ entry, idx }));
-  if (sidebarOrderMode === 'model') return items.sort((a, b) => compareSidebarModelOrder(a.entry, b.entry));
-  if (sidebarOrderMode === 'session') return buildSessionGroups(items).flatMap(group => group.items);
-  return items;
+  if (sidebarOrderMode === 'model') return items.sort((a, b) => compareSidebarModelOrder(a.entry, b.entry)).map(item => ({ type: 'entry', ...item }));
+  if (sidebarOrderMode === 'session') return sessionRowsForItems(items);
+  return items.map(item => ({ type: 'entry', ...item }));
 }
 
 /* ─── Visual order helpers ─── */
 function buildVisualOrder() {
   if (virtualMode) {
-    visualOrder = vsFilteredItems.map(item => item.idx);
+    visualOrder = vsFilteredItems.filter(item => item.type !== 'group').map(item => item.idx);
     return;
   }
   visualOrder = [];
@@ -515,6 +592,23 @@ function createSidebarItem(e, i) {
   return item;
 }
 
+function createSessionGroupHeader(group, groupIdx, groupKey, onToggle) {
+  const firstEntry = group.items[0]?.entry;
+  const taskInfo = firstEntry ? getTaskFingerprint(firstEntry) : null;
+  const taskColor = taskInfo ? getTaskColor(taskInfo.fp) : TASK_COLORS[groupIdx % TASK_COLORS.length];
+  const isCollapsed = collapsedGroups.has(groupKey);
+  const label = sessionTextSnippet(group.userText, 48);
+  const header = document.createElement('div');
+  header.className = 'sidebar-group-header';
+  header.innerHTML = `<span class="group-dot" style="background:${taskColor.color}"></span><span class="group-name">${esc(t('sort_session'))} ${groupIdx + 1}${label ? ' - ' + esc(label) : ''}</span><span class="group-count">${group.items.length}</span><span class="group-chevron${isCollapsed ? '' : ' open'}">&#9654;</span>`;
+  bindSessionInputTooltip(header, group.userText, label);
+  header.onclick = () => {
+    hideSessionTooltip(header);
+    onToggle(header);
+  };
+  return header;
+}
+
 function renderSidebar(preserveDetail) {
   const sb = $('#sidebar');
   const prevScrollTop = sb.scrollTop;
@@ -525,7 +619,7 @@ function renderSidebar(preserveDetail) {
     virtualMode = true;
     sb.classList.add('virtual-scroll');
     vsFilteredItems = sidebarItemsForMode();
-    visualOrder = vsFilteredItems.map(item => item.idx);
+    buildVisualOrder();
     vsInitSidebar(sb, prevScrollTop, preserveDetail);
     return;
   }
@@ -551,28 +645,19 @@ function renderSidebar(preserveDetail) {
   if (sidebarOrderMode === 'session') {
     const groups = buildSessionGroups(filtered.map((entry, idx) => ({ entry, idx })));
     groups.forEach((group, groupIdx) => {
-      const firstEntry = group.items[0]?.entry;
-      const taskInfo = firstEntry ? getTaskFingerprint(firstEntry) : null;
-      const taskColor = taskInfo ? getTaskColor(taskInfo.fp) : TASK_COLORS[groupIdx % TASK_COLORS.length];
-      const groupKey = 'session:' + groupIdx + ':' + group.key;
+      const groupKey = sessionGroupKey(group, groupIdx);
       const isCollapsed = collapsedGroups.has(groupKey);
-      const label = sessionTextSnippet(group.userText, 48);
-      const header = document.createElement('div');
-      header.className = 'sidebar-group-header';
-      header.innerHTML = `<span class="group-dot" style="background:${taskColor.color}"></span><span class="group-name">${esc(t('sort_session'))} ${groupIdx + 1}${label ? ' - ' + esc(label) : ''}</span><span class="group-count">${group.items.length}</span><span class="group-chevron${isCollapsed ? '' : ' open'}">&#9654;</span>`;
-      bindSessionInputTooltip(header, group.userText, label);
       const content = document.createElement('div');
       if (isCollapsed) content.style.display = 'none';
       group.items.forEach(({ entry: e, idx: i }) => content.appendChild(createSidebarItem(e, i)));
-      header.onclick = () => {
-        hideSessionTooltip(header);
+      const header = createSessionGroupHeader(group, groupIdx, groupKey, headerEl => {
         const nowCollapsed = content.style.display !== 'none';
         content.style.display = nowCollapsed ? 'none' : '';
-        header.querySelector('.group-chevron').classList.toggle('open');
+        headerEl.querySelector('.group-chevron').classList.toggle('open');
         if (nowCollapsed) collapsedGroups.add(groupKey); else collapsedGroups.delete(groupKey);
         buildVisualOrder();
         updateMobileNav();
-      };
+      });
       sb.appendChild(header);
       sb.appendChild(content);
     });
@@ -719,35 +804,28 @@ function vsRenderVisible() {
   const startIdx = Math.max(0, Math.floor(scrollTop / VS_ITEM_HEIGHT) - VS_BUFFER);
   const endIdx = Math.min(vsFilteredItems.length, Math.ceil((scrollTop + viewHeight) / VS_ITEM_HEIGHT) + VS_BUFFER);
 
-  // Collect existing rendered items
-  const existing = new Map();
-  spacer.querySelectorAll('.sidebar-item').forEach(el => {
-    existing.set(parseInt(el.dataset.idx), el);
-  });
+  spacer.querySelectorAll('.sidebar-item, .sidebar-group-header').forEach(el => el.remove());
 
-  const needed = new Set();
   for (let i = startIdx; i < endIdx; i++) {
-    needed.add(vsFilteredItems[i].idx);
-  }
-
-  // Remove items no longer visible
-  existing.forEach((el, idx) => {
-    if (!needed.has(idx)) el.remove();
-  });
-
-  // Add missing items
-  for (let i = startIdx; i < endIdx; i++) {
-    const { entry, idx } = vsFilteredItems[i];
-    if (existing.has(idx)) {
-      // Update active state
-      existing.get(idx).classList.toggle('active', idx === activeIdx);
-      continue;
+    const row = vsFilteredItems[i];
+    let item;
+    if (row.type === 'group') {
+      item = createSessionGroupHeader(row.group, row.groupIdx, row.groupKey, () => {
+        if (collapsedGroups.has(row.groupKey)) collapsedGroups.delete(row.groupKey);
+        else collapsedGroups.add(row.groupKey);
+        renderSidebar(true);
+        updateMobileNav();
+      });
+    } else {
+      const { entry, idx } = row;
+      item = createSidebarItem(entry, idx);
+      item.classList.toggle('active', idx === activeIdx);
     }
-    const item = createSidebarItem(entry, idx);
     item.style.position = 'absolute';
+    item.style.left = '0';
+    item.style.right = '0';
     item.style.top = (i * VS_ITEM_HEIGHT) + 'px';
     item.style.height = VS_ITEM_HEIGHT + 'px';
-    item.classList.toggle('active', idx === activeIdx);
     spacer.appendChild(item);
   }
 }
@@ -782,8 +860,7 @@ function selectEntry(idx, opts) {
     // Just update sidebar highlight, keep detail as-is
   } else {
     const entry = filtered[idx];
-    const resolved = resolveEntryForDetail(entry);
-    renderDetail(resolved);
+    renderDetailForEntry(entry);
   }
   if (virtualMode) {
     vsScrollToIdx(idx);
