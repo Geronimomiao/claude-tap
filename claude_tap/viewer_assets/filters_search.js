@@ -201,15 +201,26 @@ function applyFilter(preserveDetail) {
   filtered.sort((a, b) => compareTurns(captureTurnValue(a), captureTurnValue(b)));
   let totalTokens = 0, totalDuration = 0;
   let sumInput = 0, sumOutput = 0, sumCacheRead = 0, sumCacheCreate = 0;
+  let sumCacheDenominator = 0;
   filtered.forEach(e => {
     totalDuration += e.duration_ms || 0;
     const u = getUsage(e);
     if (u) {
-      totalTokens += (u.input_tokens || 0) + (u.output_tokens || 0);
-      sumInput += u.input_tokens || 0;
+      const inputTokens = u.input_tokens || 0;
+      const cacheRead = u.cache_read_input_tokens || 0;
+      const cacheCreate = u.cache_creation_input_tokens || 0;
+      totalTokens += inputTokens + (u.output_tokens || 0);
+      sumInput += inputTokens;
       sumOutput += u.output_tokens || 0;
-      sumCacheRead += u.cache_read_input_tokens || 0;
-      sumCacheCreate += u.cache_creation_input_tokens || 0;
+      sumCacheRead += cacheRead;
+      sumCacheCreate += cacheCreate;
+      if (inputTokens || cacheRead || cacheCreate) {
+        if (u._cache_read_in_input) {
+          sumCacheDenominator += inputTokens;
+        } else {
+          sumCacheDenominator += inputTokens + cacheRead + cacheCreate;
+        }
+      }
     }
   });
   $('#stat-turns').textContent = filtered.length;
@@ -225,8 +236,15 @@ function applyFilter(preserveDetail) {
     else { $('#stat-cache-read-group').style.display = 'none'; }
     if (sumCacheCreate) { $('#stat-cache-write').textContent = sumCacheCreate.toLocaleString(); $('#stat-cache-write-group').style.display = 'flex'; }
     else { $('#stat-cache-write-group').style.display = 'none'; }
+    if (sumCacheRead && sumCacheDenominator > 0) {
+      const hitRate = Math.round(sumCacheRead / sumCacheDenominator * 100);
+      $('#stat-cache-hit-rate').textContent = hitRate + '%';
+      $('#stat-cache-hit-rate-group').style.display = 'flex';
+    } else {
+      $('#stat-cache-hit-rate-group').style.display = 'none';
+    }
   } else {
-    ['stat-input-group','stat-output-group','stat-cache-read-group','stat-cache-write-group'].forEach(id => $('#'+id).style.display = 'none');
+    ['stat-input-group','stat-output-group','stat-cache-read-group','stat-cache-write-group','stat-cache-hit-rate-group'].forEach(id => $('#'+id).style.display = 'none');
   }
   renderToolFilter();
   renderSidebar(preserveDetail);
