@@ -140,10 +140,21 @@ ALLOWED_PATH_PREFIXES: tuple[str, ...] = (
     "/feedback",
 )
 
+_VERTEX_ANTHROPIC_RAW_PREDICT_RE = re.compile(
+    r"^/v1/projects/[^/]+/locations/[^/]+/publishers/anthropic/models/[^/]+"
+    r"(?::(?:rawPredict|streamRawPredict)|/count-tokens:rawPredict)$"
+)
+
+
+def _is_vertex_anthropic_raw_predict_path(clean_path: str) -> bool:
+    return bool(_VERTEX_ANTHROPIC_RAW_PREDICT_RE.fullmatch(clean_path.rstrip("/")))
+
 
 def _is_allowed_path(path: str, extra_prefixes: tuple[str, ...] = ()) -> bool:
     """Check whether the request path matches a known API endpoint."""
     clean = path.split("?", 1)[0].rstrip("/")
+    if _is_vertex_anthropic_raw_predict_path(clean):
+        return True
     prefixes = ALLOWED_PATH_PREFIXES + extra_prefixes
     return any(
         clean == prefix or clean.startswith(prefix + "/") or clean.startswith(prefix + ":") for prefix in prefixes
@@ -151,6 +162,7 @@ def _is_allowed_path(path: str, extra_prefixes: tuple[str, ...] = ()) -> bool:
 
 
 _ANTHROPIC_METADATA_USER_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+_BEDROCK_GATEWAY_UNSUPPORTED_BODY_FIELDS = frozenset({"context_management", "output_config"})
 
 
 def _is_deepseek_anthropic_target(target: str) -> bool:
@@ -164,6 +176,10 @@ def _is_deepseek_anthropic_target(target: str) -> bool:
 
 def _normalize_request_body_for_upstream(req_body: dict, target: str) -> dict:
     """Apply narrow upstream compatibility fixes without changing default Anthropic behavior."""
+    normalized_body = _normalize_bedrock_gateway_body(req_body)
+    if normalized_body is not req_body:
+        req_body = normalized_body
+
     if not _is_deepseek_anthropic_target(target):
         return req_body
 
@@ -183,6 +199,50 @@ def _normalize_request_body_for_upstream(req_body: dict, target: str) -> dict:
     return normalized_body
 
 
+def _normalize_bedrock_gateway_body(req_body: dict) -> dict:
+    if not _is_bedrock_gateway_request(req_body):
+        return req_body
+
+    normalized_body: dict | None = None
+    for key in _BEDROCK_GATEWAY_UNSUPPORTED_BODY_FIELDS:
+        if key in req_body:
+            normalized_body = dict(req_body) if normalized_body is None else normalized_body
+            normalized_body.pop(key, None)
+
+    body = normalized_body if normalized_body is not None else req_body
+    thinking = body.get("thinking")
+    if isinstance(thinking, dict) and thinking.get("type") == "adaptive":
+        normalized_body = dict(body) if normalized_body is None else normalized_body
+        normalized_body.pop("thinking", None)
+
+    return normalized_body if normalized_body is not None else req_body
+
+
+def _is_bedrock_gateway_request(req_body: object) -> bool:
+    """Return True when an Anthropic-compatible gateway routes by a Bedrock model prefix."""
+    if not isinstance(req_body, dict):
+        return False
+    model = req_body.get("model")
+    return isinstance(model, str) and model.startswith("bedrock/")
+
+
+def _drop_header(headers: dict[str, str], header_name: str) -> None:
+    target = header_name.lower()
+    for key in list(headers):
+        if key.lower() == target:
+            del headers[key]
+
+
+def _drop_query_param(raw_path: str, param_name: str) -> str:
+    path, separator, query = raw_path.partition("?")
+    if not separator:
+        return raw_path
+    kept = [part for part in query.split("&") if part.split("=", 1)[0] != param_name]
+    if not kept:
+        return path
+    return f"{path}?{'&'.join(kept)}"
+
+
 def is_capture_only_request(path: str, req_body: object) -> bool:
     """Return whether capture-only mode should short-circuit this request.
 
@@ -194,6 +254,8 @@ def is_capture_only_request(path: str, req_body: object) -> bool:
     clean_path = path.split("?", 1)[0]
     if clean_path.startswith(("/v1/embeddings", "/embeddings", "/v1/files", "/files")):
         return False
+    if _is_vertex_anthropic_raw_predict_path(clean_path):
+        return True
     if clean_path.startswith(
         (
             "/v1/messages",
@@ -226,6 +288,8 @@ def is_capture_only_streaming_request(path: str, req_body: object) -> bool:
 
     if is_bedrock_eventstream_path(path):
         return True
+    if _is_vertex_anthropic_raw_predict_path(path.split("?", 1)[0]) and ":streamRawPredict" in path:
+        return True
     if "streamGenerateContent" in path:
         return True
     return isinstance(req_body, dict) and bool(req_body.get("stream", False))
@@ -249,9 +313,11 @@ def capture_only_response(path: str, req_body: object) -> dict:
             "stopReason": "end_turn",
             "usage": {"inputTokens": 0, "outputTokens": 0, "totalTokens": 0},
         }
+    if _is_vertex_anthropic_raw_predict_path(clean_path) and clean_path.endswith("/count-tokens:rawPredict"):
+        return {"input_tokens": 0}
     if clean_path.startswith("/v1/complete"):
         return _capture_only_anthropic_completion_response(model)
-    if clean_path.startswith(("/v1/messages", "/model/")):
+    if clean_path.startswith(("/v1/messages", "/model/")) or _is_vertex_anthropic_raw_predict_path(clean_path):
         return {
             "id": "msg_claude_tap_capture",
             "type": "message",
@@ -358,20 +424,9 @@ def capture_only_stream_bytes(path: str, req_body: object) -> bytes:
             f"data: {json.dumps(chunk, separators=(',', ':'))}\n\ndata: {json.dumps(done, separators=(',', ':'))}\n\n"
         ).encode("utf-8")
     if clean_path.startswith("/v1/messages"):
-        events = [
-            ("message_start", {"type": "message_start", "message": resp_body}),
-            (
-                "content_block_start",
-                {"type": "content_block_start", "index": 0, "content_block": resp_body["content"][0]},
-            ),
-            ("content_block_stop", {"type": "content_block_stop", "index": 0}),
-            ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}}),
-            ("message_stop", {"type": "message_stop"}),
-        ]
-        return b"".join(
-            f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n".encode("utf-8")
-            for event, payload in events
-        )
+        return _capture_only_anthropic_message_stream_bytes(resp_body)
+    if _is_vertex_anthropic_raw_predict_path(clean_path) and clean_path.endswith(":streamRawPredict"):
+        return _capture_only_anthropic_message_stream_bytes(resp_body)
     if clean_path.startswith(("/v1/completions", "/completions")):
         chunk = {
             "id": resp_body["id"],
@@ -422,6 +477,23 @@ def capture_only_stream_bytes(path: str, req_body: object) -> bytes:
         f"data: {json.dumps(completed, separators=(',', ':'))}\n\n"
         "data: [DONE]\n\n"
     ).encode("utf-8")
+
+
+def _capture_only_anthropic_message_stream_bytes(resp_body: dict) -> bytes:
+    events = [
+        ("message_start", {"type": "message_start", "message": resp_body}),
+        (
+            "content_block_start",
+            {"type": "content_block_start", "index": 0, "content_block": resp_body["content"][0]},
+        ),
+        ("content_block_stop", {"type": "content_block_stop", "index": 0}),
+        ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}}),
+        ("message_stop", {"type": "message_stop"}),
+    ]
+    return b"".join(
+        f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n".encode("utf-8")
+        for event, payload in events
+    )
 
 
 def _capture_only_bedrock_eventstream_bytes(path: str) -> bytes:
@@ -511,7 +583,6 @@ async def proxy_handler(request: web.Request) -> web.StreamResponse:
     fwd_path = request.raw_path
     if strip_prefix and fwd_path.startswith(strip_prefix):
         fwd_path = fwd_path[len(strip_prefix) :] or "/"
-    upstream_url = build_upstream_url(target, fwd_path)
 
     # aiohttp auto-decompresses request bodies (gzip/deflate/zstd), so
     # request.read() returns plain bytes even when Content-Encoding is set.
@@ -531,30 +602,38 @@ async def proxy_handler(request: web.Request) -> web.StreamResponse:
     t0 = time.monotonic()
 
     req_body = _parse_request_body_for_trace(body)
+    trace_req_body = req_body
+    upstream_req_body = req_body
 
     upstream_body = body
     if isinstance(req_body, dict):
         normalized_req_body = _normalize_request_body_for_upstream(req_body, target)
         if normalized_req_body is not req_body:
-            req_body = normalized_req_body
-            upstream_body = json.dumps(req_body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+            upstream_req_body = normalized_req_body
+            upstream_body = json.dumps(upstream_req_body, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
             for key in list(fwd_headers.keys()):
                 if key.lower() == "content-length":
                     del fwd_headers[key]
 
-    is_streaming = is_capture_only_streaming_request(request.raw_path, req_body)
+    if _is_bedrock_gateway_request(upstream_req_body):
+        _drop_header(fwd_headers, "anthropic-beta")
+        fwd_path = _drop_query_param(fwd_path, "beta")
+
+    upstream_url = build_upstream_url(target, fwd_path)
+
+    is_streaming = is_capture_only_streaming_request(request.raw_path, trace_req_body)
 
     ctx["turn_counter"] = ctx.get("turn_counter", 0) + 1
     turn = ctx["turn_counter"]
 
-    model = req_body.get("model", "") if isinstance(req_body, dict) else ""
+    model = trace_req_body.get("model", "") if isinstance(trace_req_body, dict) else ""
     log_prefix = f"[Turn {turn}]"
     log.info(
         f"{log_prefix} → {request.method} {request.path} (model={model}, stream={is_streaming}, upstream={upstream_url})"
     )
 
-    if ctx.get("capture_only") and is_capture_only_request(request.raw_path, req_body):
-        resp_body = capture_only_response(request.raw_path, req_body)
+    if ctx.get("capture_only") and is_capture_only_request(request.raw_path, trace_req_body):
+        resp_body = capture_only_response(request.raw_path, trace_req_body)
         content_type = capture_only_content_type(request.raw_path, is_streaming)
         response_headers = {"Content-Type": content_type}
         duration_ms = int((time.monotonic() - t0) * 1000)
@@ -565,7 +644,7 @@ async def proxy_handler(request: web.Request) -> web.StreamResponse:
             request.method,
             request.raw_path,
             request.headers,
-            req_body,
+            trace_req_body,
             200,
             response_headers,
             resp_body,
@@ -574,7 +653,9 @@ async def proxy_handler(request: web.Request) -> web.StreamResponse:
         await writer.write(record)
         log.info(f"{log_prefix} ← 200 capture-only ({duration_ms}ms, upstream skipped)")
         if is_streaming:
-            return web.Response(body=capture_only_stream_bytes(request.raw_path, req_body), content_type=content_type)
+            return web.Response(
+                body=capture_only_stream_bytes(request.raw_path, trace_req_body), content_type=content_type
+            )
         return web.json_response(resp_body)
 
     # Request identity encoding from upstream to avoid client-side zstd decode issues
@@ -604,7 +685,7 @@ async def proxy_handler(request: web.Request) -> web.StreamResponse:
             req_id,
             turn,
             t0,
-            req_body,
+            trace_req_body,
             writer,
             log_prefix,
             upstream_base_url=target,
@@ -618,7 +699,7 @@ async def proxy_handler(request: web.Request) -> web.StreamResponse:
         req_id,
         turn,
         t0,
-        req_body,
+        trace_req_body,
         writer,
         log_prefix,
         upstream_base_url=target,
