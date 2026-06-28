@@ -137,7 +137,7 @@ def update_main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        result = subprocess.run(cmd, check=False)
+        result = subprocess.run(cmd, check=False, **windows_no_console_subprocess_kwargs())
     except OSError as exc:
         print(f"Error: failed to run update command: {exc}", file=sys.stderr)
         return 1
