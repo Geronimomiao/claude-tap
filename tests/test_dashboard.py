@@ -2052,6 +2052,7 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 "system": [{"type": "text", "text": system}],
                 "tools": tools,
                 "max_tokens": 4096 if index == 0 else 8192,
+                "messages": [{"role": "user", "content": "Hi"}],
             }
         )
         record["response"]["body"].update(
@@ -2106,7 +2107,7 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 assert await page.locator("#session-list .session-row").count() == 3
                 lab = page.locator("#compare-lab")
                 await lab.wait_for(state="visible", timeout=5000)
-                assert await page.locator("#compare-lab-pair").inner_text() == ("claude-opus-4-8 ↔ claude-fable-5")
+                assert await page.locator("#compare-lab-pair").inner_text() == ("claude-fable-5 ↔ claude-opus-4-8")
                 assert " ".join((await lab.locator(".diff-legend-item.removed").inner_text()).split()) == (
                     "− Only in baseline"
                 )
@@ -2130,7 +2131,7 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                     await page.locator(f'[data-select-session="{session_id}"]').uncheck()
                 assert await page.locator("#compare-lab-pair").inner_text() == ("📌 claude-fable-5 ↔ claude-opus-4-8")
                 await pin_button.click()
-                assert await page.locator("#compare-lab-pair").inner_text() == ("claude-opus-4-8 ↔ claude-fable-5")
+                assert await page.locator("#compare-lab-pair").inner_text() == ("claude-fable-5 ↔ claude-opus-4-8")
                 assert await pin_button.is_hidden()
                 for session_id in session_ids:
                     await page.locator(f'[data-select-session="{session_id}"]').check()
@@ -2211,11 +2212,11 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 await page.wait_for_selector("#compare-view:not(.hidden) #diff-system", timeout=5000)
                 assert page.url.endswith("#diff-system")
                 assert await page.evaluate("window.location.hash") == "#diff-system"
-                assert f"left={session_ids[1]}" in page.url
-                assert f"right={duplicate_model_session_id}" in page.url
-                await page.locator("#compare-swap").click()
-                assert f"left={duplicate_model_session_id}" in page.url
+                assert f"left={session_ids[0]}" in page.url
                 assert f"right={session_ids[1]}" in page.url
+                await page.locator("#compare-swap").click()
+                assert f"left={session_ids[1]}" in page.url
+                assert f"right={session_ids[0]}" in page.url
                 assert page.url.endswith("#diff-system")
             finally:
                 await browser.close()

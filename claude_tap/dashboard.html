@@ -1523,7 +1523,7 @@ pre {
           <div class="compare-lab-copy">
             <div class="compare-lab-title">
               <span data-i18n="compare_lab_title">Diff lab</span>
-              <span class="compare-lab-hint" data-i18n="compare_lab_hint">e.g. send both models a "Hi", then diff their system prompts</span>
+              <span class="compare-lab-hint" data-i18n="compare_lab_hint">send each model a "Hi", then diff their system prompts here</span>
             </div>
             <div id="compare-lab-pair" class="compare-lab-pair"></div>
           </div>
@@ -1725,7 +1725,7 @@ const DASHBOARD_I18N = {
 	    compare_selected: "Compare",
 	    compare_requires_two: "Select exactly two sessions to compare",
 	    compare_lab_title: "Diff lab",
-	    compare_lab_hint: "e.g. send both models a \"Hi\", then diff their system prompts",
+	    compare_lab_hint: "send each model a \"Hi\", then diff their system prompts here",
 	    compare_lab_open: "Open Diff",
 	    compare_lab_pin: "Pin this pair",
 	    compare_lab_unpin: "Unpin pair",
@@ -1874,7 +1874,7 @@ const DASHBOARD_I18N = {
 	    compare_selected: "对比",
 	    compare_requires_two: "请选择恰好两个会话进行对比",
 	    compare_lab_title: "Diff 实验台",
-	    compare_lab_hint: "例：给两个模型各发一句 “Hi”，对比它们 system prompt 的差异",
+	    compare_lab_hint: "给每个模型各发一句 “Hi”，在这里对比它们 system prompt 的差异",
 	    compare_lab_open: "打开 Diff",
 	    compare_lab_pin: "固定此对",
 	    compare_lab_unpin: "取消固定",
@@ -2533,6 +2533,12 @@ function renderOverview() {
 	  else localStorage.removeItem(COMPARE_PIN_KEY);
 	}
 
+	// The diff lab is purpose-built for "Hi" probe sessions: minimal one-shot
+	// captures whose only user input is "Hi", used to diff system prompts.
+	function isHiProbeSession(session) {
+	  return String(session.first_user || "").trim().toLowerCase() === "hi";
+	}
+
 	function compareLabSessions(sessions) {
 	  const byId = new Map(state.sessions.map(session => [session.id, session]));
 	  const selected = Array.from(state.selectedSessionIds)
@@ -2548,7 +2554,9 @@ function renderOverview() {
 	    pair = pinned;
 	    source = "pinned";
 	  } else {
-	    pair = defaultCompareLabPair(sessions.filter(canCompareSession));
+	    const candidates = sessions.filter(canCompareSession);
+	    const probes = candidates.filter(isHiProbeSession);
+	    pair = defaultCompareLabPair(probes.length >= 2 ? probes : candidates);
 	    source = "default";
 	  }
 	  if (pair.length !== 2) return {pair, source};
