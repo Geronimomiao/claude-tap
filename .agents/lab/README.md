@@ -6,12 +6,18 @@ research material, kept under `.agents/` per the repository documentation bounda
 
 ## How to view
 
-The pages load trace JSON by relative path, so serve this directory directly:
+The dashboard serves this directory at `/analyze/` when claude-tap runs from a
+source checkout (an "Analyze" entry appears in the dashboard header; the route
+resolves this directory automatically, or set `CLOUDTAP_LAB_DIR` to override).
+`index.html` is the hub page linking every exploration below.
+
+Standalone alternative — the pages load trace JSON by relative path, so any
+static server works:
 
 ```bash
 cd .agents/lab
 python3 -m http.server 8090
-# open http://localhost:8090/trace_viewer.html
+# open http://localhost:8090/
 ```
 
 ## Captures (`trace_*.json`)
