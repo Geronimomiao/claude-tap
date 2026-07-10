@@ -2755,7 +2755,8 @@ function comparisonTools(body) {
 function comparisonToolSummary(tool) {
   if (!tool) return "—";
   const description = tool.value?.description || tool.value?.function?.description || "";
-  return description ? String(description).split("\n")[0] : tool.name;
+  const firstLine = String(description).split("\n").map((line) => line.trim()).find(Boolean);
+  return firstLine || tool.name;
 }
 
 function comparisonParams(body) {
