@@ -10,10 +10,10 @@ import pytest
 from claude_tap.cli_clients import _extend_no_proxy
 from claude_tap.trace_store import get_trace_store, reset_trace_store
 
-# Prevent tests and their subprocesses from opening the user's default browser.
-_FALSE_BROWSER = shutil.which("false")
-if _FALSE_BROWSER:
-    os.environ["BROWSER"] = _FALSE_BROWSER
+# Prevent tests and their subprocesses from falling back to the user's default browser.
+_NOOP_BROWSER = shutil.which("true")
+if _NOOP_BROWSER:
+    os.environ["BROWSER"] = _NOOP_BROWSER
 
 
 def trace_db_path(trace_dir: str | Path) -> Path:
