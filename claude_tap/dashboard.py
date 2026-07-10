@@ -34,7 +34,7 @@ CLIENT_LABELS = {
     "pi": "Pi",
     "qoder": "Qoder",
 }
-DASHBOARD_SUMMARY_VERSION = 4
+DASHBOARD_SUMMARY_VERSION = 5
 VALID_SESSION_STATUSES = {"active", "complete", "error", "empty"}
 _REDACTED_VALUE = "REDACTED"
 _SENSITIVE_KEY_NAMES = {
@@ -1039,6 +1039,7 @@ def _is_successful_primary_record(record: dict[str, Any]) -> bool:
 
 def _first_user_preview(records: list[dict[str, Any]]) -> str:
     title_request_fallback = ""
+    side_request_fallback = ""
     for record in records:
         request = record.get("request")
         body = request.get("body") if isinstance(request, dict) else None
@@ -1049,8 +1050,13 @@ def _first_user_preview(records: list[dict[str, Any]]) -> str:
             if not title_request_fallback:
                 title_request_fallback = text
             continue
+        if _is_agent_side_request(body, text):
+            if not side_request_fallback:
+                side_request_fallback = text
+            continue
         return _preview(text, 220)
-    return _preview(title_request_fallback, 220) if title_request_fallback else ""
+    fallback = title_request_fallback or side_request_fallback
+    return _preview(fallback, 220) if fallback else ""
 
 
 def _is_claude_title_generation_request(body: Any) -> bool:
@@ -1072,6 +1078,22 @@ def _is_claude_title_generation_request(body: Any) -> bool:
         and schema.get("required") == ["title"]
         and set(schema.get("properties") or {}) == {"title"}
     )
+
+
+_SIDE_REQUEST_TEXT_PREFIXES = ("Web page content:\n---",)
+_SIDE_REQUEST_SYSTEM_MARKERS = ("A user kicked off a Claude Code agent to do a coding task and walked away",)
+
+
+def _is_agent_side_request(body: Any, text: str) -> bool:
+    """Detect agent-issued side requests such as web fetch digests and state probes."""
+    if text.startswith(_SIDE_REQUEST_TEXT_PREFIXES):
+        return True
+    if text.startswith("Current state: ") and "\nTool calls so far: " in text:
+        return True
+    if not isinstance(body, dict):
+        return False
+    system_text = _content_text(body.get("system"))
+    return any(marker in system_text for marker in _SIDE_REQUEST_SYSTEM_MARKERS)
 
 
 def _last_response_preview(records: list[dict[str, Any]]) -> str:
@@ -1255,7 +1277,7 @@ def _clean_user_prompt_text(text: str) -> str:
     if request:
         return request.group(1).strip()
 
-    session = re.fullmatch(r"<session>\s*(.*?)\s*</session>", text, flags=re.DOTALL | re.IGNORECASE)
+    session = re.match(r"<session>\s*(.*?)\s*</session>", text, flags=re.DOTALL | re.IGNORECASE)
     if session:
         return session.group(1).strip()
 
