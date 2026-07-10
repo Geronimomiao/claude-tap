@@ -1768,6 +1768,113 @@ async def test_dashboard_session_route_serves_standalone_viewer(trace_db, tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_dashboard_trace_records_use_stable_order_and_support_collapse(trace_db) -> None:
+    playwright = pytest.importorskip("playwright.async_api")
+    store = get_trace_store()
+    session_id = store.create_session(client="codex", proxy_mode="reverse")
+    records = [
+        {
+            "timestamp": "2026-07-10T12:37:29+00:00",
+            "turn": 2,
+            "request": {"method": "GET", "path": "/v1/models?client_version=0.144.1", "body": None},
+            "response": {"status": 200, "body": {"models": []}},
+        },
+        {
+            "timestamp": "2026-07-10T12:37:30+00:00",
+            "turn": 1,
+            "request": {"method": "GET", "path": "/v1/models?client_version=0.144.1", "body": None},
+            "response": {"status": 200, "body": {"models": []}},
+        },
+        {
+            "timestamp": "2026-07-10T12:37:43+00:00",
+            "turn": 3,
+            "request": {
+                "method": "WEBSOCKET",
+                "path": "/v1/responses",
+                "body": {"type": "response.create", "generate": False, "input": []},
+            },
+            "response": {"status": 101, "body": {"status": "completed", "generate": False, "output": []}},
+        },
+        {
+            "timestamp": "2026-07-10T12:37:45+00:00",
+            "turn": 3.2,
+            "request": {
+                "method": "WEBSOCKET",
+                "path": "/v1/responses",
+                "body": {
+                    "type": "response.create",
+                    "input": [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
+                },
+            },
+            "response": {
+                "status": 101,
+                "body": {
+                    "status": "completed",
+                    "output": [
+                        {
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": "Hello"}],
+                        }
+                    ],
+                },
+            },
+        },
+    ]
+    for record in records:
+        store.append_record(session_id, record)
+    store.finalize_session(session_id, {"api_calls": len(records)})
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with playwright.async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page()
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/session/{session_id}",
+                    wait_until="domcontentloaded",
+                )
+                cards = page.locator("#raw-tab [data-record-card]")
+                await page.wait_for_selector("#raw-tab [data-record-card]", timeout=5000)
+                assert await cards.count() == 4
+
+                assert await cards.locator("[data-record-title]").all_text_contents() == [
+                    "Record 1",
+                    "Record 2",
+                    "Record 3",
+                    "Record 4",
+                ]
+                assert await cards.locator("[data-record-kind-label]").all_text_contents() == [
+                    "Model discovery",
+                    "Model discovery",
+                    "Prewarm",
+                    "Generation",
+                ]
+                assert await cards.locator("[data-record-toggle]").evaluate_all(
+                    "buttons => buttons.map(button => button.getAttribute('aria-expanded'))"
+                ) == ["false", "false", "false", "true"]
+
+                first_card = page.locator('[data-record-card][data-record-index="0"]')
+                assert await first_card.count() == 1
+                first_toggle = first_card.locator("[data-record-toggle]")
+                await first_toggle.click()
+                assert await first_toggle.get_attribute("aria-expanded") == "true"
+                assert await first_card.locator(".section-body").is_visible()
+
+                generation_card = page.locator('[data-record-card][data-record-index="3"]')
+                assert await generation_card.count() == 1
+                generation_toggle = generation_card.locator("[data-record-toggle]")
+                await generation_toggle.click()
+                assert await generation_toggle.get_attribute("aria-expanded") == "false"
+                assert not await generation_card.locator(".section-body").is_visible()
+            finally:
+                await browser.close()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
 async def test_dashboard_session_export_menu_is_not_clipped_on_mobile(trace_db, tmp_path: Path) -> None:
     playwright = pytest.importorskip("playwright.async_api")
     trace_path = tmp_path / "2026-05-20" / "trace_080000.jsonl"

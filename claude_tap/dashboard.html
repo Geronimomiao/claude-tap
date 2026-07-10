@@ -803,11 +803,29 @@ body.detail-route .detail-inspector-bar {
   background: var(--bg-card); box-shadow: var(--shadow-sm);
 }
 .section-header {
-  display: flex; align-items: center; padding: 8px 12px;
-  gap: 8px; transition: background .1s;
+  display: flex; align-items: center;
+  gap: 0; transition: background .1s;
 }
-.section-header .chevron { font-size: 10px; color: var(--text-tertiary); width: 12px; }
+.section-toggle {
+  display: flex; align-items: center; flex: 1; min-width: 0;
+  gap: 8px; padding: 8px 12px; border: 0;
+  background: transparent; color: inherit; text-align: left;
+  cursor: pointer; transition: background .12s;
+}
+.section-toggle:hover { background: var(--bg-hover); }
+.section-toggle:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: -2px;
+}
+.section-header .chevron {
+  width: 12px; color: var(--text-tertiary); font-size: 10px;
+  transform: rotate(90deg); transition: transform .15s ease;
+}
+.section.collapsed .chevron { transform: rotate(0deg); }
 .section-header .title { font-size: 13px; font-weight: 600; color: var(--text); }
+.section-header .record-kind {
+  color: var(--blue); background: var(--blue-bg);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
+}
 .section-header .path {
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--text-tertiary); font-family: var(--mono); font-size: 11px;
@@ -818,8 +836,10 @@ body.detail-route .detail-inspector-bar {
   border: 1px solid var(--border); background: var(--bg-card);
   color: var(--text-tertiary); margin-left: auto; transition: all .15s;
 }
+.section-header .json-btn { margin: 0 12px 0 8px; }
 .section-header .json-btn:hover { color: var(--blue); border-color: var(--blue); }
 .section-body { padding: 0 16px 16px; overflow-x: auto; }
+.section-body[hidden] { display: none; }
 .conversation { display: grid; gap: 8px; }
 .msg {
   margin-bottom: 0; border-radius: var(--radius-sm);
@@ -1152,6 +1172,7 @@ const state = {
 	  detailRecordTotal: 0,
 	  detailFingerprint: "",
 	  detailSession: null,
+	  recordExpansion: new Map(),
 	};
 
 const $ = selector => document.querySelector(selector);
@@ -1274,6 +1295,14 @@ const DASHBOARD_I18N = {
     copy_path: "Copy session id",
     records: "Records",
     turns: "Turns",
+    record_label: "Record {number}",
+    record_kind_model_discovery: "Model discovery",
+    record_kind_prewarm: "Prewarm",
+    record_kind_generation: "Generation",
+    record_kind_api: "API request",
+    expand_record: "Expand record",
+    collapse_record: "Collapse record",
+    capture_turn: "Internal capture turn {turn}",
     input: "Input",
     output: "Output",
     cache_read: "Cache R",
@@ -1381,6 +1410,14 @@ const DASHBOARD_I18N = {
     copy_path: "复制会话 ID",
     records: "记录",
     turns: "轮次",
+    record_label: "记录 {number}",
+    record_kind_model_discovery: "模型发现",
+    record_kind_prewarm: "预热",
+    record_kind_generation: "生成请求",
+    record_kind_api: "API 请求",
+    expand_record: "展开记录",
+    collapse_record: "折叠记录",
+    capture_turn: "内部捕获轮次 {turn}",
     input: "输入",
     output: "输出",
     cache_read: "缓存读",
@@ -2210,7 +2247,7 @@ async function loadMoreSessionRecords(session, records, button) {
 	    </div>
     <div id="raw-tab" class="${state.activeTab === "raw" ? "" : "hidden"}">
       ${hasHiddenRecords ? `<div class="detail-fallback-note">${esc(t("limited_records", {shown: records.length, total: totalRecords}))}</div>` : ""}
-      <div class="records">${records.map((record, index) => renderRecord(record, index)).join("") || emptyRecord()}</div>
+      <div class="records">${records.map((record, index) => renderRecord(session.id, record, index)).join("") || emptyRecord()}</div>
       ${hasHiddenRecords ? `<div class="detail-load-more"><button class="load-more-btn" type="button" data-load-more>${esc(t("load_more_records"))}</button></div>` : ""}
     </div>
   `;
@@ -2222,6 +2259,10 @@ async function loadMoreSessionRecords(session, records, button) {
   document.querySelectorAll("[data-json-toggle]").forEach(button => {
     button.addEventListener("click", () => {
       const panel = document.getElementById(button.dataset.jsonToggle);
+      if (panel && !panel.classList.contains("open")) {
+        const toggle = button.closest("[data-record-card]")?.querySelector("[data-record-toggle]");
+        if (toggle) setRecordExpanded(toggle, true, session.id);
+      }
       const pre = panel?.querySelector("[data-json-index]");
       if (pre && !pre.dataset.rendered) {
         const index = Number(pre.dataset.jsonIndex);
@@ -2229,6 +2270,11 @@ async function loadMoreSessionRecords(session, records, button) {
         pre.dataset.rendered = "true";
       }
       panel?.classList.toggle("open");
+    });
+  });
+  document.querySelectorAll("[data-record-toggle]").forEach(button => {
+    button.addEventListener("click", () => {
+      setRecordExpanded(button, button.getAttribute("aria-expanded") !== "true", session.id);
     });
   });
   document.querySelectorAll("[data-load-more]").forEach(button => {
@@ -2287,12 +2333,52 @@ function updateDetailI18n(session) {
   $("#detail-subtitle").textContent = session.legacy_rel_path || session.id || "";
   updateTracePathBar(session);
 	  updateDetailTabToggle();
+  document.querySelectorAll("[data-record-title]").forEach(element => {
+    element.textContent = t("record_label", {number: element.dataset.recordTitle});
+  });
+  document.querySelectorAll("[data-record-kind-label]").forEach(element => {
+    element.textContent = t(`record_kind_${element.dataset.recordKindLabel}`);
+  });
+  document.querySelectorAll("[data-record-toggle]").forEach(button => {
+    button.title = t(button.getAttribute("aria-expanded") === "true" ? "collapse_record" : "expand_record");
+  });
   document.querySelectorAll("[data-detail-i18n]").forEach(element => {
     element.textContent = t(element.dataset.detailI18n);
   });
 }
 
-function renderRecord(record, index) {
+function recordKind(record) {
+  const request = record?.request || {};
+  const path = String(request.path || "").toLowerCase();
+  const body = request.body && typeof request.body === "object" ? request.body : {};
+  if (/^\/v1\/models(?:[/?]|$)/.test(path)) return "model_discovery";
+  if (path.includes("/v1/responses") && body.generate === false) return "prewarm";
+  if (/\/(?:v1\/)?(?:responses|messages|chat\/completions)(?:[/?]|$)/.test(path)) return "generation";
+  return "api";
+}
+
+function recordExpansionKey(sessionId, index) {
+  return `${sessionId}:${index}`;
+}
+
+function recordStartsExpanded(sessionId, record, index, kind) {
+  const key = recordExpansionKey(sessionId, index);
+  if (state.recordExpansion.has(key)) return state.recordExpansion.get(key);
+  return kind !== "model_discovery" && kind !== "prewarm";
+}
+
+function setRecordExpanded(button, expanded, sessionId) {
+  const card = button.closest("[data-record-card]");
+  const body = card?.querySelector(".section-body");
+  const index = Number(button.dataset.recordToggle);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.title = t(expanded ? "collapse_record" : "expand_record");
+  card?.classList.toggle("collapsed", !expanded);
+  if (body) body.hidden = !expanded;
+  if (Number.isFinite(index)) state.recordExpansion.set(recordExpansionKey(sessionId, index), expanded);
+}
+
+function renderRecord(sessionId, record, index) {
   const request = record.request || {};
   const response = record.response || {};
   const userText = requestText(request.body) || t("request_empty");
@@ -2300,17 +2386,32 @@ function renderRecord(record, index) {
   const status = response.status ?? "";
   const path = request.path || "";
   const jsonId = `json-${index}`;
+  const bodyId = `record-body-${index}`;
   const statusClass = Number(status) >= 400 ? "error" : "";
+  const kind = recordKind(record);
+  const expanded = recordStartsExpanded(sessionId, record, index, kind);
+  const captureTurn = record.turn === undefined || record.turn === null ? "" : String(record.turn);
+  const captureTitle = captureTurn ? t("capture_turn", {turn: captureTurn}) : "";
   return `
-    <article class="section">
+    <article class="section${expanded ? "" : " collapsed"}" data-record-card data-record-index="${index}" data-record-kind="${kind}">
       <div class="section-header">
-        <span class="chevron">&#9654;</span>
-        <span class="title">Turn ${esc(record.turn ?? index + 1)}</span>
-        <span class="badge ${statusClass}">${esc(status || t("ok"))}</span>
-        <span class="path">${esc(path)}</span>
+        <button
+          class="section-toggle"
+          type="button"
+          data-record-toggle="${index}"
+          aria-expanded="${expanded}"
+          aria-controls="${bodyId}"
+          title="${esc(t(expanded ? "collapse_record" : "expand_record"))}"
+        >
+          <span class="chevron" aria-hidden="true">&#9654;</span>
+          <span class="title" data-record-title="${index + 1}" title="${esc(captureTitle)}">${esc(t("record_label", {number: index + 1}))}</span>
+          <span class="badge record-kind" data-record-kind-label="${kind}">${esc(t(`record_kind_${kind}`))}</span>
+          <span class="badge ${statusClass}">${esc(status || t("ok"))}</span>
+          <span class="path">${esc(path)}</span>
+        </button>
         <button class="json-btn" data-json-toggle="${jsonId}">${esc(t("json"))}</button>
       </div>
-      <div class="section-body">
+      <div id="${bodyId}" class="section-body"${expanded ? "" : " hidden"}>
         <div class="conversation">
           <div class="msg user">
             <span class="msg-role">${esc(t("request"))}</span>
