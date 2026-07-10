@@ -1696,6 +1696,20 @@ pre {
               <button id="cost-lab-open" class="lab-card-open" type="button" data-i18n="cost_lab_open" disabled>Open Analysis</button>
             </div>
           </section>
+          <section id="compaction-lab" class="lab-card" role="listitem" aria-label="Compaction lab">
+            <div class="lab-card-mark" aria-hidden="true">⤓</div>
+            <div class="lab-card-copy">
+              <div class="lab-card-title">
+                <span data-i18n="compaction_lab_title">Compaction lab</span>
+                <span class="lab-card-hint" data-i18n="compaction_lab_hint">pick 1–3 captures, watch the context cliff of /compact</span>
+              </div>
+              <div id="compaction-lab-target" class="lab-card-pair"></div>
+            </div>
+            <div class="lab-card-actions">
+              <button id="compaction-lab-pin" class="lab-card-secondary" type="button" hidden></button>
+              <button id="compaction-lab-open" class="lab-card-open" type="button" data-i18n="compaction_lab_open" disabled>Open Timeline</button>
+            </div>
+          </section>
         </div>
       </div>
   </section>
@@ -1753,6 +1767,19 @@ pre {
       <div class="cost-empty" data-i18n="cost_loading">Loading cost analysis...</div>
     </div>
   </section>
+
+  <section id="compaction-view" class="cost-view hidden">
+    <div class="compare-page-head">
+      <button class="back-btn" type="button" data-compaction-back title="Back to session list" aria-label="Back to session list">←</button>
+      <div class="compare-heading">
+        <div class="compare-title" data-i18n="compaction_title">Context compaction timeline</div>
+        <div class="compare-subtitle" id="compaction-subtitle"></div>
+      </div>
+    </div>
+    <div id="compaction-content" class="cost-shell">
+      <div class="cost-empty" data-i18n="compaction_loading">Loading compaction timeline...</div>
+    </div>
+  </section>
 </div>
 
 <div id="delete-session-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="delete-session-title" aria-describedby="delete-session-message">
@@ -1778,6 +1805,7 @@ pre {
 const SESSION_DETAIL_ROUTE = /^\/dashboard\/session\/([^/]+)\/?$/;
 const SESSION_COMPARE_ROUTE = /^\/dashboard\/compare\/?$/;
 const SESSION_COST_ROUTE = /^\/dashboard\/cost\/?$/;
+const SESSION_COMPACTION_ROUTE = /^\/dashboard\/compaction\/?$/;
 const CLAUDE_TAP_VERSION = "";
 const DASHBOARD_QUIT_TOKEN = "";
 const DASHBOARD_CAN_STOP = false;
@@ -1857,7 +1885,16 @@ const state = {
   pendingCostSessionId: initialCostSessionId(),
   costSessionId: null,
   costRequestId: 0,
-  view: initialComparisonIds().length === 2 ? "compare" : initialCostSessionId() ? "cost" : "list",
+  pendingCompactionIds: initialCompactionIds(),
+  compactionSessionIds: [],
+  compactionRequestId: 0,
+  view: initialComparisonIds().length === 2
+    ? "compare"
+    : initialCostSessionId()
+      ? "cost"
+      : initialCompactionIds().length
+        ? "compaction"
+        : "list",
 	  activeTab: "conversation",
   search: "",
   date: "all",
@@ -1935,6 +1972,18 @@ function sessionCompareUrl(sessionIds) {
 
 function sessionCostUrl(sessionId) {
   return `/dashboard/cost?${new URLSearchParams({session: sessionId}).toString()}`;
+}
+
+function initialCompactionIds() {
+  if (!window.location.pathname.match(SESSION_COMPACTION_ROUTE)) return [];
+  const raw = new URLSearchParams(window.location.search).get("sessions") || "";
+  const sessionIds = raw.split(",").filter(Boolean);
+  const distinct = sessionIds.length >= 1 && sessionIds.length <= 3 && new Set(sessionIds).size === sessionIds.length;
+  return distinct ? sessionIds : [];
+}
+
+function sessionCompactionUrl(sessionIds) {
+  return `/dashboard/compaction?sessions=${sessionIds.map(encodeURIComponent).join(",")}`;
 }
 
 const DASHBOARD_I18N = {
@@ -2019,6 +2068,31 @@ const DASHBOARD_I18N = {
 	    cost_amortize_full: "Without cache (all full price)",
 	    cost_amortize_actual: "With cache (input ×1, read ×0.1, write ×1.25)",
 	    cost_amortize_note: "Weighted input cost is {percent}% of the no-cache equivalent",
+	    compaction_lab_title: "Compaction lab",
+	    compaction_lab_hint: "pick 1–3 captures, watch the context cliff of /compact",
+	    compaction_lab_open: "Open Timeline",
+	    compaction_lab_pin: "Pin these captures",
+	    compaction_lab_unpin: "Unpin captures",
+	    compaction_lab_empty: "Select one to three sessions with records",
+	    compaction_title: "Context compaction timeline",
+	    compaction_loading: "Loading compaction timeline...",
+	    compaction_unable: "Unable to load compaction timeline: {error}",
+	    compaction_none: "No compaction detected in these captures — the timeline below still shows context growth",
+	    compaction_calls: "API calls",
+	    compaction_peak: "Peak context",
+	    compaction_summary_tokens: "Summary output",
+	    compaction_post_context: "First context after compact",
+	    compaction_reduction: "Context reduction",
+	    compaction_chart_title: "Prompt size per call, with compaction markers",
+	    compaction_marker_compact: "compact",
+	    compaction_marker_resume: "resume",
+	    compaction_notes_title: "What compaction actually does",
+	    compaction_note_mechanics:
+	      "/compact appends a harness-injected user message (“Respond with TEXT ONLY …”) asking the same model to summarize its own history in place; the next session starts from “This session is being continued…” plus that summary.",
+	    compaction_note_cache:
+	      "The summarizer reads the old history through the prompt cache (cheap), but the rewritten prefix breaks the cache chain — expect a fresh cache-write burst right after the cliff.",
+	    compaction_note_data:
+	      "All markers are detected from harness-injected strings captured in this timeline's real requests.",
 	    delete_selected: "Delete selected",
 	    load_more_sessions: "Load more sessions",
 	    loading_more_sessions: "Loading more sessions...",
@@ -2204,6 +2278,31 @@ const DASHBOARD_I18N = {
 	    cost_amortize_full: "无缓存（全部按全价）",
 	    cost_amortize_actual: "有缓存（输入 ×1，读 ×0.1，写 ×1.25）",
 	    cost_amortize_note: "加权后的输入成本是无缓存情况的 {percent}%",
+	    compaction_lab_title: "压缩实验台",
+	    compaction_lab_hint: "选 1–3 条抓包，看 /compact 的上下文断崖",
+	    compaction_lab_open: "打开时间线",
+	    compaction_lab_pin: "钉住这组抓包",
+	    compaction_lab_unpin: "取消钉住",
+	    compaction_lab_empty: "需要选择一到三条有记录的会话",
+	    compaction_title: "上下文压缩时间线",
+	    compaction_loading: "正在加载压缩时间线...",
+	    compaction_unable: "无法加载压缩时间线：{error}",
+	    compaction_none: "这组抓包里没有检测到压缩事件——下方时间线仍展示上下文增长",
+	    compaction_calls: "API 调用",
+	    compaction_peak: "峰值上下文",
+	    compaction_summary_tokens: "摘要输出",
+	    compaction_post_context: "压缩后首个上下文",
+	    compaction_reduction: "上下文削减",
+	    compaction_chart_title: "每次调用的 prompt 规模（标注压缩事件）",
+	    compaction_marker_compact: "压缩",
+	    compaction_marker_resume: "恢复",
+	    compaction_notes_title: "压缩实际做了什么",
+	    compaction_note_mechanics:
+	      "/compact 会在对话尾部注入一条 harness 消息（“Respond with TEXT ONLY…”），让同一个模型就地总结自己的历史；下一段会话以“This session is being continued…”加这份摘要开场。",
+	    compaction_note_cache:
+	      "摘要器通过 prompt cache 读旧历史（便宜），但重写后的前缀会打断缓存链——断崖之后紧跟一波新的 cache 写入。",
+	    compaction_note_data:
+	      "所有标记都来自这条时间线真实请求里捕获的 harness 注入字符串。",
 	    compare_deleted: "仅基线有",
 	    compare_added: "仅对比项有",
 	    delete_selected: "删除所选",
@@ -2573,6 +2672,13 @@ function updateTracePathBar(session = null) {
     `;
     return;
   }
+  if (state.view === "compaction" && state.compactionSessionIds.length) {
+    $("#trace-path-bar").innerHTML = `
+      <span class="tp-label">${esc(t("compaction_title"))}</span>
+      <span class="tp-val">${esc(state.compactionSessionIds.join(" → "))}</span>
+    `;
+    return;
+  }
   if (state.view === "detail" && session) {
     $("#trace-path-bar").innerHTML = `
       <span class="tp-label">${esc(t("session_id"))}</span>
@@ -2610,6 +2716,7 @@ function updateTracePathBar(session = null) {
 	    const pendingSessionId = state.pendingSessionId;
 	    const pendingComparisonIds = state.pendingComparisonIds;
 	    const pendingCostSessionId = state.pendingCostSessionId;
+	    const pendingCompactionIds = state.pendingCompactionIds;
 	    if (pendingComparisonIds.length === 2) {
 	      state.pendingComparisonIds = [];
 	      state.compareSessionIds = pendingComparisonIds;
@@ -2618,6 +2725,10 @@ function updateTracePathBar(session = null) {
 	      state.pendingCostSessionId = null;
 	      state.costSessionId = pendingCostSessionId;
 	      state.view = "cost";
+	    } else if (pendingCompactionIds.length) {
+	      state.pendingCompactionIds = [];
+	      state.compactionSessionIds = pendingCompactionIds;
+	      state.view = "compaction";
 	    } else if (pendingSessionId) {
 	      state.pendingSessionId = null;
 	      state.selectedSessionId = pendingSessionId;
@@ -2626,6 +2737,8 @@ function updateTracePathBar(session = null) {
 	      state.view = "compare";
 	    } else if (state.view === "cost" && state.costSessionId) {
 	      state.view = "cost";
+	    } else if (state.view === "compaction" && state.compactionSessionIds.length) {
+	      state.view = "compaction";
 	    } else if (state.view === "detail" && state.selectedSessionId) {
 	      state.view = "detail";
 	    } else {
@@ -2635,7 +2748,7 @@ function updateTracePathBar(session = null) {
         state.view = "list";
       }
     }
-    if (state.view !== "detail" && state.view !== "compare" && state.view !== "cost") {
+    if (state.view !== "detail" && state.view !== "compare" && state.view !== "cost" && state.view !== "compaction") {
       state.selectedSessionId = null;
       state.view = "list";
     }
@@ -2646,6 +2759,9 @@ function updateTracePathBar(session = null) {
     } else if (state.view === "cost" && state.costSessionId) {
       showCostView();
       await loadCostAnalysis(state.costSessionId);
+    } else if (state.view === "compaction" && state.compactionSessionIds.length) {
+      showCompactionView();
+      await loadCompaction(state.compactionSessionIds);
     } else if (state.view === "detail" && state.selectedSessionId) {
       showDetailView();
       const selected = state.sessions.find(session => session.id === state.selectedSessionId);
@@ -2734,6 +2850,7 @@ function renderAgents() {
 	  renderBulkEditControls(sessions);
 	  renderCompareLab(sessions);
 	  renderCostLab(sessions);
+	  renderCompactionLab(sessions);
 	  renderSessionPagination();
 	  if (state.loadingSessions && !state.sessions.length) {
 	    $("#pinned-panel").classList.add("hidden");
@@ -3325,29 +3442,39 @@ function openCostLab() {
   window.location.assign(sessionCostUrl(sessionId));
 }
 
+function usageBuckets(record) {
+  const usage = record?.usage || record?.response?.body?.usage || {};
+  let input = Number(usage.input_tokens) || 0;
+  const cacheRead = Number(usage.cache_read_input_tokens) || 0;
+  // OpenAI-style prompt_tokens include cached tokens while Anthropic
+  // input_tokens exclude them; subtract so both providers report
+  // disjoint fresh-input vs cache-read buckets.
+  if (usage.prompt_tokens != null || usage.input_tokens_details != null) {
+    input = Math.max(input - cacheRead, 0);
+  }
+  return {
+    input,
+    output: Number(usage.output_tokens) || 0,
+    cacheRead,
+    cacheWrite: Number(usage.cache_creation_input_tokens) || 0,
+  };
+}
+
+function isGenerationRow(buckets) {
+  // Token-count probes report only input_tokens; they are free requests,
+  // not billed generation traffic, so labs must ignore them.
+  return Boolean(buckets.output || buckets.cacheRead || buckets.cacheWrite);
+}
+
 function costUsageRows(payload) {
   const records = Array.isArray(payload?.records) ? payload.records : [];
   return records
-    .map((record, index) => {
-      const usage = record?.usage || record?.response?.body?.usage || {};
-      let input = Number(usage.input_tokens) || 0;
-      const cacheRead = Number(usage.cache_read_input_tokens) || 0;
-      // OpenAI-style prompt_tokens include cached tokens while Anthropic
-      // input_tokens exclude them; subtract so both providers report
-      // disjoint fresh-input vs cache-read buckets.
-      if (usage.prompt_tokens != null || usage.input_tokens_details != null) {
-        input = Math.max(input - cacheRead, 0);
-      }
-      return {
-        turn: Number(record?.turn) || index + 1,
-        model: record?.request?.body?.model || "",
-        input,
-        output: Number(usage.output_tokens) || 0,
-        cacheRead,
-        cacheWrite: Number(usage.cache_creation_input_tokens) || 0,
-      };
-    })
-    .filter(row => row.input || row.output || row.cacheRead || row.cacheWrite);
+    .map((record, index) => ({
+      turn: Number(record?.turn) || index + 1,
+      model: record?.request?.body?.model || "",
+      ...usageBuckets(record),
+    }))
+    .filter(isGenerationRow);
 }
 
 function costRowTotal(row) {
@@ -3583,6 +3710,222 @@ async function loadCostAnalysis(sessionId) {
   } catch (error) {
     if (requestId !== state.costRequestId) return;
     $("#cost-content").innerHTML = `<div class="cost-empty">${esc(t("cost_unable", {error: error.message}))}</div>`;
+  }
+}
+
+// Compaction lab: stitch 1-3 captures into one context timeline and mark
+// where /compact rewrote the history. Detection relies on harness-injected
+// marker strings observed in real traces.
+const COMPACTION_PIN_KEY = "claude-tap-compaction-pin";
+const COMPACT_INSTRUCTION_MARKER = "Respond with TEXT ONLY";
+const COMPACT_RESUME_MARKER = "This session is being continued from a previous conversation";
+
+function pinnedCompactionIds() {
+  try {
+    const ids = JSON.parse(localStorage.getItem(COMPACTION_PIN_KEY) || "null");
+    return Array.isArray(ids) && ids.length >= 1 && ids.length <= 3 ? ids : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function setPinnedCompactionIds(ids) {
+  if (ids && ids.length) localStorage.setItem(COMPACTION_PIN_KEY, JSON.stringify(ids));
+  else localStorage.removeItem(COMPACTION_PIN_KEY);
+}
+
+function compactionLabSessions(sessions) {
+  const byId = new Map(state.sessions.map(session => [session.id, session]));
+  const selected = Array.from(state.selectedSessionIds)
+    .map(id => byId.get(id))
+    .filter(canCompareSession);
+  if (selected.length >= 1 && selected.length <= 3) return {targets: selected, source: "selected"};
+  const pinned = (pinnedCompactionIds() || []).map(id => byId.get(id)).filter(canCompareSession);
+  if (pinned.length) return {targets: pinned, source: "pinned"};
+  return {targets: sessions.filter(canCompareSession).slice(0, 1), source: "default"};
+}
+
+function sortSessionsByStart(sessions) {
+  const startTime = session => new Date(session.started_at || session.updated_at || 0).getTime() || 0;
+  return [...sessions].sort((a, b) => startTime(a) - startTime(b));
+}
+
+function renderCompactionLab(sessions) {
+  const target = $("#compaction-lab-target");
+  const button = $("#compaction-lab-open");
+  const pinButton = $("#compaction-lab-pin");
+  if (!target || !button) return;
+  const {targets, source} = compactionLabSessions(sessions);
+  const ordered = sortSessionsByStart(targets);
+  const ready = ordered.length >= 1 && ordered.length <= 3;
+  const pinMark = source === "pinned" ? "📌 " : "";
+  target.textContent = ready
+    ? `${pinMark}${ordered.map(session => session.model || session.agent || t("unknown")).join(" → ")}`
+    : t("compaction_lab_empty");
+  button.disabled = !ready;
+  button.dataset.sessions = ready ? ordered.map(session => session.id).join(",") : "";
+  button.title = ready ? t("compaction_lab_open") : t("compaction_lab_empty");
+  if (pinButton) {
+    const hasPin = Boolean(pinnedCompactionIds());
+    pinButton.hidden = !hasPin && !(source === "selected" && ready);
+    pinButton.textContent = t(hasPin ? "compaction_lab_unpin" : "compaction_lab_pin");
+    pinButton.title = pinButton.textContent;
+    pinButton.classList.toggle("active", hasPin);
+  }
+}
+
+function toggleCompactionLabPin() {
+  if (pinnedCompactionIds()) {
+    setPinnedCompactionIds(null);
+  } else {
+    const raw = $("#compaction-lab-open")?.dataset.sessions || "";
+    const ids = raw.split(",").filter(Boolean);
+    if (!ids.length) return;
+    setPinnedCompactionIds(ids);
+  }
+  renderSessions();
+}
+
+function openCompactionLab() {
+  const raw = $("#compaction-lab-open")?.dataset.sessions || "";
+  const ids = raw.split(",").filter(Boolean);
+  if (!ids.length) return;
+  setPinnedCompactionIds(ids);
+  window.location.assign(sessionCompactionUrl(ids));
+}
+
+function recordUserTextIncludes(record, marker, {lastMessage = false} = {}) {
+  const messages = record?.request?.body?.messages;
+  if (!Array.isArray(messages) || !messages.length) return false;
+  const userMessages = messages.filter(message => message?.role === "user");
+  if (!userMessages.length) return false;
+  const scan = lastMessage ? [userMessages[userMessages.length - 1]] : [userMessages[0]];
+  for (const message of scan) {
+    const content = message?.content;
+    if (typeof content === "string" && content.includes(marker)) return true;
+    if (Array.isArray(content)) {
+      for (const block of content) {
+        if (block?.type === "text" && typeof block.text === "string" && block.text.includes(marker)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function compactionRows(payloads) {
+  const rows = [];
+  payloads.forEach((payload, sessionIndex) => {
+    const records = Array.isArray(payload?.records) ? payload.records : [];
+    records.forEach((record, index) => {
+      const buckets = usageBuckets(record);
+      if (!isGenerationRow(buckets)) return;
+      rows.push({
+        sessionIndex,
+        turn: Number(record?.turn) || index + 1,
+        promptSize: buckets.input + buckets.cacheRead + buckets.cacheWrite,
+        output: buckets.output,
+        isCompact: recordUserTextIncludes(record, COMPACT_INSTRUCTION_MARKER, {lastMessage: true}),
+        isResume: recordUserTextIncludes(record, COMPACT_RESUME_MARKER),
+      });
+    });
+  });
+  return rows;
+}
+
+function compactionChart(rows) {
+  const width = 940;
+  const height = 280;
+  const pad = {top: 18, right: 12, bottom: 42, left: 78};
+  const innerW = width - pad.left - pad.right;
+  const innerH = height - pad.top - pad.bottom;
+  const max = Math.max(...rows.map(row => row.promptSize), 1);
+  const pointX = index => pad.left + (rows.length > 1 ? (innerW * index) / (rows.length - 1) : innerW / 2);
+  const pointY = value => pad.top + innerH - (innerH * value) / max;
+  let grid = "";
+  for (let line = 0; line <= 4; line += 1) {
+    const y = pad.top + innerH - (innerH * line) / 4;
+    grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-dasharray="3 3"></line>`
+      + `<text x="${pad.left - 8}" y="${(y + 3).toFixed(1)}" text-anchor="end" class="cost-axis">${fmtTok((max * line) / 4)}</text>`;
+  }
+  const points = rows.map((row, index) => `${pointX(index).toFixed(1)},${pointY(row.promptSize).toFixed(1)}`);
+  const baseY = pad.top + innerH;
+  const area = `M${pad.left},${baseY} L${points.join(" L")} L${pointX(rows.length - 1).toFixed(1)},${baseY} Z`;
+  const labelEvery = Math.max(1, Math.ceil(rows.length / 14));
+  let marks = "";
+  rows.forEach((row, index) => {
+    const x = pointX(index);
+    const color = row.isCompact ? "var(--red)" : row.isResume ? "var(--green)" : "var(--blue)";
+    marks += `<circle cx="${x.toFixed(1)}" cy="${pointY(row.promptSize).toFixed(1)}" r="${row.isCompact || row.isResume ? 4.5 : 3}" fill="${color}"><title>#${row.turn} · ${fmtTok(row.promptSize)}</title></circle>`;
+    if (row.isCompact || row.isResume) {
+      const label = t(row.isCompact ? "compaction_marker_compact" : "compaction_marker_resume");
+      marks += `<line class="compaction-marker" x1="${x.toFixed(1)}" y1="${pad.top}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="${color}" stroke-dasharray="5 4"></line>`
+        + `<text x="${x.toFixed(1)}" y="${(pad.top - 4).toFixed(1)}" text-anchor="middle" class="cost-axis" fill="${color}">${esc(label)}</text>`;
+    }
+    if (index % labelEvery === 0) {
+      marks += `<text x="${x.toFixed(1)}" y="${height - 10}" text-anchor="middle" class="cost-axis">#${row.turn}</text>`;
+    }
+  });
+  return `<svg class="cost-svg" viewBox="0 0 ${width} ${height}" role="img">${grid}`
+    + `<path d="${area}" fill="var(--blue)" opacity="0.1"></path>`
+    + `<polyline points="${points.join(" ")}" fill="none" stroke="var(--blue)" stroke-width="2"></polyline>`
+    + `${marks}</svg>`;
+}
+
+function renderCompaction(payloads) {
+  const rows = compactionRows(payloads);
+  $("#compaction-subtitle").textContent = state.compactionSessionIds.join(" → ");
+  if (!rows.length) {
+    $("#compaction-content").innerHTML = `<div class="cost-empty">${esc(t("cost_no_usage"))}</div>`;
+    return;
+  }
+  const compactIndex = rows.findIndex(row => row.isCompact);
+  const peak = Math.max(...rows.map(row => row.promptSize));
+  const summaryTokens = compactIndex >= 0 ? rows[compactIndex].output : 0;
+  const afterRows = compactIndex >= 0 ? rows.slice(compactIndex + 1) : [];
+  const postContext = afterRows.length ? afterRows[0].promptSize : 0;
+  const reduction = compactIndex >= 0 && peak > 0 && afterRows.length
+    ? `-${(((peak - postContext) / peak) * 100).toFixed(1)}%`
+    : "—";
+  const tiles = [
+    {label: t("compaction_calls"), value: fmtTok(rows.length)},
+    {label: t("compaction_peak"), value: fmtTok(peak)},
+    {label: t("compaction_summary_tokens"), value: compactIndex >= 0 ? fmtTok(summaryTokens) : "—"},
+    {label: t("compaction_post_context"), value: afterRows.length ? fmtTok(postContext) : "—"},
+    {label: t("compaction_reduction"), value: reduction},
+  ];
+  const noteKeys = ["compaction_note_mechanics", "compaction_note_cache", "compaction_note_data"];
+  const detected = compactIndex >= 0
+    ? ""
+    : `<div class="cost-empty">${esc(t("compaction_none"))}</div>`;
+  $("#compaction-content").innerHTML = `
+    <div class="cost-tiles">${tiles
+      .map(tile => `<div class="cost-tile"><div class="cost-tile-label">${esc(tile.label)}</div><div class="cost-tile-value">${tile.value}</div></div>`)
+      .join("")}</div>
+    ${detected}
+    <div class="cost-card">
+      <div class="cost-card-head"><span class="cost-card-title">${esc(t("compaction_chart_title"))}</span></div>
+      ${compactionChart(rows)}
+    </div>
+    <div class="cost-card">
+      <div class="cost-card-head"><span class="cost-card-title">${esc(t("compaction_notes_title"))}</span></div>
+      <div class="cost-formula">${noteKeys.map(key => `<div class="cost-formula-row">${esc(t(key))}</div>`).join("")}</div>
+    </div>
+  `;
+}
+
+async function loadCompaction(sessionIds) {
+  const requestId = state.compactionRequestId + 1;
+  state.compactionRequestId = requestId;
+  $("#compaction-content").innerHTML = `<div class="cost-empty">${loadingMarkup(t("compaction_loading"))}</div>`;
+  try {
+    const payloads = await Promise.all(sessionIds.map(sessionId => fetchJSON(
+      `/api/sessions/${encodeURIComponent(sessionId)}/records?offset=0&limit=2000`
+    )));
+    if (requestId !== state.compactionRequestId || state.view !== "compaction") return;
+    renderCompaction(payloads);
+  } catch (error) {
+    if (requestId !== state.compactionRequestId) return;
+    $("#compaction-content").innerHTML = `<div class="cost-empty">${esc(t("compaction_unable", {error: error.message}))}</div>`;
   }
 }
 
@@ -3922,16 +4265,19 @@ function showListView() {
   state.compareSessionIds = [];
   state.comparePayloads = null;
   state.costSessionId = null;
-  document.body.classList.remove("detail-route", "compare-route", "cost-route");
+  state.compactionSessionIds = [];
+  document.body.classList.remove("detail-route", "compare-route", "cost-route", "compaction-route");
   $("#list-view").classList.remove("hidden");
   $("#detail-view").classList.add("hidden");
   $("#compare-view").classList.add("hidden");
   $("#cost-view").classList.add("hidden");
+  $("#compaction-view").classList.add("hidden");
   updateTracePathBar();
   if (
     window.location.pathname.match(SESSION_DETAIL_ROUTE)
     || window.location.pathname.match(SESSION_COMPARE_ROUTE)
     || window.location.pathname.match(SESSION_COST_ROUTE)
+    || window.location.pathname.match(SESSION_COMPACTION_ROUTE)
   ) {
     history.replaceState(null, "", "/dashboard");
   }
@@ -3939,30 +4285,44 @@ function showListView() {
 
 function showDetailView() {
   document.body.classList.add("detail-route");
-  document.body.classList.remove("compare-route", "cost-route");
+  document.body.classList.remove("compare-route", "cost-route", "compaction-route");
   $("#list-view").classList.add("hidden");
   $("#detail-view").classList.remove("hidden");
   $("#compare-view").classList.add("hidden");
   $("#cost-view").classList.add("hidden");
+  $("#compaction-view").classList.add("hidden");
 }
 
 function showCompareView() {
   document.body.classList.add("compare-route");
-  document.body.classList.remove("detail-route", "cost-route");
+  document.body.classList.remove("detail-route", "cost-route", "compaction-route");
   $("#list-view").classList.add("hidden");
   $("#detail-view").classList.add("hidden");
   $("#compare-view").classList.remove("hidden");
   $("#cost-view").classList.add("hidden");
+  $("#compaction-view").classList.add("hidden");
   updateTracePathBar();
 }
 
 function showCostView() {
   document.body.classList.add("cost-route");
-  document.body.classList.remove("detail-route", "compare-route");
+  document.body.classList.remove("detail-route", "compare-route", "compaction-route");
   $("#list-view").classList.add("hidden");
   $("#detail-view").classList.add("hidden");
   $("#compare-view").classList.add("hidden");
   $("#cost-view").classList.remove("hidden");
+  $("#compaction-view").classList.add("hidden");
+  updateTracePathBar();
+}
+
+function showCompactionView() {
+  document.body.classList.add("compaction-route");
+  document.body.classList.remove("detail-route", "compare-route", "cost-route");
+  $("#list-view").classList.add("hidden");
+  $("#detail-view").classList.add("hidden");
+  $("#compare-view").classList.add("hidden");
+  $("#cost-view").classList.add("hidden");
+  $("#compaction-view").classList.remove("hidden");
   updateTracePathBar();
 }
 
@@ -4438,6 +4798,8 @@ $("#status-filter").addEventListener("change", event => {
 	$("#compare-lab-open").addEventListener("click", openCompareLab);
 	$("#cost-lab-open").addEventListener("click", openCostLab);
 	$("#cost-lab-pin").addEventListener("click", toggleCostLabPin);
+	$("#compaction-lab-open").addEventListener("click", openCompactionLab);
+	$("#compaction-lab-pin").addEventListener("click", toggleCompactionLabPin);
 	$("#compare-lab-pin").addEventListener("click", toggleCompareLabPin);
 	$("#delete-selected-sessions").addEventListener("click", () => {
 	  showDeleteSessionDialog(selectedDeletableSessions().map(session => session.id));
@@ -4461,6 +4823,7 @@ if (dashboardQuitButton) {
 $("#lang-select").addEventListener("change", event => setLang(event.target.value));
 document.querySelector("[data-compare-back]")?.addEventListener("click", showListView);
 document.querySelector("[data-cost-back]")?.addEventListener("click", showListView);
+document.querySelector("[data-compaction-back]")?.addEventListener("click", showListView);
 $("#compare-swap")?.addEventListener("click", swapComparisonSides);
 
 	applyI18n();
