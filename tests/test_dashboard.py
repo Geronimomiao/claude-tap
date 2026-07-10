@@ -611,7 +611,7 @@ def test_dashboard_first_message_skips_claude_title_generation_request(trace_db,
     assert summary["first_user"] == "Hi"
 
 
-def _web_fetch_digest_record(turn: int) -> dict:
+def _web_fetch_digest_record(turn: int, model: str = "claude-fable-5") -> dict:
     return {
         "timestamp": "2026-07-10T17:20:00+00:00",
         "turn": turn,
@@ -619,7 +619,7 @@ def _web_fetch_digest_record(turn: int) -> dict:
             "method": "POST",
             "path": "/v1/messages?beta=true",
             "body": {
-                "model": "claude-fable-5",
+                "model": model,
                 "system": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
                 "messages": [
                     {
@@ -636,12 +636,36 @@ def _web_fetch_digest_record(turn: int) -> dict:
         },
         "response": {
             "status": 200,
-            "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "Latest is v24."}]},
+            "body": {"model": model, "content": [{"type": "text", "text": "Latest is v24."}]},
         },
     }
 
 
-def _agent_state_probe_record(turn: int) -> dict:
+def _web_search_record(turn: int, model: str = "claude-haiku-4-5-20251001") -> dict:
+    return {
+        "timestamp": "2026-07-10T17:20:30+00:00",
+        "turn": turn,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages?beta=true",
+            "body": {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "Perform a web search for the query: Node.js latest release",
+                    }
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {"model": model, "content": [{"type": "text", "text": "Results."}]},
+        },
+    }
+
+
+def _agent_state_probe_record(turn: int, model: str = "claude-fable-5") -> dict:
     return {
         "timestamp": "2026-07-10T17:21:00+00:00",
         "turn": turn,
@@ -649,7 +673,7 @@ def _agent_state_probe_record(turn: int) -> dict:
             "method": "POST",
             "path": "/v1/messages?beta=true",
             "body": {
-                "model": "claude-fable-5",
+                "model": model,
                 "max_tokens": 3072,
                 "system": (
                     "A user kicked off a Claude Code agent to do a coding task and walked away. "
@@ -669,7 +693,76 @@ def _agent_state_probe_record(turn: int) -> dict:
         },
         "response": {
             "status": 200,
-            "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "working"}]},
+            "body": {"model": model, "content": [{"type": "text", "text": "working"}]},
+        },
+    }
+
+
+def _title_generation_record(turn: int, model: str = "claude-haiku-4-5-20251001") -> dict:
+    title_schema = {
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"],
+        "additionalProperties": False,
+    }
+    return {
+        "timestamp": "2026-07-10T17:18:02+00:00",
+        "turn": turn,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages?beta=true",
+            "body": {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "<session>\nCheck the latest Node.js version.\n</session>\n\n"
+                                    "Write the title in the predominant language of the session."
+                                ),
+                            }
+                        ],
+                    }
+                ],
+                "system": [
+                    {
+                        "type": "text",
+                        "text": "Generate a concise, sentence-case title (3-7 words).",
+                    }
+                ],
+                "output_config": {"format": {"type": "json_schema", "schema": title_schema}},
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {"model": model, "content": [{"type": "text", "text": "Node version check"}]},
+        },
+    }
+
+
+def _main_conversation_record(turn: int, model: str = "claude-fable-5") -> dict:
+    return {
+        "timestamp": "2026-07-10T17:19:00+00:00",
+        "turn": turn,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages?beta=true",
+            "body": {
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Check the latest Node.js version."}],
+                    }
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {"model": model, "content": [{"type": "text", "text": "Checking."}]},
         },
     }
 
@@ -755,6 +848,63 @@ def test_dashboard_first_message_falls_back_to_title_session_content(trace_db, t
     summary = list_trace_sessions()[0]
 
     assert summary["first_user"] == "Check the latest Node.js version."
+
+
+def test_dashboard_model_prefers_main_conversation_records(trace_db, tmp_path: Path) -> None:
+    trace_path = tmp_path / "2026-07-10" / "trace_175444.jsonl"
+    aux_model = "claude-haiku-4-5-20251001"
+    _write_jsonl(
+        trace_path,
+        [
+            _title_generation_record(1, model=aux_model),
+            _main_conversation_record(2, model="claude-fable-5"),
+            _web_search_record(3, model=aux_model),
+            _web_fetch_digest_record(4, model=aux_model),
+            _agent_state_probe_record(5, model=aux_model),
+        ],
+    )
+
+    _seed_legacy(tmp_path)
+    summary = list_trace_sessions()[0]
+
+    assert summary["model"] == "claude-fable-5"
+
+
+def test_dashboard_repairs_model_when_boundary_records_are_auxiliary(trace_db) -> None:
+    store = get_trace_store()
+    session_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 17, 54, tzinfo=timezone.utc),
+    )
+    aux_model = "claude-haiku-4-5-20251001"
+    store.append_record(session_id, _title_generation_record(1, model=aux_model))
+    store.append_record(session_id, _main_conversation_record(2, model="claude-fable-5"))
+    store.append_record(session_id, _agent_state_probe_record(3, model=aux_model))
+    store.finalize_session(session_id, {"api_calls": 3})
+
+    stale_summary = {
+        "id": session_id,
+        "status": "complete",
+        "record_count": 3,
+        "updated_at": "2026-07-10T17:54:44+00:00",
+        "first_user": "Check the latest Node.js version.",
+        "model": aux_model,
+        "summary_version": 5,
+    }
+    conn = store._connect()
+    conn.execute(
+        "UPDATE sessions SET status = 'complete', summary_json = ? WHERE id = ?",
+        (json.dumps(stale_summary, ensure_ascii=False, separators=(",", ":")), session_id),
+    )
+    conn.commit()
+
+    summary = next(item for item in list_trace_sessions() if item["id"] == session_id)
+    cached = json.loads(store.load_session_row(session_id)["summary_json"])
+
+    assert summary["model"] == "claude-fable-5"
+    assert cached["model"] == "claude-fable-5"
+    assert cached["summary_version"] == DASHBOARD_SUMMARY_VERSION
 
 
 def test_dashboard_first_message_skips_injected_user_content_blocks(trace_db, tmp_path: Path) -> None:
