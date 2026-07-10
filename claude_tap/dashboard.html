@@ -2216,7 +2216,7 @@ const DASHBOARD_I18N = {
     compare_analysis_system_channel: "{channel}; {chars} prompt chars; {blocks} instruction blocks",
     compare_analysis_tool_value: "{count} tools: {names}",
     compare_analysis_workflow_value: "{records} records; {generations} generations; {transport}",
-    compare_analysis_answer_value: "{chars} chars; {links} source links",
+    compare_analysis_answer_value: "{chars} chars; {links} source links; versions: {versions}",
     compare_loading: "Loading comparison...",
     compare_unable: "Unable to compare sessions: {error}",
     compare_baseline: "Baseline",
@@ -2453,7 +2453,7 @@ const DASHBOARD_I18N = {
     compare_analysis_system_channel: "{channel}；{chars} 个 prompt 字符；{blocks} 个指令块",
     compare_analysis_tool_value: "{count} 个工具：{names}",
     compare_analysis_workflow_value: "{records} 条记录；{generations} 次生成；{transport}",
-    compare_analysis_answer_value: "{chars} 个字符；{links} 个来源链接",
+    compare_analysis_answer_value: "{chars} 个字符；{links} 个来源链接；版本：{versions}",
     compare_loading: "正在加载对比...",
     compare_unable: "无法对比会话：{error}",
     compare_baseline: "基线",
@@ -4465,7 +4465,12 @@ function comparisonWorkflowProfile(side) {
 
 function comparisonAnswerProfile(side) {
   const links = (side.response.match(/https?:\/\/[^\s)\]]+/g) || []).length;
-  return t("compare_analysis_answer_value", {chars: fmtNumber(side.response.length), links: fmtNumber(links)});
+  const versions = Array.from(new Set(side.response.match(/\bv?\d+\.\d+\.\d+\b/gi) || [])).slice(0, 5);
+  return t("compare_analysis_answer_value", {
+    chars: fmtNumber(side.response.length),
+    links: fmtNumber(links),
+    versions: versions.join(", ") || "—",
+  });
 }
 
 function renderComparisonInsights(left, right) {
