@@ -57,14 +57,14 @@ These rules apply to every local dashboard restart, UI check, trace validation, 
 1. Start the dashboard without opening the user's browser:
 
    ```bash
-   BROWSER=/usr/bin/false uv run python -m claude_tap dashboard --tap-no-open
+   BROWSER=/usr/bin/true uv run python -m claude_tap dashboard --tap-no-open
    ```
 
 2. Never use the user's default browser, Chrome profile, Chrome extension, or browser history for routine automated verification. Only use those surfaces when the user explicitly asks for them.
 3. Run every local pytest command with the external browser disabled:
 
    ```bash
-   BROWSER=/usr/bin/false uv run pytest tests/ -x --timeout=60
+   BROWSER=/usr/bin/true uv run pytest tests/ -x --timeout=60
    ```
 
 4. Run browser checks in an isolated headless browser. Prefer the repository's pytest Playwright tests or an explicit `chromium.launch(headless=True)` context. Do not use `playwright-cli open` for routine local verification.
