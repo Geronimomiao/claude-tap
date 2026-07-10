@@ -1948,10 +1948,10 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 assert "claude-fable-5" in await page.locator("#compare-lab-pair").inner_text()
                 assert "claude-opus-4-8" in await page.locator("#compare-lab-pair").inner_text()
                 assert " ".join((await lab.locator(".diff-legend-item.removed").inner_text()).split()) == (
-                    "− Deleted from baseline"
+                    "− Only in baseline"
                 )
                 assert " ".join((await lab.locator(".diff-legend-item.added").inner_text()).split()) == (
-                    "+ Added in compared"
+                    "+ Only in compared"
                 )
                 assert not await page.locator("#compare-lab-open").is_disabled()
                 await page.locator("#edit-sessions").click()
@@ -1971,6 +1971,8 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 assert await page.locator(".compare-section").count() == 7
                 assert await page.locator(".compare-tool-cell.added").count() == 1
                 assert await page.locator(".compare-tool-cell.removed").count() == 1
+                assert await page.locator(".compare-tool-cell.absent").count() == 2
+                assert await page.locator(".compare-tool-cell.absent").first.inner_text() == "Not in this session"
                 assert await page.locator(".compare-diff-cell.added").count() > 0
                 assert await page.locator(".compare-diff-cell.removed").count() > 0
                 assert await page.locator(".compare-diff-row.modified").count() > 0
@@ -1980,7 +1982,7 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 ]
                 assert " ".join(
                     (await page.locator(".compare-workbench-bar .diff-legend-item.removed").inner_text()).split()
-                ) == ("− Deleted from baseline")
+                ) == ("− Only in baseline")
                 assert (
                     await page.locator("#diff-system .compare-diff-cell.removed .compare-diff-sign").first.inner_text()
                     == "−"

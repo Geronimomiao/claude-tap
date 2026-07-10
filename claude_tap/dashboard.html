@@ -1283,7 +1283,7 @@ pre {
 .compare-diff-sign { color: var(--text-tertiary); font-weight: 800; user-select: none; }
 .compare-diff-cell.removed { background: var(--red-bg); color: var(--red); }
 .compare-diff-cell.added { background: var(--green-bg); color: var(--green); }
-.compare-diff-cell.empty { background: var(--bg); }
+.compare-diff-cell.empty { background: repeating-linear-gradient(-45deg, var(--bg) 0 6px, var(--bg-hover) 6px 12px); }
 .compare-diff-row.removed .compare-line-number.left,
 .compare-diff-row.modified .compare-line-number.left { background: var(--red-bg); color: var(--red); }
 .compare-diff-row.added .compare-line-number.right,
@@ -1291,6 +1291,11 @@ pre {
 .compare-tool-cell.removed { background: var(--red-bg); color: var(--red); }
 .compare-tool-cell.added { background: var(--green-bg); color: var(--green); }
 .compare-tool-cell.changed { background: var(--amber-bg); color: var(--amber); }
+.compare-tool-cell.absent {
+  background: repeating-linear-gradient(-45deg, var(--bg) 0 6px, var(--bg-hover) 6px 12px);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
 .compare-raw-grid { min-width: 760px; }
 .compare-raw-label { padding: 14px 18px; color: var(--text-tertiary); font-size: 11px; font-weight: 650; }
 .compare-raw {
@@ -1651,8 +1656,8 @@ const DASHBOARD_I18N = {
 	    compare_lab_title: "Diff lab",
 	    compare_lab_open: "Open Diff",
 	    compare_lab_empty: "At least two sessions are required",
-	    compare_deleted: "Deleted from baseline",
-	    compare_added: "Added in compared",
+	    compare_deleted: "Only in baseline",
+	    compare_added: "Only in compared",
 	    delete_selected: "Delete selected",
 	    load_more_sessions: "Load more sessions",
 	    loading_more_sessions: "Loading more sessions...",
@@ -1715,6 +1720,7 @@ const DASHBOARD_I18N = {
     compare_changed: "Changed",
     compare_same: "Same",
     compare_no_content: "No captured content",
+    compare_tool_absent: "Not in this session",
     compare_shared_tools: "{count} shared tools",
     compare_chars: "{count} characters",
     no_session_selected: "No session selected.",
@@ -1793,8 +1799,8 @@ const DASHBOARD_I18N = {
 	    compare_lab_title: "Diff 实验台",
 	    compare_lab_open: "打开 Diff",
 	    compare_lab_empty: "至少需要两个会话",
-	    compare_deleted: "基线中删除",
-	    compare_added: "对比项新增",
+	    compare_deleted: "仅基线有",
+	    compare_added: "仅对比项有",
 	    delete_selected: "删除所选",
 	    load_more_sessions: "加载更多会话",
 	    loading_more_sessions: "正在加载更多会话...",
@@ -1857,6 +1863,7 @@ const DASHBOARD_I18N = {
     compare_changed: "有差异",
     compare_same: "相同",
     compare_no_content: "没有捕获到内容",
+    compare_tool_absent: "此会话无该工具",
     compare_shared_tools: "{count} 个相同工具",
     compare_chars: "{count} 个字符",
     no_session_selected: "未选择会话。",
@@ -2861,8 +2868,8 @@ function renderComparisonTools(leftTools, rightTools) {
     return `
       <div class="compare-tool-row">
         <div class="compare-row-label">${esc(name)}</div>
-        <div class="compare-tool-cell ${!right || changed ? "removed" : ""}">${left && (!right || changed) ? "− " : ""}${esc(comparisonToolSummary(left))}</div>
-        <div class="compare-tool-cell ${!left || changed ? "added" : ""}">${right && (!left || changed) ? "+ " : ""}${esc(comparisonToolSummary(right))}</div>
+        <div class="compare-tool-cell ${!left ? "absent" : !right || changed ? "removed" : ""}">${!left ? esc(t("compare_tool_absent")) : `${!right || changed ? "− " : ""}${esc(comparisonToolSummary(left))}`}</div>
+        <div class="compare-tool-cell ${!right ? "absent" : !left || changed ? "added" : ""}">${!right ? esc(t("compare_tool_absent")) : `${!left || changed ? "+ " : ""}${esc(comparisonToolSummary(right))}`}</div>
       </div>
     `;
   }).join("");
