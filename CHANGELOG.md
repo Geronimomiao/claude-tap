@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Skip Codex-injected recommended plugin catalogs when selecting the dashboard's first user prompt.
+- Label dashboard trace records in stable display order and make each record collapsible.
 
 
 
