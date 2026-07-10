@@ -237,6 +237,21 @@ class TraceStore:
         conn = self._connect()
         return conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
 
+    def get_dashboard_pref(self, key: str) -> str | None:
+        conn = self._connect()
+        row = conn.execute("SELECT value FROM dashboard_prefs WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else None
+
+    def set_dashboard_pref(self, key: str, value: str) -> None:
+        with self._write_lock:
+            conn = self._connect()
+            conn.execute(
+                "INSERT INTO dashboard_prefs (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            conn.commit()
+
     def find_codex_app_session_row(self, codex_app_session_id: str) -> sqlite3.Row | None:
         codex_app_session_id = codex_app_session_id.strip()
         if not codex_app_session_id:
@@ -1099,6 +1114,14 @@ class TraceStore:
         )
 
     def _create_v4_tables(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS dashboard_prefs (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """
+        )
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS record_blobs (
