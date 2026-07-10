@@ -3,7 +3,7 @@
 // Persist section collapse state across turn switches.
 // Key: section title text, Value: true = open, false = collapsed.
 const sectionCollapseState = {};
-let detailViewMode = 'default';
+let detailViewMode = new URLSearchParams(window.location.search || '').get('detail') === 'trace' ? 'trace' : 'default';
 let traceFormatMode = 'json';
 let detailLoadToken = 0;
 

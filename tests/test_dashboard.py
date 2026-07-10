@@ -807,6 +807,7 @@ def test_dashboard_detail_navigation_uses_lazy_shell_route() -> None:
     assert "state.detailRecordTotal = totalRecords" in template
     assert "state.detailFingerprint = sessionDetailFingerprint(session)" in template
     assert "function ensureViewerFrame(session)" in template
+    assert '/html?detail=trace"' in template
     assert "data-tab-toggle" in template
     assert 'container.querySelector("[data-viewer-frame]")' in template
     assert "setDetailTab(event.currentTarget.dataset.tab, session)" in template
@@ -1795,7 +1796,14 @@ async def test_dashboard_session_route_serves_standalone_viewer(trace_db, tmp_pa
                 assert await page.locator(".viewer-frame").count() == 1
                 frame = page.frame_locator(".viewer-frame")
                 await frame.locator(".sidebar-item").first.wait_for(timeout=5000)
+                trace_tab = frame.locator('#detail .detail-tab[data-tab="trace"].active')
+                await trace_tab.wait_for(timeout=5000)
+                await frame.locator("#detail .trace-block").first.wait_for(timeout=5000)
+                default_tab = frame.locator('#detail .detail-tab[data-tab="default"]')
+                await default_tab.click()
                 await frame.locator("#detail .section").first.wait_for(timeout=5000)
+                await frame.locator('#detail .detail-tab[data-tab="trace"]').click()
+                await trace_tab.wait_for(timeout=5000)
                 assert not await frame.locator("#drop-zone").is_visible()
                 await page.locator(".viewer-frame").evaluate("(frame) => { frame.dataset.reuseMarker = 'kept'; }")
                 assert await tab_toggle.inner_text() == "Trace"
