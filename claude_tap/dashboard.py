@@ -34,7 +34,7 @@ CLIENT_LABELS = {
     "pi": "Pi",
     "qoder": "Qoder",
 }
-DASHBOARD_SUMMARY_VERSION = 5
+DASHBOARD_SUMMARY_VERSION = 6
 VALID_SESSION_STATUSES = {"active", "complete", "error", "empty"}
 _REDACTED_VALUE = "REDACTED"
 _SENSITIVE_KEY_NAMES = {
@@ -268,8 +268,11 @@ def merge_record_into_summary(
     )
     summary["duration_ms"] = int(summary.get("duration_ms") or 0) + _duration_ms(record)
     model = _record_model(record)
-    if model:
-        summary["model"] = model
+    if model and (not summary.get("model") or summary.get("model_provisional")):
+        is_aux = _is_auxiliary_request(_record_request_body(record))
+        if not summary.get("model") or not is_aux:
+            summary["model"] = model
+            summary["model_provisional"] = is_aux
     timestamp = _timestamp_from_record(record)
     if timestamp:
         summary["updated_at"] = timestamp
@@ -359,6 +362,8 @@ def _session_summary_from_row(
                 boundary_records = store.load_boundary_records(row["id"])
                 if boundary_records:
                     summary = _summary_from_boundary_records(row, boundary_records, cached)
+                    if summary.get("model_provisional"):
+                        summary = _repair_summary_model(store, row["id"], summary)
                     store.store_summary(row["id"], summary)
                     return summary
             return _normalize_cached_session_summary(row, cached)
@@ -462,7 +467,6 @@ def _summary_from_boundary_records(
         "total_tokens",
         "duration_ms",
         "turn_count",
-        "model",
         "error",
     ):
         if cached.get(key):
@@ -471,6 +475,24 @@ def _summary_from_boundary_records(
     summary["record_count"] = int(row["record_count"] or summary.get("record_count") or 0)
     summary["turn_count"] = max(int(summary.get("turn_count") or 0), summary["record_count"])
     return redact_dashboard_summary(summary)
+
+
+_MODEL_REPAIR_SCAN_LIMIT = 25
+
+
+def _repair_summary_model(store: TraceStore, session_id: str, summary: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the main-conversation model when boundary records are all auxiliary."""
+    try:
+        records = store.load_records(session_id, limit=_MODEL_REPAIR_SCAN_LIMIT)
+    except (OSError, sqlite3.Error, ValueError):
+        return summary
+    for record in records:
+        model = _record_model(record)
+        if model and not _is_auxiliary_request(_record_request_body(record)):
+            summary["model"] = model
+            summary["model_provisional"] = False
+            break
+    return summary
 
 
 def _normalize_cached_session_summary(row: sqlite3.Row, cached: dict[str, Any]) -> dict[str, Any]:
@@ -550,6 +572,7 @@ def _summarize_session(
     agent = _infer_agent(records, manifest_entry)
     input_tokens = output_tokens = cache_read_tokens = cache_create_tokens = 0
     models: dict[str, int] = {}
+    main_model = ""
     duration_ms = 0
     turns: set[int] = set()
 
@@ -562,6 +585,8 @@ def _summarize_session(
         model = _record_model(record)
         if model:
             models[model] = models.get(model, 0) + 1
+            if not main_model and not _is_auxiliary_request(_record_request_body(record)):
+                main_model = model
         duration_ms += _duration_ms(record)
         turn = record.get("turn")
         if isinstance(turn, int):
@@ -605,7 +630,8 @@ def _summarize_session(
             "cache_read_tokens": cache_read_tokens,
             "cache_create_tokens": cache_create_tokens,
             "total_tokens": input_tokens + output_tokens + cache_read_tokens + cache_create_tokens,
-            "model": _top_key(models) or _record_model(last_record) or "unknown",
+            "model": main_model or _top_key(models) or _record_model(last_record) or "unknown",
+            "model_provisional": not main_model,
             "first_user": _first_user_preview(preview_records),
             "last_response": _last_response_preview(preview_records),
             "error": _first_error(error_display_records),
@@ -1080,7 +1106,10 @@ def _is_claude_title_generation_request(body: Any) -> bool:
     )
 
 
-_SIDE_REQUEST_TEXT_PREFIXES = ("Web page content:\n---",)
+_SIDE_REQUEST_TEXT_PREFIXES = (
+    "Web page content:\n---",
+    "Perform a web search for the query:",
+)
 _SIDE_REQUEST_SYSTEM_MARKERS = ("A user kicked off a Claude Code agent to do a coding task and walked away",)
 
 
@@ -1094,6 +1123,18 @@ def _is_agent_side_request(body: Any, text: str) -> bool:
         return False
     system_text = _content_text(body.get("system"))
     return any(marker in system_text for marker in _SIDE_REQUEST_SYSTEM_MARKERS)
+
+
+def _record_request_body(record: dict[str, Any]) -> Any:
+    request = record.get("request")
+    return request.get("body") if isinstance(request, dict) else None
+
+
+def _is_auxiliary_request(body: Any) -> bool:
+    """True for requests that support the session without carrying the main conversation."""
+    if _is_claude_title_generation_request(body):
+        return True
+    return _is_agent_side_request(body, _request_user_text(body))
 
 
 def _last_response_preview(records: list[dict[str, Any]]) -> str:
