@@ -1,5 +1,17 @@
 """Unit contracts for the dashboard's side-by-side line comparison."""
 
+from __future__ import annotations
+
+import re
+import shutil
+import subprocess
+import textwrap
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _line_diff_rows(left_text: str, right_text: str) -> list[tuple[str, str, str]]:
     """Mirror dashboard.html lineDiffRows for fast alignment coverage."""
@@ -73,3 +85,38 @@ def test_line_diff_rows_handles_content_present_on_only_one_side() -> None:
     assert _line_diff_rows("", "tool: Research") == [
         ("", "tool: Research", "added"),
     ]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for dashboard JS unit tests")
+def test_comparison_tool_summary_skips_leading_blank_description_lines() -> None:
+    dashboard_html = (REPO_ROOT / "claude_tap" / "dashboard.html").read_text(encoding="utf-8")
+    match = re.search(r"function comparisonToolSummary\(tool\) \{.*?\n\}", dashboard_html, re.DOTALL)
+    assert match, "comparisonToolSummary not found in dashboard.html"
+
+    script = match.group(0) + textwrap.dedent(
+        r"""
+
+        const assert = require('assert/strict');
+        assert.equal(
+          comparisonToolSummary({ name: 'ListMcpResourcesTool', value: { description: '\nList available resources.\nDetails follow.' } }),
+          'List available resources.',
+        );
+        assert.equal(
+          comparisonToolSummary({ name: 'Read', value: { description: 'Reads a file.\nMore.' } }),
+          'Reads a file.',
+        );
+        assert.equal(comparisonToolSummary({ name: 'Bash', value: { description: '\n  \n' } }), 'Bash');
+        assert.equal(comparisonToolSummary({ name: 'Bash', value: {} }), 'Bash');
+        assert.equal(comparisonToolSummary(null), '—');
+        console.log('ok');
+        """
+    )
+    result = subprocess.run(
+        ["node", "-e", script],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"
