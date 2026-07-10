@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>图解 · Workflow 形态图谱 · claude-tap 实验台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,500;9..144,0,600;9..144,1,500&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#f4f1e9;--paper2:#faf8f2;--card:#fffdf7;--ink:#211e18;--ink2:#4a463c;--mut:#9c9483;
+    --line:#e6e0d2;--line2:#d9d2c0;--req:#15616d;--res:#3f7d4e;--amber:#bd6a30;--gold:#caa24a;--nul:#bb3b53;
+    --gut:74px;}
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;color:var(--ink);font-family:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
+    background-color:var(--paper);background-image:radial-gradient(var(--line) 1px,transparent 1px);
+    background-size:22px 22px;background-position:-11px -11px;line-height:1.7}
+  header{padding:18px 24px 14px;border-bottom:1.5px solid var(--ink);background:linear-gradient(180deg,var(--paper2),rgba(250,248,242,.85));position:relative;overflow:hidden}
+  header::after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;border-radius:50%;
+    background:radial-gradient(circle at 40% 40%,rgba(21,97,109,.10),transparent 62%);pointer-events:none}
+  .kicker{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--amber);font-weight:500}
+  h1{margin:2px 0 0;font-family:"Fraunces",serif;font-weight:600;font-size:27px;letter-spacing:-.015em}
+  h1 em{font-style:italic;color:var(--req)}
+  .lead{margin:8px 0 0;font-size:13.5px;color:var(--ink2);max-width:660px}
+  .back{display:inline-block;margin-top:11px;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;
+    color:var(--req);text-decoration:none;border:1.5px solid var(--line2);border-radius:2px;padding:6px 11px;background:var(--card);box-shadow:2px 2px 0 var(--line)}
+  .back:hover{border-color:var(--ink);box-shadow:3px 3px 0 var(--gold);transform:translate(-1px,-1px)}
+  main{max-width:860px;margin:0 auto;padding:30px 20px 90px;display:flex;flex-direction:column;gap:26px}
+
+  .card{background:var(--card);border:1.5px solid var(--ink);border-radius:6px;box-shadow:5px 5px 0 var(--line);padding:22px 26px;
+    opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
+  .card.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.card{opacity:1;transform:none;transition:none}}
+  .num{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--amber);letter-spacing:.05em}
+  .card h2{margin:4px 0 3px;font-family:"Fraunces",serif;font-weight:600;font-size:21px;color:var(--ink)}
+  .card h2 em{font-style:italic;color:var(--req)}
+  .sub{font-size:13px;color:var(--mut);margin:0 0 16px}
+  .cap{font-size:13.5px;line-height:1.75;color:var(--ink2);margin:16px 0 0;border-top:1px dashed var(--line2);padding-top:13px}
+  .cap b{color:var(--req);font-weight:600}
+
+  /* ---- 三个积木 ---- */
+  .prim{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .pcard{border:1.5px solid var(--line2);border-radius:5px;background:var(--paper2);padding:13px 14px 15px}
+  .pcard .pt{font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:700;color:var(--ink)}
+  .pcard .pt small{color:var(--mut);font-weight:400}
+  .pcard .pd{font-size:12.5px;color:var(--ink2);margin:6px 0 10px;min-height:52px}
+  .pcard svg{width:100%;height:64px;display:block}
+  .pill{display:inline-block;font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;border:1px solid currentColor}
+  .pill.bar{color:var(--nul)} .pill.nobar{color:var(--res)}
+
+  /* ---- 栅栏 vs 流水 演示 ---- */
+  .demo-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  .play{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:700;color:var(--card);background:var(--req);
+    border:1.5px solid var(--ink);border-radius:3px;padding:7px 14px;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
+  .play:hover{background:#124f59;box-shadow:3px 3px 0 var(--gold);transform:translate(-1px,-1px)}
+  .play:active{box-shadow:1px 1px 0 var(--ink);transform:translate(1px,1px)}
+  .clockread{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink2)}
+  .clockread b{color:var(--nul)}
+  .demo-legend{display:flex;flex-wrap:wrap;gap:14px;margin:4px 0 14px;font-size:11.5px;color:var(--ink2);font-family:"JetBrains Mono",monospace}
+  .demo-legend span{display:flex;align-items:center;gap:5px}
+  .sw{width:15px;height:11px;border-radius:3px;border:1px solid}
+
+  .lanes{position:relative}
+  .playhead{position:absolute;top:30px;bottom:8px;width:2px;background:var(--nul);z-index:5;pointer-events:none;
+    left:calc(var(--gut) + (100% - var(--gut)) * var(--frac,0));opacity:0;transition:opacity .3s}
+  .playhead.on{opacity:1}
+  .playhead::before{content:"t="attr(data-t);position:absolute;top:-19px;left:50%;transform:translateX(-50%);
+    font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--card);background:var(--nul);padding:1px 5px;border-radius:3px;white-space:nowrap}
+
+  .lane{margin-top:14px}
+  .lane-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:9px}
+  .lane-name{font-family:"Fraunces",serif;font-size:16px;font-weight:600}
+  .lane-name .tag{font-family:"JetBrains Mono",monospace;font-size:10.5px;font-weight:700;margin-left:8px;padding:1px 7px;border-radius:20px;vertical-align:middle}
+  .lane.barrier .tag{color:var(--nul);border:1px solid var(--nul)}
+  .lane.pipe .tag{color:var(--res);border:1px solid var(--res)}
+  .lane-total{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink2)}
+  .lane-total b{font-size:15px;color:var(--ink)}
+  .lane-body{position:relative}
+  .row{display:grid;grid-template-columns:var(--gut) 1fr;align-items:center;height:30px}
+  .rowlab{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--mut);white-space:nowrap;padding-right:8px;text-align:right}
+  .track{position:relative;height:20px;background:var(--paper);border:1px solid var(--line2);border-radius:4px}
+  .seg{position:absolute;top:-1px;height:20px;border-radius:4px;overflow:hidden;border:1px solid}
+  .seg.explore{border-color:var(--req);background:rgba(21,97,109,.10)}
+  .seg.verify{border-color:var(--amber);background:rgba(189,106,48,.10)}
+  .seg.idle{border-color:var(--nul);background:repeating-linear-gradient(45deg,rgba(187,59,83,.16) 0 5px,transparent 5px 10px);
+    display:flex;align-items:center;justify-content:center}
+  .seg.idle .il{font-family:"JetBrains Mono",monospace;font-size:9px;color:var(--nul);font-weight:700;opacity:.75}
+  .segfill{position:absolute;inset:0;width:0;border-radius:3px}
+  .seg.explore .segfill{background:var(--req)}
+  .seg.verify .segfill{background:var(--amber)}
+  .seg.verify.done .segfill{background:var(--res)}
+  .seg.active{box-shadow:0 0 0 2px rgba(202,162,74,.55)}
+  .seg .lbl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:"JetBrains Mono",monospace;font-size:9.5px;font-weight:700;color:var(--card);z-index:2;opacity:0;transition:opacity .2s}
+  .seg.explore.filled .lbl,.seg.verify.filled .lbl{opacity:1}
+  .barrier-line{position:absolute;top:-3px;bottom:-3px;width:0;border-left:2px dashed var(--nul);z-index:4;
+    left:calc(var(--gut) + (100% - var(--gut)) * var(--bfrac))}
+  .barrier-line::before{content:"⛔ 栅栏";position:absolute;top:-16px;left:4px;font-family:"JetBrains Mono",monospace;font-size:9.5px;color:var(--nul);font-weight:700;white-space:nowrap}
+  .donemark{position:absolute;right:4px;top:50%;transform:translateY(-50%) scale(.4);opacity:0;
+    font-size:12px;color:var(--res);font-weight:700;transition:opacity .25s,transform .25s;z-index:3}
+  .donemark.on{opacity:1;transform:translateY(-50%) scale(1)}
+  .axis{display:grid;grid-template-columns:var(--gut) 1fr;margin-top:2px}
+  .axis .ticks{position:relative;height:16px;font-family:"JetBrains Mono",monospace;font-size:9px;color:var(--mut)}
+  .axis .ticks span{position:absolute;transform:translateX(-50%)}
+  .verdict{margin-top:16px;border-top:1px dashed var(--line2);padding-top:13px;font-size:13.5px;color:var(--ink2);
+    opacity:0;transition:opacity .5s}
+  .verdict.on{opacity:1}
+  .verdict b{color:var(--res);font-weight:700}
+  .verdict .bad{color:var(--nul)}
+
+  /* ---- 七种形态 ---- */
+  .atlas{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .tp{border:1.5px solid var(--line2);border-radius:5px;background:var(--paper2);padding:14px 15px 13px;display:flex;flex-direction:column}
+  .tp .tn{font-family:"JetBrains Mono",monospace;font-size:10.5px;color:var(--amber);font-weight:700}
+  .tp .th{font-family:"Fraunces",serif;font-size:17px;font-weight:600;margin:1px 0 0}
+  .tp .th small{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--mut);font-weight:400;letter-spacing:.02em}
+  .tp .td{font-size:12.5px;color:var(--ink2);margin:6px 0 8px}
+  .tp svg{width:100%;height:118px;display:block;margin-top:auto}
+  .tp .when{font-size:11.5px;color:var(--mut);font-family:"JetBrains Mono",monospace;margin-top:9px;border-top:1px dashed var(--line2);padding-top:8px}
+  .tp .when b{color:var(--req)}
+
+  /* ---- 质量手法 ---- */
+  .qgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .q{border-left:3px solid var(--gold);background:var(--paper2);border-radius:0 5px 5px 0;padding:11px 14px}
+  .q .qh{font-family:"Fraunces",serif;font-size:15px;font-weight:600}
+  .q .qd{font-size:12.5px;color:var(--ink2);margin-top:3px}
+  .q .qd em{font-style:normal;color:var(--amber);font-weight:600}
+
+  /* ---- 落地实例 ---- */
+  .run{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:4px 0 4px}
+  .stat{border:1.5px solid var(--line2);border-radius:5px;background:var(--paper2);padding:11px 13px}
+  .stat .k{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--mut);letter-spacing:.04em;text-transform:uppercase}
+  .stat .v{font-family:"Fraunces",serif;font-size:22px;font-weight:600;color:var(--ink);line-height:1.2;margin-top:2px}
+  .stat .v small{font-size:12px;color:var(--mut);font-family:"JetBrains Mono",monospace}
+  .stat.good .v{color:var(--res)} .stat.warn .v{color:var(--nul)}
+
+  footer{max-width:860px;margin:0 auto;padding:0 20px 60px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--mut)}
+  footer b{color:var(--ink2)}
+  svg text{font-family:"Hanken Grotesk",sans-serif}
+  .g-src{fill:var(--req)} .g-node{fill:var(--paper2);stroke:var(--ink);stroke-width:1.4}
+  .g-vf{fill:var(--amber)} .g-win{fill:var(--res)} .g-wt{fill:var(--card);font-weight:600}
+  .g-t{fill:var(--ink2);font-size:11px} .g-tm{fill:var(--mut);font-size:10px;font-family:"JetBrains Mono",monospace}
+  .g-arrow{stroke:var(--ink2);stroke-width:1.4;fill:none}
+  @media (max-width:640px){
+    .prim{grid-template-columns:1fr}.atlas{grid-template-columns:1fr}.qgrid{grid-template-columns:1fr}
+    :root{--gut:60px}.rowlab{font-size:9px}
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+    <path d="M0,1 L9,5 L0,9 z" fill="#4a463c"/>
+  </marker>
+</defs></svg>
+
+<header>
+  <span class="kicker">claude-tap · workflow atlas</span>
+  <h1><em>图解</em>:Workflow 形态图谱</h1>
+  <p class="lead">同样是"派 agent 干活",编排的<em style="font-style:normal;color:var(--amber);font-weight:600">形状</em>不一样,墙钟时间和产出质量差得远。三个积木,七种流水线形态,四种验证手法 —— 一页看完。</p>
+  <a class="back" href="trace_viewer.html">← 回抓包实验台</a>
+</header>
+
+<main>
+
+  <!-- 三个积木 -->
+  <section class="card">
+    <div class="num">积木</div>
+    <h2>一切都由这 <em>三个</em> 原语搭出来</h2>
+    <p class="sub">编排 = agent（一个）× 怎么接线（parallel 有栅栏 / pipeline 无栅栏）</p>
+    <div class="prim">
+      <div class="pcard">
+        <div class="pt">agent() <small>· 一个子代理</small></div>
+        <div class="pd">派 1 个 agent 干一件事,可要求它按结构化 schema 返回。</div>
+        <svg viewBox="0 0 200 64" aria-label="单个 agent 节点">
+          <rect x="18" y="20" width="52" height="26" rx="5" class="g-src"/>
+          <text x="44" y="37" text-anchor="middle" class="g-wt" font-size="11">派活</text>
+          <path class="g-arrow" d="M74,33 L120,33" marker-end="url(#ar)"/>
+          <rect x="126" y="20" width="56" height="26" rx="5" class="g-node"/>
+          <text x="154" y="37" text-anchor="middle" class="g-t">agent</text>
+        </svg>
+      </div>
+      <div class="pcard">
+        <div class="pt">parallel() <small>· 齐头并进</small></div>
+        <div class="pd">一批 agent 同时跑。<span class="pill bar">有栅栏</span> 等<b style="color:var(--nul)">全部</b>跑完才继续。</div>
+        <svg viewBox="0 0 200 64" aria-label="parallel 扇出并有栅栏">
+          <rect x="10" y="22" width="40" height="22" rx="5" class="g-src"/>
+          <path class="g-arrow" d="M52,33 C78,33 82,14 104,14" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M52,33 L104,33" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M52,33 C78,33 82,52 104,52" marker-end="url(#ar)"/>
+          <rect x="106" y="6"  width="40" height="16" rx="4" class="g-node"/>
+          <rect x="106" y="25" width="40" height="16" rx="4" class="g-node"/>
+          <rect x="106" y="44" width="40" height="16" rx="4" class="g-node"/>
+          <line x1="160" y1="4" x2="160" y2="60" stroke="#bb3b53" stroke-width="2" stroke-dasharray="4 3"/>
+          <text x="176" y="36" class="g-tm" fill="#bb3b53">栅栏</text>
+        </svg>
+      </div>
+      <div class="pcard">
+        <div class="pt">pipeline() <small>· 各走各的</small></div>
+        <div class="pd">每个条目独立穿过多个阶段。<span class="pill nobar">无栅栏</span> A 到第 3 步时 B 还在第 1 步。</div>
+        <svg viewBox="0 0 200 64" aria-label="pipeline 流水线,无栅栏">
+          <rect x="8"  y="6"  width="34" height="15" rx="4" class="g-src"/><rect x="46" y="6"  width="34" height="15" rx="4" class="g-vf"/><rect x="84" y="6" width="34" height="15" rx="4" class="g-win"/>
+          <rect x="30" y="25" width="34" height="15" rx="4" class="g-src"/><rect x="68" y="25" width="34" height="15" rx="4" class="g-vf"/><rect x="106" y="25" width="34" height="15" rx="4" class="g-win"/>
+          <rect x="52" y="44" width="34" height="15" rx="4" class="g-src"/><rect x="90" y="44" width="34" height="15" rx="4" class="g-vf"/><rect x="128" y="44" width="34" height="15" rx="4" class="g-win"/>
+          <text x="182" y="36" class="g-tm">对角流动</text>
+        </svg>
+      </div>
+    </div>
+    <p class="cap">口诀:<b>parallel = 同步栅栏</b>（下一步需要上一步<em style="font-style:normal">全部</em>结果时才用 —— 去重 / 合并 / 计数）; <b>pipeline = 无栅栏流水</b>（默认首选,墙钟 = 最慢那一条链,不是每步最慢之和）。下面这张动图就是这句话。</p>
+  </section>
+
+  <!-- 栅栏 vs 流水 动画 -->
+  <section class="card" id="demo">
+    <div class="num">图 01 · 交互</div>
+    <h2>亲眼看:<em>栅栏</em> 让 agent 空等,<em style="color:var(--res)">流水</em> 不等</h2>
+    <p class="sub">同样 3 个条目、同样"探索→验证"两步、同样的耗时 —— 只因接线不同,墙钟差 22%</p>
+    <div class="demo-controls">
+      <button class="play" id="play">▶ 播放</button>
+      <span class="clockread">时钟 <b id="clock">0.0</b> · 单位=时间格</span>
+    </div>
+    <div class="demo-legend">
+      <span><span class="sw" style="background:var(--req);border-color:var(--req)"></span>探索 explore</span>
+      <span><span class="sw" style="background:var(--amber);border-color:var(--amber)"></span>验证 verify</span>
+      <span><span class="sw" style="background:var(--res);border-color:var(--res)"></span>已确认</span>
+      <span><span class="sw" style="background:repeating-linear-gradient(45deg,rgba(187,59,83,.35) 0 4px,transparent 4px 8px);border-color:var(--nul)"></span>空等栅栏</span>
+      <span><span class="sw" style="background:var(--nul);border:none;width:3px;height:13px"></span>时钟游标</span>
+    </div>
+    <div class="lanes" id="lanes">
+      <div class="playhead" id="playhead" data-t="0.0"></div>
+      <div class="lane barrier">
+        <div class="lane-head">
+          <div class="lane-name">parallel<span class="tag">有栅栏</span></div>
+          <div class="lane-total">墙钟 <b id="tot-bar">0.0</b></div>
+        </div>
+        <div class="lane-body" id="lane-bar">
+          <div class="barrier-line" style="--bfrac:.5556"></div>
+        </div>
+      </div>
+      <div class="lane pipe">
+        <div class="lane-head">
+          <div class="lane-name">pipeline<span class="tag">无栅栏</span></div>
+          <div class="lane-total">墙钟 <b id="tot-pipe">0.0</b></div>
+        </div>
+        <div class="lane-body" id="lane-pipe"></div>
+      </div>
+      <div class="axis"><div></div><div class="ticks" id="ticks"></div></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+    <p class="cap">看条目 3(探 2·验 4):栅栏模式里它探完只能<b style="color:var(--nul)">干等到 t=5</b>才许开始验证;流水模式里它 t=2 立刻开验。<b>栅栏只在"下一步真的需要上一步全部结果"时才值得付这个空等代价</b> —— 比如要先把所有发现去重再验证。否则默认用流水。</p>
+  </section>
+
+  <!-- 七种形态 -->
+  <section class="card">
+    <div class="num">图 02</div>
+    <h2>七种<em>流水线形态</em></h2>
+    <p class="sub">三个积木组合出的常见拓扑 —— 你说的"探索→验证"是其中的 ③ 和它的栅栏变体 ④</p>
+    <div class="atlas">
+
+      <div class="tp"><div class="tn">形态 ①</div><div class="th">扇出 <small>Fan-out</small></div>
+        <div class="td">N 个 agent 各探一块,收齐。最基础的一版。</div>
+        <svg viewBox="0 0 240 118" aria-label="扇出:一个源分派到三个节点">
+          <rect x="14" y="46" width="50" height="28" rx="6" class="g-src"/><text x="39" y="64" text-anchor="middle" class="g-wt" font-size="11">派活</text>
+          <path class="g-arrow" d="M68,60 C120,60 130,22 176,22" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M68,60 L176,60" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M68,60 C120,60 130,96 176,96" marker-end="url(#ar)"/>
+          <rect x="178" y="9"  width="52" height="26" rx="6" class="g-node"/><text x="204" y="26" text-anchor="middle" class="g-t">A</text>
+          <rect x="178" y="47" width="52" height="26" rx="6" class="g-node"/><text x="204" y="64" text-anchor="middle" class="g-t">B</text>
+          <rect x="178" y="85" width="52" height="26" rx="6" class="g-node"/><text x="204" y="102" text-anchor="middle" class="g-t">C</text>
+        </svg>
+        <div class="when"><b>何时:</b> 探索、独立搜集</div>
+      </div>
+
+      <div class="tp"><div class="tn">形态 ②</div><div class="th">扇出→汇总 <small>Map-Reduce</small></div>
+        <div class="td">收齐后加一个"综合者",把 N 份揉成一份成品。</div>
+        <svg viewBox="0 0 240 118" aria-label="Map-Reduce:分派再汇聚成一个结果">
+          <rect x="8" y="46" width="44" height="26" rx="6" class="g-src"/><text x="30" y="63" text-anchor="middle" class="g-wt" font-size="10">派</text>
+          <path class="g-arrow" d="M54,59 C86,59 92,22 120,22" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M54,59 L120,59" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M54,59 C86,59 92,96 120,96" marker-end="url(#ar)"/>
+          <rect x="122" y="9"  width="40" height="24" rx="6" class="g-node"/><text x="142" y="25" text-anchor="middle" class="g-t">A</text>
+          <rect x="122" y="47" width="40" height="24" rx="6" class="g-node"/><text x="142" y="63" text-anchor="middle" class="g-t">B</text>
+          <rect x="122" y="85" width="40" height="24" rx="6" class="g-node"/><text x="142" y="101" text-anchor="middle" class="g-t">C</text>
+          <path class="g-arrow" d="M164,21 C190,21 194,52 210,58" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M164,59 L206,59" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M164,97 C190,97 194,66 210,60" marker-end="url(#ar)"/>
+          <rect x="210" y="45" width="26" height="28" rx="6" class="g-win"/><text x="223" y="63" text-anchor="middle" class="g-wt" font-size="10">合</text>
+        </svg>
+        <div class="when"><b>何时:</b> 多份结果 → 一份报告</div>
+      </div>
+
+      <div class="tp"><div class="tn">形态 ③</div><div class="th">流水线 <small>Pipeline · 探索→验证</small></div>
+        <div class="td">每条独立走完探索→验证,中间<b style="color:var(--res)">不设栅栏</b>。默认首选。</div>
+        <svg viewBox="0 0 240 118" aria-label="流水线:三条独立错峰流动">
+          <g font-size="9" class="g-tm" text-anchor="middle">
+            <rect x="8"  y="14" width="46" height="20" rx="5" fill="#15616d"/><text x="31" y="27" fill="#fffdf7">探索</text>
+            <rect x="60" y="14" width="46" height="20" rx="5" fill="#bd6a30"/><text x="83" y="27" fill="#fffdf7">验证</text>
+            <rect x="112" y="14" width="30" height="20" rx="5" fill="#3f7d4e"/><text x="127" y="27" fill="#fffdf7">✓</text>
+            <rect x="34"  y="49" width="46" height="20" rx="5" fill="#15616d"/><text x="57" y="62" fill="#fffdf7">探索</text>
+            <rect x="86" y="49" width="46" height="20" rx="5" fill="#bd6a30"/><text x="109" y="62" fill="#fffdf7">验证</text>
+            <rect x="138" y="49" width="30" height="20" rx="5" fill="#3f7d4e"/><text x="153" y="62" fill="#fffdf7">✓</text>
+            <rect x="60"  y="84" width="46" height="20" rx="5" fill="#15616d"/><text x="83" y="97" fill="#fffdf7">探索</text>
+            <rect x="112" y="84" width="46" height="20" rx="5" fill="#bd6a30"/><text x="135" y="97" fill="#fffdf7">验证</text>
+            <rect x="164" y="84" width="30" height="20" rx="5" fill="#3f7d4e"/><text x="179" y="97" fill="#fffdf7">✓</text>
+          </g>
+        </svg>
+        <div class="when"><b>何时:</b> 每维审完立刻验 / 批量改</div>
+      </div>
+
+      <div class="tp"><div class="tn">形态 ④</div><div class="th">栅栏多阶段 <small>Barrier</small></div>
+        <div class="td">第二步开始前先等第一步<b style="color:var(--nul)">全部</b>到齐,中间做跨条目的活(去重)。</div>
+        <svg viewBox="0 0 240 118" aria-label="栅栏:全部到齐后再进入下一阶段">
+          <rect x="10" y="12" width="46" height="22" rx="6" class="g-src" fill="#15616d"/><text x="33" y="27" text-anchor="middle" class="g-wt" font-size="10">探A</text>
+          <rect x="10" y="48" width="46" height="22" rx="6" class="g-src" fill="#15616d"/><text x="33" y="63" text-anchor="middle" class="g-wt" font-size="10">探B</text>
+          <rect x="10" y="84" width="46" height="22" rx="6" class="g-src" fill="#15616d"/><text x="33" y="99" text-anchor="middle" class="g-wt" font-size="10">探C</text>
+          <path class="g-arrow" d="M58,23 L104,52" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M58,59 L104,59" marker-end="url(#ar)"/>
+          <path class="g-arrow" d="M58,95 L104,66" marker-end="url(#ar)"/>
+          <line x1="112" y1="8" x2="112" y2="110" stroke="#bb3b53" stroke-width="2.5" stroke-dasharray="5 4"/>
+          <text x="112" y="6" text-anchor="middle" class="g-tm" fill="#bb3b53" font-size="9">⛔ 去重</text>
+          <path class="g-arrow" d="M118,59 L150,59" marker-end="url(#ar)"/>
+          <rect x="152" y="34" width="52" height="24" rx="6" class="g-vf"/><text x="178" y="50" text-anchor="middle" class="g-wt" font-size="10">验 B′</text>
+          <rect x="152" y="62" width="52" height="24" rx="6" class="g-vf"/><text x="178" y="78" text-anchor="middle" class="g-wt" font-size="10">验 D′</text>
+        </svg>
+        <div class="when"><b>何时:</b> 先合并/去重再验证 · 0 发现就整体跳过</div>
+      </div>
+
+      <div class="tp"><div class="tn">形态 ⑤</div><div class="th">循环收敛 <small>Loop</small></div>
+        <div class="td">不知跑几轮时循环到条件:连 2 轮无新发现 / 凑够 N / 烧到预算。</div>
+        <svg viewBox="0 0 240 118" aria-label="循环:结果回流再来一轮">
+          <rect x="30" y="46" width="70" height="30" rx="7" class="g-node"/><text x="65" y="65" text-anchor="middle" class="g-t">一轮 finder</text>
+          <path class="g-arrow" d="M102,61 L150,61" marker-end="url(#ar)"/>
+          <rect x="152" y="46" width="60" height="30" rx="7" class="g-node"/><text x="182" y="65" text-anchor="middle" class="g-t">收敛?</text>
+          <path class="g-arrow" d="M182,44 C182,14 65,14 65,44" marker-end="url(#ar)"/>
+          <text x="123" y="12" text-anchor="middle" class="g-tm">有新发现 → 再来一轮</text>
+          <text x="182" y="98" text-anchor="middle" class="g-tm" fill="#3f7d4e">连 2 轮 dry → 停</text>
+        </svg>
+        <div class="when"><b>何时:</b> 找 bug / 边界,防漏长尾</div>
+      </div>
+
+      <div class="tp"><div class="tn">形态 ⑥</div><div class="th">评委团 <small>Judge Panel</small></div>
+        <div class="td">N 个角度各出一版方案 → 一批评委打分 → 从赢家综合。</div>
+        <svg viewBox="0 0 240 118" aria-label="评委团:多方案评分选出冠军">
+          <rect x="8" y="10" width="52" height="22" rx="6" class="g-node"/><text x="34" y="25" text-anchor="middle" class="g-t" font-size="10">方案·稳</text>
+          <rect x="8" y="48" width="52" height="22" rx="6" class="g-node"/><text x="34" y="63" text-anchor="middle" class="g-t" font-size="10">方案·险</text>
+          <rect x="8" y="86" width="52" height="22" rx="6" class="g-node"/><text x="34" y="101" text-anchor="middle" class="g-t" font-size="10">方案·奇</text>
+          <path class="g-arrow" d="M62,21 L100,52" marker-end="url(#ar)"/><path class="g-arrow" d="M62,59 L100,59" marker-end="url(#ar)"/><path class="g-arrow" d="M62,97 L100,66" marker-end="url(#ar)"/>
+          <g fill="#caa24a" stroke="#bd6a30" stroke-width="1"><circle cx="112" cy="46" r="7"/><circle cx="128" cy="59" r="7"/><circle cx="112" cy="72" r="7"/></g>
+          <text x="120" y="98" text-anchor="middle" class="g-tm">评委打分</text>
+          <path class="g-arrow" d="M138,59 L176,59" marker-end="url(#ar)"/>
+          <rect x="178" y="44" width="54" height="30" rx="7" class="g-win"/><text x="205" y="63" text-anchor="middle" class="g-wt" font-size="10">冠军综合</text>
+        </svg>
+        <div class="when"><b>何时:</b> 解法空间宽 · 设计/取舍</div>
+      </div>
+
+      <div class="tp"><div class="tn">形态 ⑦</div><div class="th">嵌套 <small>Nested</small></div>
+        <div class="td">一个 workflow 里再调另一个完整 workflow 当子步骤(只嵌一层)。</div>
+        <svg viewBox="0 0 240 118" aria-label="嵌套:workflow 里套一个子 workflow">
+          <rect x="8" y="10" width="224" height="98" rx="9" fill="none" stroke="#4a463c" stroke-width="1.6" stroke-dasharray="6 4"/>
+          <text x="20" y="27" class="g-tm">workflow</text>
+          <rect x="24" y="60" width="42" height="26" rx="6" class="g-node"/><text x="45" y="77" text-anchor="middle" class="g-t" font-size="10">阶段</text>
+          <path class="g-arrow" d="M68,73 L92,73" marker-end="url(#ar)"/>
+          <rect x="94" y="42" width="86" height="58" rx="8" fill="rgba(21,97,109,.07)" stroke="#15616d" stroke-width="1.4" stroke-dasharray="4 3"/>
+          <text x="137" y="57" text-anchor="middle" class="g-tm" fill="#15616d">▸ 子 workflow</text>
+          <g class="g-node"><rect x="104" y="66" width="30" height="20" rx="4"/><rect x="140" y="66" width="30" height="20" rx="4"/></g>
+          <path class="g-arrow" d="M182,73 L206,73" marker-end="url(#ar)"/>
+          <rect x="206" y="60" width="24" height="26" rx="6" class="g-win"/>
+        </svg>
+        <div class="when"><b>何时:</b> 复用一整段已保存的编排</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 质量手法 -->
+  <section class="card">
+    <div class="num">图 03</div>
+    <h2>嫁接到"<em>验证</em>"那一步的四种手法</h2>
+    <p class="sub">第二步具体怎么验,决定结论可信不可信</p>
+    <div class="qgrid">
+      <div class="q"><div class="qh">对抗式验证 <span style="font-size:11px;color:var(--mut)">Adversarial</span></div>
+        <div class="qd">每个结论派 <em>N 个"唱反调"</em> 的 agent,默认倾向反驳,多数反驳就毙掉 → 干掉"看着对其实错"。</div></div>
+      <div class="q"><div class="qh">多视角验证 <span style="font-size:11px;color:var(--mut)">Perspective</span></div>
+        <div class="qd">N 个验证者各用 <em>不同镜头</em>(正确性 / 安全 / 性能 / 能否复现)→ 抓冗余抓不到的失败模式。</div></div>
+      <div class="q"><div class="qh">多模态搜索 <span style="font-size:11px;color:var(--mut)">Multi-modal</span></div>
+        <div class="qd">每个 agent 用 <em>不同方式</em> 找(按目录 / 按内容 / 按实体 / 按时间)→ 补单一角度的盲区。</div></div>
+      <div class="q"><div class="qh">完备性批判 <span style="font-size:11px;color:var(--mut)">Critic</span></div>
+        <div class="qd">最后派一个 agent 专问 <em>"还漏了什么?"</em> → 它找到的漏洞变成下一轮的活。</div></div>
+    </div>
+    <p class="cap">规模按需要缩放:"随便看看"就几个 explorer + 单票验证;<b>"彻底审计"就大批 finder + 3~5 票对抗验证 + 综合</b>。</p>
+  </section>
+
+  <!-- 落地实例 -->
+  <section class="card">
+    <div class="num">图 04 · 实例</div>
+    <h2>就在刚才:一次真实的 <em>扇出</em> 探索</h2>
+    <p class="sub">你让我探这个目录 → 我用的正是形态 ① 扇出:5 个 agent 各探一块</p>
+    <div class="run">
+      <div class="stat"><div class="k">形态</div><div class="v" style="font-size:17px">Fan-out ①</div></div>
+      <div class="stat"><div class="k">派出 agent</div><div class="v">5</div></div>
+      <div class="stat good"><div class="k">成功</div><div class="v">4</div></div>
+      <div class="stat warn"><div class="k">失败</div><div class="v">1 <small>schema 超重试</small></div></div>
+      <div class="stat"><div class="k">墙钟</div><div class="v">3.3<small>min</small></div></div>
+      <div class="stat"><div class="k">tokens</div><div class="v">161<small>k</small></div></div>
+    </div>
+    <p class="cap">那次 <b>纯扇出、单票、无第二阶段验证</b> —— 因为只是"探索一下",不需要对抗。经验一条:让 agent 嚼很多大文件时,别硬套"要求详尽 keyFiles"的 schema,容易超重试(那个挂掉的 <span style="font-family:'JetBrains Mono',monospace;font-size:12px">trace-data</span> agent 就是要一口气吃 16 个大 JSON 崩的)。要么切细,要么放宽返回结构。</p>
+  </section>
+
+</main>
+
+<footer>
+  claude-tap · workflow atlas &nbsp;·&nbsp; 本页自身就是这套 lab 的一件"图解成品",姊妹页 <b>explainers.html</b> / <b>workflow-anatomy.html</b> &nbsp;·&nbsp; served via <b>python3 -m http.server 8090</b>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var TIME_MAX = 9;
+  // 探索/验证耗时(时间格)。三条链:探3验2 / 探5验2 / 探2验4
+  var base = [
+    {n:'条目 1 · 探3 验2', e:3, v:2},
+    {n:'条目 2 · 探5 验2', e:5, v:2},
+    {n:'条目 3 · 探2 验4', e:2, v:4}
+  ];
+  var barrierT = Math.max.apply(null, base.map(function(i){return i.e;})); // 5
+  function specBarrier(it){
+    return {name:it.n, explore:[0,it.e], idle: it.e<barrierT?[it.e,barrierT]:null,
+      verify:[barrierT, barrierT+it.v], done: barrierT+it.v};
+  }
+  function specPipe(it){
+    return {name:it.n, explore:[0,it.e], idle:null, verify:[it.e, it.e+it.v], done: it.e+it.v};
+  }
+  var barSpec = base.map(specBarrier), pipeSpec = base.map(specPipe);
+  var barTotal = Math.max.apply(null, barSpec.map(function(s){return s.done;}));   // 9
+  var pipeTotal = Math.max.apply(null, pipeSpec.map(function(s){return s.done;})); // 7
+  var saved = Math.round((1 - pipeTotal/barTotal)*100);
+
+  var segs = [];
+  function pct(x){return (x/TIME_MAX*100)+'%';}
+  function addSeg(track, cls, range, label){
+    if(!range) return null;
+    var s=range[0], e=range[1];
+    var seg=document.createElement('div');
+    seg.className='seg '+cls;
+    seg.style.left=pct(s); seg.style.width=pct(e-s);
+    var fill=document.createElement('div'); fill.className='segfill'; seg.appendChild(fill);
+    if(cls==='idle'){ var il=document.createElement('span'); il.className='il'; il.textContent='⏳等'; seg.appendChild(il); }
+    if(label){ var lb=document.createElement('span'); lb.className='lbl'; lb.textContent=label; seg.appendChild(lb); }
+    track.appendChild(seg);
+    var rec={el:seg, fill:fill, s:s, e:e, cls:cls};
+    if(cls!=='idle') segs.push(rec);
+    else segs.push(rec);
+    return rec;
+  }
+  function buildLane(bodyEl, spec){
+    spec.forEach(function(item){
+      var row=document.createElement('div'); row.className='row';
+      var lab=document.createElement('div'); lab.className='rowlab'; lab.textContent=item.name;
+      var track=document.createElement('div'); track.className='track';
+      addSeg(track,'explore',item.explore,'探');
+      addSeg(track,'idle',item.idle,null);
+      addSeg(track,'verify',item.verify,'验');
+      var dm=document.createElement('div'); dm.className='donemark'; dm.textContent='✓'; dm.setAttribute('data-done',item.done);
+      track.appendChild(dm);
+      row.appendChild(lab); row.appendChild(track); bodyEl.appendChild(row);
+    });
+  }
+  var laneBar=document.getElementById('lane-bar'), lanePipe=document.getElementById('lane-pipe');
+  buildLane(laneBar, barSpec); buildLane(lanePipe, pipeSpec);
+
+  // 时间轴刻度
+  var ticks=document.getElementById('ticks');
+  for(var t=0;t<=TIME_MAX;t++){ var s=document.createElement('span'); s.style.left=pct(t); s.textContent=t; ticks.appendChild(s); }
+
+  var playhead=document.getElementById('playhead');
+  var clock=document.getElementById('clock');
+  var totBar=document.getElementById('tot-bar'), totPipe=document.getElementById('tot-pipe');
+  var verdict=document.getElementById('verdict');
+  var dmarks=[].slice.call(document.querySelectorAll('.donemark'));
+  var playBtn=document.getElementById('play');
+
+  function setState(tNow){
+    segs.forEach(function(r){
+      var frac = (r.e>r.s) ? Math.max(0, Math.min(1, (tNow-r.s)/(r.e-r.s))) : (tNow>=r.e?1:0);
+      if(r.cls!=='idle') r.fill.style.width=(frac*100)+'%';
+      var active = tNow>r.s && tNow<r.e;
+      r.el.classList.toggle('active', active);
+      r.el.classList.toggle('done', tNow>=r.e);
+      r.el.classList.toggle('filled', frac>0.35);
+    });
+    dmarks.forEach(function(d){ d.classList.toggle('on', tNow >= parseFloat(d.getAttribute('data-done'))); });
+    playhead.style.setProperty('--frac', (tNow/TIME_MAX).toFixed(4));
+    playhead.setAttribute('data-t', tNow.toFixed(1));
+    clock.textContent=tNow.toFixed(1);
+    totBar.textContent=Math.min(tNow, barTotal).toFixed(1);
+    totPipe.textContent=Math.min(tNow, pipeTotal).toFixed(1);
+  }
+  function showVerdict(){
+    verdict.innerHTML='结果 &nbsp;·&nbsp; pipeline <b>'+pipeTotal.toFixed(1)+'</b> &nbsp;vs&nbsp; parallel <span class="bad">'+barTotal.toFixed(1)+
+      '</span> &nbsp;→&nbsp; <b>无栅栏省 '+saved+'%</b> 墙钟。栅栏那 '+(barTotal-pipeTotal).toFixed(1)+' 格差,全是 agent 空等出来的。';
+    verdict.classList.add('on');
+  }
+
+  var raf=0, PER_UNIT=0.5; // 秒/格 → 全程约 4.5s
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  function play(){
+    if(reduce){ setState(TIME_MAX); showVerdict(); playhead.classList.add('on'); return; }
+    cancelAnimationFrame(raf);
+    verdict.classList.remove('on');
+    playhead.classList.add('on');
+    var start=null;
+    function frame(now){
+      if(start===null) start=now;
+      var t=(now-start)/1000/PER_UNIT;
+      if(t>=TIME_MAX){ setState(TIME_MAX); showVerdict(); return; }
+      setState(t); raf=requestAnimationFrame(frame);
+    }
+    setState(0);
+    raf=requestAnimationFrame(frame);
+  }
+  playBtn.addEventListener('click', play);
+  setState(0);
+
+  // 进入视口自动播一次 + 卡片依次浮现
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){
+      if(en.isIntersecting){
+        en.target.classList.add('in');
+        if(en.target.id==='demo'){ play(); }
+      }
+    });
+  }, {threshold:0.25});
+  [].slice.call(document.querySelectorAll('.card')).forEach(function(c){ io.observe(c); });
+})();
+</script>
+</body>
+</html>

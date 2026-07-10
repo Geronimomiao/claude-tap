@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>First Principles Thinking | 第一性原理</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #111827;
+      --muted: #53606f;
+      --line: #d7dee7;
+      --paper: #f8faf8;
+      --panel: #ffffff;
+      --teal: #0f766e;
+      --teal-deep: #134e4a;
+      --amber: #d97706;
+      --rose: #be123c;
+      --blue: #2563eb;
+      --shadow: 0 22px 60px rgba(15, 23, 42, 0.13);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 12% 8%, rgba(15, 118, 110, 0.10), transparent 28rem),
+        linear-gradient(180deg, #f5f7f4 0%, #eef3f2 48%, #f8faf8 100%);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.45;
+      background-image:
+        linear-gradient(rgba(17, 24, 39, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(17, 24, 39, 0.035) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(180deg, black, transparent 75%);
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .skip-link {
+      position: absolute;
+      left: 1rem;
+      top: 1rem;
+      z-index: 10;
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      background: var(--ink);
+      color: white;
+      transform: translateY(-150%);
+      transition: transform 180ms ease;
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .page {
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero {
+      min-height: 92svh;
+      display: grid;
+      align-items: center;
+      padding: clamp(2rem, 5vw, 5rem);
+      border-bottom: 1px solid rgba(17, 24, 39, 0.08);
+    }
+
+    .hero-grid {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+      gap: clamp(2rem, 6vw, 5rem);
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin: 0 0 1.4rem;
+      color: var(--teal-deep);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      animation: rise 620ms ease both;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 50%;
+      background: var(--teal);
+      box-shadow: 0 0 0 0.45rem rgba(15, 118, 110, 0.12);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      max-width: 11ch;
+      margin-bottom: 1.1rem;
+      font-size: clamp(4.1rem, 11vw, 8.8rem);
+      line-height: 0.88;
+      letter-spacing: 0;
+      animation: rise 760ms 80ms ease both;
+    }
+
+    .hero-subtitle {
+      max-width: 38rem;
+      margin-bottom: 2rem;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 2vw, 1.35rem);
+      animation: rise 760ms 160ms ease both;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.85rem;
+      animation: rise 760ms 240ms ease both;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      min-height: 3rem;
+      padding: 0.82rem 1rem;
+      border: 1px solid rgba(17, 24, 39, 0.14);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--ink);
+      font-weight: 750;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+      transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+    }
+
+    .button.primary {
+      border-color: transparent;
+      background: var(--ink);
+      color: white;
+    }
+
+    .button:hover,
+    .button:focus-visible {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 36px rgba(15, 23, 42, 0.14);
+    }
+
+    .hero-visual {
+      position: relative;
+      min-height: min(68svh, 620px);
+      border-left: 1px solid rgba(17, 24, 39, 0.10);
+      animation: reveal 900ms 180ms ease both;
+    }
+
+    .principle-stack {
+      position: absolute;
+      inset: 7% 0 7% clamp(1.2rem, 4vw, 4rem);
+      display: grid;
+      align-content: center;
+      gap: 1rem;
+    }
+
+    .principle-row {
+      display: grid;
+      grid-template-columns: minmax(4.5rem, 6rem) 1fr;
+      align-items: center;
+      gap: 1rem;
+      min-height: 5.8rem;
+      padding: 1rem 1.1rem;
+      border: 1px solid rgba(17, 24, 39, 0.12);
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      transform: translateX(var(--offset));
+      transition: transform 240ms ease, border-color 240ms ease;
+    }
+
+    .principle-row:hover {
+      transform: translateX(var(--offset)) translateY(-4px);
+      border-color: rgba(15, 118, 110, 0.45);
+    }
+
+    .principle-row:nth-child(1) {
+      --offset: 0;
+    }
+
+    .principle-row:nth-child(2) {
+      --offset: 2.3rem;
+    }
+
+    .principle-row:nth-child(3) {
+      --offset: 4.6rem;
+    }
+
+    .symbol {
+      display: grid;
+      place-items: center;
+      width: 4.6rem;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      background: #e5f4f2;
+      color: var(--teal-deep);
+      font-size: 1.65rem;
+      font-weight: 900;
+    }
+
+    .row-copy strong {
+      display: block;
+      font-size: 1.02rem;
+    }
+
+    .row-copy span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    main {
+      background: var(--paper);
+    }
+
+    .section {
+      padding: clamp(4rem, 9vw, 7rem) clamp(1.25rem, 5vw, 5rem);
+    }
+
+    .section-inner {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+    }
+
+    .section-label {
+      display: block;
+      margin-bottom: 0.85rem;
+      color: var(--teal);
+      font-size: 0.78rem;
+      font-weight: 850;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      max-width: 13ch;
+      margin-bottom: 1.2rem;
+      font-size: clamp(2.15rem, 5vw, 4.4rem);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 49rem;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 1.7vw, 1.25rem);
+    }
+
+    .definition-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(280px, 1.15fr);
+      gap: clamp(2rem, 6vw, 5rem);
+      align-items: start;
+    }
+
+    .definition-points {
+      display: grid;
+      gap: 1.1rem;
+      margin-top: 0.5rem;
+    }
+
+    .point {
+      display: grid;
+      grid-template-columns: 2.35rem 1fr;
+      gap: 1rem;
+      padding-bottom: 1.1rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .point:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .point-number {
+      display: grid;
+      place-items: center;
+      width: 2.35rem;
+      height: 2.35rem;
+      border-radius: 50%;
+      background: var(--ink);
+      color: white;
+      font-weight: 850;
+    }
+
+    .point h3 {
+      margin-bottom: 0.25rem;
+      font-size: 1.08rem;
+    }
+
+    .point p {
+      margin-bottom: 0;
+      color: var(--muted);
+    }
+
+    .example {
+      background:
+        linear-gradient(135deg, rgba(17, 24, 39, 0.97), rgba(19, 78, 74, 0.94)),
+        var(--ink);
+      color: white;
+    }
+
+    .example .section-label,
+    .example .lead {
+      color: #b7f4ea;
+    }
+
+    .example h2 {
+      max-width: 15ch;
+    }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 1px;
+      margin-top: clamp(2rem, 4vw, 3rem);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.16);
+      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.22);
+    }
+
+    .comparison article {
+      padding: clamp(1.35rem, 3vw, 2rem);
+      background: rgba(255, 255, 255, 0.08);
+      transition: background 180ms ease, transform 180ms ease;
+    }
+
+    .comparison article:hover {
+      background: rgba(255, 255, 255, 0.13);
+    }
+
+    .comparison h3 {
+      margin-bottom: 1rem;
+      font-size: clamp(1.2rem, 2vw, 1.6rem);
+    }
+
+    .logic-list {
+      display: grid;
+      gap: 0.8rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .logic-list li {
+      position: relative;
+      padding-left: 1.35rem;
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    .logic-list li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0.73em;
+      width: 0.48rem;
+      height: 0.48rem;
+      border-radius: 50%;
+      background: var(--marker, #b7f4ea);
+    }
+
+    .analogy {
+      --marker: #fecdd3;
+    }
+
+    .principles {
+      --marker: #99f6e4;
+    }
+
+    .cost-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 1.4rem;
+    }
+
+    .cost-item {
+      padding: 1rem;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .cost-item span {
+      display: block;
+      color: rgba(255, 255, 255, 0.66);
+      font-size: 0.82rem;
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .cost-item strong {
+      display: block;
+      margin-top: 0.3rem;
+      font-size: clamp(1.35rem, 3vw, 2.1rem);
+      line-height: 1;
+    }
+
+    .note {
+      margin-top: 1.2rem;
+      margin-bottom: 0;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 0.95rem;
+    }
+
+    .method-layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.7fr) minmax(0, 1.3fr);
+      gap: clamp(2rem, 6vw, 5rem);
+      align-items: start;
+    }
+
+    .steps {
+      margin: 0;
+      padding: 0;
+      counter-reset: step;
+      list-style: none;
+      border-top: 1px solid var(--line);
+    }
+
+    .steps li {
+      counter-increment: step;
+      display: grid;
+      grid-template-columns: 4rem 1fr;
+      gap: 1rem;
+      padding: 1.35rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .steps li::before {
+      content: counter(step, decimal-leading-zero);
+      color: var(--teal);
+      font-size: 1.35rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .steps h3 {
+      margin-bottom: 0.25rem;
+      font-size: 1.08rem;
+    }
+
+    .steps p {
+      margin-bottom: 0;
+      color: var(--muted);
+    }
+
+    .method-prompt {
+      padding: clamp(1.4rem, 3vw, 2rem);
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+    }
+
+    .method-prompt h3 {
+      margin-bottom: 0.65rem;
+      font-size: 1.3rem;
+    }
+
+    .method-prompt p {
+      margin-bottom: 1rem;
+      color: var(--muted);
+    }
+
+    blockquote {
+      margin: 0;
+      padding-left: 1rem;
+      border-left: 4px solid var(--teal);
+      color: var(--ink);
+      font-size: clamp(1.15rem, 2vw, 1.45rem);
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
+    footer {
+      padding: 2rem clamp(1.25rem, 5vw, 5rem);
+      border-top: 1px solid rgba(17, 24, 39, 0.10);
+      background: #101820;
+      color: rgba(255, 255, 255, 0.76);
+    }
+
+    .footer-inner {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      font-size: 0.95rem;
+    }
+
+    .footer-inner strong {
+      color: white;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(18px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes reveal {
+      from {
+        opacity: 0;
+        clip-path: inset(0 0 0 100%);
+      }
+      to {
+        opacity: 1;
+        clip-path: inset(0 0 0 0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 1ms !important;
+        scroll-behavior: auto !important;
+        transition-duration: 1ms !important;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .hero {
+        min-height: auto;
+        padding-top: 4rem;
+      }
+
+      .hero-grid,
+      .definition-layout,
+      .method-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-visual {
+        min-height: 23rem;
+        border-left: 0;
+        border-top: 1px solid rgba(17, 24, 39, 0.10);
+      }
+
+      .principle-stack {
+        inset: 2rem 0 0;
+      }
+
+      .principle-row:nth-child(n) {
+        --offset: 0;
+      }
+
+      .comparison,
+      .cost-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+
+    @media (max-width: 560px) {
+      h1 {
+        font-size: clamp(3.4rem, 18vw, 5.2rem);
+      }
+
+      .hero-actions {
+        flex-direction: column;
+      }
+
+      .button {
+        justify-content: center;
+        width: 100%;
+      }
+
+      .principle-row {
+        grid-template-columns: 3.6rem 1fr;
+      }
+
+      .symbol {
+        width: 3.45rem;
+        font-size: 1.25rem;
+      }
+
+      .steps li {
+        grid-template-columns: 3rem 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <div class="page">
+    <header class="hero" aria-labelledby="page-title">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Mental Model | 思维模型</p>
+          <h1 id="page-title">First Principles Thinking</h1>
+          <p class="hero-subtitle">第一性原理把问题拆回不可再拆的事实，再从事实重新搭建答案。它不是问“别人怎么做”，而是问“物理上、经济上、逻辑上必须是什么”。</p>
+          <nav class="hero-actions" aria-label="Page sections">
+            <a class="button primary" href="#example">See the battery example</a>
+            <a class="button" href="#method">Use the method</a>
+          </nav>
+        </div>
+
+        <div class="hero-visual" aria-label="First principles thinking visual model">
+          <div class="principle-stack">
+            <div class="principle-row">
+              <div class="symbol" aria-hidden="true">?</div>
+              <div class="row-copy">
+                <strong>Question the assumption</strong>
+                <span>把“大家都这么做”先放下。</span>
+              </div>
+            </div>
+            <div class="principle-row">
+              <div class="symbol" aria-hidden="true">↓</div>
+              <div class="row-copy">
+                <strong>Decompose to truths</strong>
+                <span>拆到事实、约束、材料、能量、成本。</span>
+              </div>
+            </div>
+            <div class="principle-row">
+              <div class="symbol" aria-hidden="true">+</div>
+              <div class="row-copy">
+                <strong>Rebuild from the base</strong>
+                <span>从底层事实重新组合一个解法。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main id="content">
+      <section class="section" aria-labelledby="what-title">
+        <div class="section-inner definition-layout">
+          <div>
+            <span class="section-label">01 | Definition</span>
+            <h2 id="what-title">What it is</h2>
+            <p class="lead">First-principles thinking is a way to reason from foundational facts instead of inherited comparisons. In Chinese: 第一性原理是一种从最基本事实出发的推理方式。</p>
+          </div>
+
+          <div class="definition-points">
+            <article class="point">
+              <span class="point-number">1</span>
+              <div>
+                <h3>Separate facts from conventions</h3>
+                <p>A convention says “this is how the industry works.” A fact says “this material has this cost, this process has this limit, this user has this need.”</p>
+              </div>
+            </article>
+            <article class="point">
+              <span class="point-number">2</span>
+              <div>
+                <h3>Find the irreducible constraints</h3>
+                <p>Look for the pieces you cannot wish away: physics, math, regulation, human behavior, time, and available resources.</p>
+              </div>
+            </article>
+            <article class="point">
+              <span class="point-number">3</span>
+              <div>
+                <h3>Build upward deliberately</h3>
+                <p>Once the base is clear, the solution can be redesigned instead of copied. This is where non-obvious options appear.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="example" class="section example" aria-labelledby="example-title">
+        <div class="section-inner">
+          <span class="section-label">02 | Worked Example</span>
+          <h2 id="example-title">Battery-pack cost: analogy vs. first principles</h2>
+          <p class="lead">The classic battery example shows the difference. The goal is not to memorize the numbers; it is to notice the direction of reasoning.</p>
+
+          <div class="comparison" role="list" aria-label="Reasoning comparison">
+            <article class="analogy" role="listitem">
+              <h3>Reasoning by analogy</h3>
+              <ul class="logic-list">
+                <li>Existing battery packs are expensive, around hundreds of dollars per kilowatt-hour in the historical example.</li>
+                <li>Competitors buy packs at roughly the same category price.</li>
+                <li>Therefore, cheap electric vehicles must be impossible until the market price falls.</li>
+              </ul>
+            </article>
+
+            <article class="principles" role="listitem">
+              <h3>First-principles reasoning</h3>
+              <ul class="logic-list">
+                <li>A battery pack is made of cells, casing, cooling, electronics, labor, and manufacturing process.</li>
+                <li>The raw ingredients include lithium, nickel, cobalt, aluminum, copper, carbon, steel, and polymers.</li>
+                <li>If the material floor is far below the selling price, the question changes: how do we redesign manufacturing to approach that floor?</li>
+              </ul>
+            </article>
+          </div>
+
+          <div class="cost-strip" aria-label="Illustrative battery pack cost decomposition">
+            <div class="cost-item">
+              <span>Analogy says</span>
+              <strong>$600/kWh</strong>
+            </div>
+            <div class="cost-item">
+              <span>First principles asks</span>
+              <strong>What is inside?</strong>
+            </div>
+            <div class="cost-item">
+              <span>New target becomes</span>
+              <strong>close the gap</strong>
+            </div>
+          </div>
+
+          <p class="note">Numbers are simplified from a well-known historical teaching example, not a current commodity-price estimate. The lesson is the shift from “market price is destiny” to “what does the system actually require?”</p>
+        </div>
+      </section>
+
+      <section id="method" class="section" aria-labelledby="method-title">
+        <div class="section-inner method-layout">
+          <div>
+            <span class="section-label">03 | Method</span>
+            <h2 id="method-title">A short way to use it</h2>
+            <p class="lead">Use this when a problem feels stuck, expensive, or crowded with inherited assumptions.</p>
+          </div>
+
+          <div>
+            <ol class="steps">
+              <li>
+                <div>
+                  <h3>State the problem plainly</h3>
+                  <p>Write the desired outcome without the current solution baked into it.</p>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h3>List the assumptions</h3>
+                  <p>Mark which claims are facts, which are habits, and which are guesses.</p>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h3>Decompose to fundamentals</h3>
+                  <p>Break the system into materials, constraints, incentives, steps, and measurable limits.</p>
+                </div>
+              </li>
+              <li>
+                <div>
+                  <h3>Rebuild from the facts</h3>
+                  <p>Combine the fundamentals into alternatives, then test the cheapest risky assumption first.</p>
+                </div>
+              </li>
+            </ol>
+
+            <aside class="method-prompt" aria-label="Practice prompt">
+              <h3>Practice prompt</h3>
+              <p>For any expensive plan, ask:</p>
+              <blockquote>“If I could not copy the standard solution, what facts would I still have to obey?”</blockquote>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="footer-inner">
+        <p><strong>First Principles Thinking</strong> | 第一性原理</p>
+        <p>Break assumptions. Keep facts. Rebuild better.</p>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

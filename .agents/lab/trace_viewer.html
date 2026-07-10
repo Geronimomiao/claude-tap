@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>claude-tap 抓包实验台 · Codex vs Claude Code</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4f1e9; --paper2:#faf8f2; --card:#fffdf7; --ink:#211e18; --ink2:#4a463c;
+    --mut:#9c9483; --line:#e6e0d2; --line2:#d9d2c0;
+    --req:#15616d; --res:#3f7d4e; --amber:#bd6a30; --gold:#caa24a;
+    --key:#1f5fa8; --str:#2f7d46; --num:#b25a1e; --bool:#7a4fb0; --nul:#bb3b53;
+    --sel:#eef3ee; --reqtint:#e9f1f2;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;color:var(--ink);font-family:"Hanken Grotesk",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;
+    background-color:var(--paper);background-image:radial-gradient(var(--line) 1px,transparent 1px);
+    background-size:22px 22px;background-position:-11px -11px;display:flex;flex-direction:column;overflow:hidden}
+  header{padding:14px 24px 10px;border-bottom:1.5px solid var(--ink);
+    background:linear-gradient(180deg,var(--paper2),rgba(250,248,242,.8));display:flex;flex-direction:column;gap:10px}
+  .hrow{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap}
+  .brand{display:flex;flex-direction:column;gap:2px}
+  .kicker{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.3em;text-transform:uppercase;color:var(--amber);font-weight:500}
+  header h1{margin:0;font-family:"Fraunces",serif;font-weight:600;font-size:26px;letter-spacing:-.015em;line-height:1}
+  header h1 em{font-style:italic;color:var(--req)}
+  #task{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--mut);padding-bottom:3px;line-height:1.5}
+  .btns{margin-left:auto;display:flex;gap:8px;padding-bottom:2px}
+  button{font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:500;background:var(--card);color:var(--ink2);
+    border:1.5px solid var(--line2);border-radius:2px;padding:7px 12px;cursor:pointer;transition:.16s;box-shadow:2px 2px 0 var(--line)}
+  button:hover{border-color:var(--ink);color:var(--ink);box-shadow:3px 3px 0 var(--gold);transform:translate(-1px,-1px)}
+  button:active{box-shadow:1px 1px 0 var(--line);transform:translate(1px,1px)}
+  .tabs{display:flex;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden;box-shadow:3px 3px 0 var(--line)}
+  .tab{border:0;border-radius:0;box-shadow:none;background:var(--card);color:var(--mut);font-weight:600;padding:7px 14px}
+  .tab:not(:last-child){border-right:1.5px solid var(--ink)}
+  .tab:hover{box-shadow:none;transform:none;color:var(--ink);background:var(--paper2)}
+  .tab.active{background:var(--ink);color:#fff}
+  .tab.active[data-k="codex"]{background:var(--req)} .tab.active[data-k="claude"]{background:var(--amber)}
+  .tab.active[data-k="on"]{background:var(--res)} .tab.active[data-k="off"]{background:var(--mut)}
+  .labrow{display:none}
+  #backbtn{display:none;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600}
+  body:not(.guide) #backbtn{display:inline-block}
+  .labkicker{font-family:"JetBrains Mono",monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--mut);flex-shrink:0}
+  .labtabs{display:flex;gap:9px;flex-wrap:wrap}
+  .labtab{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;
+    background:var(--card);border:1.5px solid var(--line2);border-radius:3px;box-shadow:2px 2px 0 var(--line);
+    padding:6px 13px;font-family:"Hanken Grotesk",sans-serif;font-size:13px;font-weight:600;color:var(--ink2)}
+  .labtab .sub{font-family:"JetBrains Mono",monospace;font-size:9px;font-weight:400;color:var(--mut);letter-spacing:.02em}
+  .labtab:hover{border-color:var(--ink);color:var(--ink);box-shadow:3px 3px 0 var(--gold);transform:translate(-1px,-1px)}
+  .labtab.active{background:var(--ink);color:var(--paper2);border-color:var(--ink)}
+  .labtab.active .sub{color:var(--gold)}
+  .main{flex:1;display:flex;min-height:0}
+  .modeswitch{display:flex;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden;box-shadow:3px 3px 0 var(--line)}
+  .modeswitch button{border:0;border-radius:0;box-shadow:none;background:var(--card);color:var(--mut);font-weight:600;padding:7px 13px}
+  .modeswitch button:not(:last-child){border-right:1.5px solid var(--ink)}
+  .modeswitch button:hover{box-shadow:none;transform:none;color:var(--ink);background:var(--paper2)}
+  .modeswitch button.active{background:var(--gold);color:var(--ink)}
+  #hub{display:none}
+  body.guide #hub{display:flex;flex-direction:column;gap:20px;padding:32px 8% 64px;overflow:auto}
+  body.guide .labrow,body.guide .main,body.guide .btns,body.guide #agenttabs,body.guide #task{display:none}
+  .hubcard{background:var(--card);border:1.5px solid var(--ink);border-radius:6px;box-shadow:5px 5px 0 var(--line);padding:24px 32px;cursor:pointer;transition:.16s;display:flex;flex-direction:column;gap:11px;opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}
+  .hubcard:hover{box-shadow:9px 9px 0 var(--gold);transform:translate(-3px,-3px)}
+  .hubkicker{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:600;color:var(--amber);letter-spacing:.05em}
+  .hubcard h3{margin:0;font-family:"Fraunces",serif;font-weight:600;font-size:23px;color:var(--ink);line-height:1.25;word-break:break-word}
+  .hubcard p{margin:0;font-size:15px;color:var(--ink2);line-height:1.8;max-width:90ch}
+  .hubcard .hubmeta{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--mut);letter-spacing:.02em}
+  .hubcard .go{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--req);font-weight:700;border-top:1px dashed var(--line2);padding-top:12px;margin-top:3px}
+  .banner{margin:0 0 16px;padding:12px 16px;background:#eef3f7;border:1.5px solid var(--req);border-left:5px solid var(--req);border-radius:5px;font-family:"Hanken Grotesk",sans-serif;font-size:13px;line-height:1.65;color:var(--ink2)}
+  .banner b{color:var(--req)} .banner .where{display:block;margin-top:7px;font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--amber)}
+  .banner .back{float:right;cursor:pointer;color:var(--req);font-weight:700;font-family:"JetBrains Mono",monospace;font-size:11px}
+  body.guide #hub.expview{display:block;max-width:none;margin:0;padding:30px 8% 64px}
+  .exptop{display:flex;align-items:center;gap:18px;margin-bottom:18px}
+  .exptitle{font-family:"Fraunces",serif;font-weight:600;font-size:28px;color:var(--ink)}
+  .stepcard{background:var(--card);border:1.5px solid var(--line2);border-radius:6px;box-shadow:4px 4px 0 var(--line);padding:22px 28px;margin-bottom:18px;cursor:pointer;transition:.16s;opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}
+  .stepcard:hover{border-color:var(--ink);box-shadow:7px 7px 0 var(--gold);transform:translate(-3px,-3px)}
+  .steptitle{font-family:"Hanken Grotesk",sans-serif;font-weight:700;font-size:18px;color:var(--req);margin-bottom:8px}
+  .stepdesc{font-size:15px;line-height:1.8;color:var(--ink2);margin-bottom:13px;max-width:92ch}
+  .stepcard .go{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--mut);border-top:1px dashed var(--line2);padding-top:11px}
+  .stepcard:hover .go{color:var(--req)}
+  .list{width:316px;flex-shrink:0;overflow-y:auto;overflow-x:hidden;background:linear-gradient(180deg,rgba(255,253,247,.6),rgba(244,241,233,.3))}
+  .resizer{flex:0 0 6px;cursor:col-resize;background:var(--ink);position:relative;transition:background .12s}
+  .resizer:hover,.resizer.dragging{background:var(--gold)}
+  .resizer::before{content:"";position:absolute;inset:0 -4px;}
+  #expandSidebar{display:none;position:fixed;left:0;top:50%;transform:translateY(-50%);z-index:50;
+    background:var(--ink);color:var(--paper2);border:0;border-radius:0 6px 6px 0;padding:14px 5px;
+    writing-mode:vertical-rl;font-family:"JetBrains Mono",monospace;font-size:11px;font-weight:600;
+    letter-spacing:.1em;cursor:pointer;box-shadow:2px 2px 0 var(--line)}
+  #expandSidebar:hover{background:var(--gold);color:var(--ink)}
+  .list::-webkit-scrollbar,.detail::-webkit-scrollbar{width:10px}
+  .list::-webkit-scrollbar-thumb,.detail::-webkit-scrollbar-thumb{background:var(--line2)}
+  .pk{position:relative;padding:13px 16px 13px 18px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .14s;opacity:0;animation:rise .5s cubic-bezier(.2,.7,.3,1) forwards}
+  @keyframes rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  .pk:hover{background:var(--paper2)} .pk.sel{background:var(--sel)}
+  .pk.sel:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--req)}
+  .pk .row1{display:flex;align-items:center;gap:9px}
+  .pk .n{flex-shrink:0;width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-family:"JetBrains Mono",monospace;font-weight:700;font-size:11px;background:var(--card);border:1.5px solid var(--ink)}
+  .pk.sel .n{background:var(--req);color:#fff;border-color:var(--req)}
+  .pk .pp{font-family:"JetBrains Mono",monospace;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pk .st{margin-left:auto;flex-shrink:0;font-family:"JetBrains Mono",monospace;font-size:10px;font-weight:700;padding:2px 7px;border-radius:2px;border:1px solid}
+  .st.ok{background:#eaf3ec;color:var(--res);border-color:#bcd9c3} .st.err{background:#f7e9ec;color:var(--nul);border-color:#e5c3cc}
+  .pk .meta{font-family:"JetBrains Mono",monospace;color:var(--mut);font-size:10.5px;margin-top:7px;padding-left:32px;line-height:1.6}
+  .pk .act{display:inline-block;background:var(--paper);border:1px solid var(--line2);border-radius:2px;padding:1px 6px;margin:3px 4px 0 0;color:var(--ink2);font-size:10px;font-weight:500}
+  .detail{flex:1;overflow:auto;padding:20px 26px 60px;font-family:"JetBrains Mono",monospace;font-size:12.5px;line-height:1.7}
+  .loading{color:var(--mut);padding:30px 6px;font-family:"JetBrains Mono",monospace}
+  .metabar{font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--ink2);padding:11px 15px;margin-bottom:18px;
+    background:var(--card);border:1.5px solid var(--ink);border-radius:3px;box-shadow:4px 4px 0 var(--line)}
+  .metabar b{color:var(--ink);font-weight:700}
+  .copybig{margin-left:12px;font-size:10.5px;padding:4px 10px}
+  .rootlabel{font-family:"Fraunces",serif;font-weight:600;font-size:15px;letter-spacing:.04em;margin:22px 0 8px;padding:4px 0 4px 13px;border-left:4px solid;display:flex;align-items:center;gap:8px}
+  .rootlabel.req{color:var(--req);border-color:var(--req)} .rootlabel.res{color:var(--res);border-color:var(--res)}
+  .rootlabel .tag{font-family:"JetBrains Mono",monospace;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--mut);font-weight:500}
+  .node{padding-left:15px;border-left:1px solid var(--line);margin-left:1px}
+  .node:hover{border-left-color:var(--gold)}
+  .line{white-space:pre-wrap;word-break:break-word;border-radius:3px;padding:.5px 4px;margin-left:-4px}
+  .line.clk{cursor:pointer} .line.clk:hover{background:var(--reqtint)}
+  .tog{display:inline-block;width:15px;color:var(--amber);user-select:none;font-size:10px}
+  .cp{display:inline-block;margin-left:9px;opacity:0;cursor:pointer;color:var(--mut);font-size:10px;border:1px solid var(--line2);border-radius:3px;padding:0 6px;transition:opacity .12s,color .12s;user-select:none;vertical-align:middle;font-family:"JetBrains Mono",monospace}
+  .line:hover>.cp{opacity:.65} .cp:hover{opacity:1;color:#fff;background:var(--req);border-color:var(--req)}
+  .anno{color:#9a7b3e;font-style:italic;font-family:"Hanken Grotesk",sans-serif;font-size:12px;margin-left:12px;background:#fbf3e3;padding:0 7px;border-radius:3px}
+  .detailtop{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+  .detailtop>.copybig{margin-left:auto}
+  .annobar{display:flex;gap:0;border:1.5px solid var(--ink);border-radius:3px;overflow:hidden;box-shadow:3px 3px 0 var(--line);width:fit-content}
+  .annobtn{border:0;border-radius:0;box-shadow:none;background:var(--card);color:var(--mut);font-weight:600;padding:7px 15px;font-family:"JetBrains Mono",monospace;font-size:11.5px}
+  .annobtn:not(:last-child){border-right:1.5px solid var(--ink)}
+  .annobtn:hover{box-shadow:none;transform:none;color:var(--ink);background:var(--paper2)}
+  .annobtn.on{background:var(--gold);color:var(--ink)}
+  .sm{display:inline-block;margin-left:6px;opacity:0;cursor:pointer;color:var(--mut);font-size:10px;border:1px solid var(--line2);border-radius:3px;padding:0 6px;transition:opacity .12s,color .12s;user-select:none;vertical-align:middle;font-family:"Hanken Grotesk",sans-serif}
+  .line:hover>.sm{opacity:.65} .sm:hover{opacity:1;color:#fff;background:var(--amber);border-color:var(--amber)}
+  .note{margin:4px 0 7px 15px;padding:7px 11px;background:#fbf3e8;border:1px solid var(--gold);border-left:3px solid var(--amber);border-radius:4px;color:var(--ink2);font-family:"Hanken Grotesk",sans-serif;font-size:12px;line-height:1.55;white-space:normal}
+  .note:before{content:"概括 · ";color:var(--amber);font-weight:700}
+  .ovbtn{border-color:var(--res);color:var(--res)} .ovbtn:hover{box-shadow:3px 3px 0 #bcd9c3;border-color:var(--res)}
+  .overview{margin:0 0 18px;padding:12px 16px;background:#edf4ef;border:1.5px solid var(--res);border-left:4px solid var(--res);border-radius:4px;color:var(--ink2);font-family:"Hanken Grotesk",sans-serif;font-size:13px;line-height:1.7;box-shadow:3px 3px 0 #d3e6d8}
+  .overview:before{content:"整包概览 · ";color:var(--res);font-weight:700}
+  .key{color:var(--key);font-weight:500} .str{color:var(--str)} .num{color:var(--num)}
+  .bool{color:var(--bool)} .null{color:var(--nul);font-style:italic} .meta2{color:var(--mut)}
+  .err{color:var(--nul);font-family:"JetBrains Mono",monospace;padding:20px 6px}
+  .foot{font-family:"JetBrains Mono",monospace;font-size:10px;color:var(--mut);padding:7px 24px;border-top:1px solid var(--line);background:var(--paper2)}
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(18px);background:var(--ink);color:var(--paper2);font-family:"JetBrains Mono",monospace;font-size:12px;padding:9px 16px;border-radius:4px;opacity:0;pointer-events:none;transition:.2s;z-index:99;box-shadow:0 8px 24px rgba(33,30,24,.28)}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+  <header>
+    <div class="hrow">
+      <div class="brand">
+        <span class="kicker">claude-tap · packet ledger</span>
+        <h1><em id="agentName">Codex</em> 抓包实验台</h1>
+      </div>
+      <button id="backbtn" onclick="setMode('guide')">← 全部实验</button>
+      <div class="tabs" id="agenttabs"></div>
+      <span id="task"></span>
+      <div class="btns">
+        <button onclick="expandAll(true)">＋ 展开</button>
+        <button onclick="expandAll(false)">－ 折叠</button>
+      </div>
+    </div>
+    <div class="labrow">
+      <span class="labkicker">实验</span>
+      <div class="labtabs" id="labtabs"></div>
+    </div>
+  </header>
+  <div class="main">
+    <div class="list" id="list"></div>
+    <div class="resizer" id="resizer" title="拖拽调整宽度;拖到很窄会自动隐藏侧栏"></div>
+    <div class="detail" id="detail"></div>
+  </div>
+  <div id="hub"></div>
+  <div class="toast" id="toast"></div>
+<script>
+const $=(s)=>document.querySelector(s);
+function el(t,c,txt){const e=document.createElement(t);if(c)e.className=c;if(txt!=null)e.textContent=txt;return e;}
+let _tt=null;
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('show'),1500);}
+function copyVal(v){const txt=(typeof v==='string')?v:JSON.stringify(v,null,2);
+  navigator.clipboard.writeText(txt).then(()=>toast(`✓ 已复制 ${txt.length.toLocaleString()} 字符`),()=>toast('✗ 复制失败(需经 http://localhost 打开)'));}
+function mkCopy(value){const cp=el('span','cp','⧉ 复制');cp.title='复制此项完整内容';cp.onclick=(e)=>{e.stopPropagation();copyVal(value);};return cp;}
+const TYPE_DICT={
+  'response.create':'WebSocket 帧:发起一次模型生成请求(把历史+工具发上去)',
+  'input_text':'一段纯文本输入片段',
+  'reasoning':'模型的思考链(加密;客户端读不懂,回放给模型接上次思路)',
+  'function_call':'模型发起的工具调用(含 name / arguments / call_id)',
+  'function_call_output':'工具执行结果,按 call_id 配回对应 function_call(ReAct 的 Observe)',
+  'custom_tool_call':'freeform 工具调用(如 apply_patch 写/改文件)',
+  'custom_tool_call_output':'freeform 工具的执行结果',
+  'image_generation_call':'服务端生成图片的调用 + 结果(base64)',
+  'web_search_call':'服务端网页搜索动作(search / open_page)',
+  'tool_use':'模型发起的工具调用(Claude)',
+  'tool_result':'工具结果回填(Claude)',
+  'thinking':'模型的思考块(Claude)',
+  'server_tool_use':'Anthropic 服务端工具调用(如 web_search)',
+  'web_search_tool_result':'服务端 web_search 返回的结果(Claude)',
+  'message':'一条消息',
+  'compaction_trigger':'★触发压缩的裸信号(Codex):客户端末尾只塞这一个空信号,让服务端去做摘要,自己不带任何"怎么总结"的提示',
+  'compaction':'★压缩产物(Codex):服务端生成的加密摘要胶囊(见 encrypted_content),客户端存着但读不懂,下一轮原样回放、顶替臃肿历史',
+};
+const KEY_DICT={
+  instructions:'系统提示(固定人设/规则),每轮重发',
+  input:'对话历史(累积事件,旧→新);store=false 所以每轮整段重放',
+  messages:'对话历史(Anthropic Messages 格式)',
+  system:'系统提示(Claude;块数组,首块常是计费头)',
+  tools:'本轮可用工具的 schema 列表(模型据此知道能调什么)',
+  tool_choice:'工具选择策略(auto=模型自己决定用不用)',
+  parallel_tool_calls:'是否允许一次并行调用多个工具',
+  reasoning:'思考强度设置(effort:low/medium/high)',
+  thinking:'思考模式(adaptive=模型自适应 / enabled+budget)',
+  store:'是否让服务端保存对话(false=不存,客户端每轮重放)',
+  stream:'是否流式返回',
+  include:'请求额外返回的内容(如 reasoning.encrypted_content)',
+  prompt_cache_key:'提示缓存键:提高 KV 缓存命中,更快更省',
+  previous_response_id:'接续上一个响应(本例多为接住"预热"那一包)',
+  text:'输出设置(verbosity=回答啰嗦程度)',
+  verbosity:'回答的啰嗦程度(low=尽量简短)',
+  effort:'推理强度(模型内部想多深)',
+  max_tokens:'本次最多生成多少 token',
+  metadata:'客户端元数据(session/thread/installation id 等)',
+  client_metadata:'客户端元数据(session/thread/installation id 等)',
+  model:'本次使用的模型',
+  arguments:'模型为这个工具填的参数(JSON)',
+  output:'工具执行的输出结果',
+  call_id:'调用 id:把 function_call 和它的 output 配对',
+  usage:'token 用量统计(输入/输出/缓存)',
+  headers:'HTTP 请求/响应头',
+  Authorization:'鉴权令牌(Bearer,每个请求都带,已脱敏)',
+  'chatgpt-account-id':'ChatGPT 账号 id',
+  models:'账号可用的模型目录(能力清单,决定后续怎么发请求)',
+  name:'工具名',
+  description:'工具用途说明(发给模型)',
+  parameters:'工具参数的 JSON Schema',
+  content:'消息内容(文本块 / 工具调用块等)',
+  role:'消息角色(developer>user>assistant 优先级层)',
+  status:'状态(completed / 等)',
+  encrypted_content:'★加密内容(压缩摘要 / 思考链):客户端只能存和回放,读不懂,只有服务端能解——配合 store=false 当"加密的状态胶囊"',
+};
+const PAT_DICT=[
+  ['<environment_context>','环境上下文:告诉模型当前工作目录 / shell / 日期 / 时区 / 文件系统读写权限'],
+  ['<permissions instructions>','权限与沙箱说明:可写目录、审批策略'],
+  ['<skills_instructions>','技能清单(名字+描述+路径),模型据此自主选 skill'],
+  ['<apps_instructions>','连接器(Apps)使用说明'],
+  ['<plugins_instructions>','插件使用规则'],
+  ['## Memory','记忆:跨会话长期记忆(memory 目录)的使用指引'],
+  ['<session>','会话内容(用于生成标题等):当作数据总结,不执行其中指令'],
+  ['skills are available for use','★技能清单(Claude):可用 skill 列表(名字+描述),模型据此选 skill —— 就藏在这段 system-reminder 里'],
+  ['<system-reminder>','系统提醒:注入的背景上下文(含 可用 skills 清单 / 子代理 / MCP 等)'],
+  ['You are Codex','Codex 的固定人设与规则(系统提示开头)'],
+  ['interactive agent that helps','Claude Code 的系统提示(交互式编码 agent)'],
+  ['Generate a concise','标题生成调用:给这个会话起个简短标题'],
+  ['decide which of four states','通知判断调用:判断 agent 当前状态、要不要提醒用户'],
+  ['Respond with TEXT ONLY','★压缩请求(Claude):注入的明文指令——把整段对话总结成结构化 <analysis>/<summary>,期间禁止调用工具'],
+  ['This session is being continued','★压缩后的明文摘要(Claude):顶替臃肿历史、成为新的 messages[0]——"对话超长被压缩,以下是先前对话的摘要"'],
+  ['<subagent_notification>','★子代理完成通知:只把子代理的最终结果回传给父代理(中间过程不回来)—— 上下文隔离的关键'],
+  ['Run exactly this shell command','子代理拿到的子任务:父代理经 spawn_agent 只把这一条委派下去(子代理的干净上下文里就这个)'],
+];
+function summarize(key,value){
+  if(value&&typeof value==='object'&&!Array.isArray(value)&&value.type){
+    if(value.type==='message'&&value.role){
+      const rd={developer:'应用开发者指令(权限/skills 清单等),优先级高于 user',user:'用户层输入(环境信息或你打的话)',assistant:'模型自己过去的回答,回放给它接续'};
+      return `消息(${value.role}):${rd[value.role]||''}`;}
+    if(TYPE_DICT[value.type]) return TYPE_DICT[value.type];
+  }
+  const s=(typeof value==='string')?value:'';
+  for(const [m,d] of PAT_DICT){ if(s.includes(m)) return d; }
+  if(KEY_DICT[key]) return KEY_DICT[key];
+  if(Array.isArray(value)) return `一个数组,共 ${value.length} 项`;
+  if(value&&typeof value==='object') return `一个对象,共 ${Object.keys(value).length} 个字段`;
+  return '(这是个具体取值;词典里暂无对应说明 — 看上层字段名更易理解)';
+}
+function mkSummarize(key,value,lineEl){
+  const b=el('span','sm','概括');b.title='用中文简述这步是干啥';let note=null;
+  b.onclick=(e)=>{e.stopPropagation();if(note){note.remove();note=null;return;}note=el('div','note',summarize(key,value));lineEl.after(note);};
+  return b;
+}
+function extractFinalText(rb){
+  if(!rb||typeof rb!=='object') return '';
+  for(const it of (rb.output||[])){ if(it.type==='message'){const c=it.content;if(Array.isArray(c))return c.map(x=>x.text||'').join('');} }
+  let t=''; for(const c of (rb.content||[])){ if(c.type==='text') t+=c.text||''; } return t;
+}
+function packetOverview(p){
+  const b=p.request.body||{}, rb=p.response.body||{}, s=p.summary||{};
+  const acts=s.actions||[]; const inN=(b.input||b.messages||[]).length;
+  const inTok=s.input_tokens, outTok=s.output_tokens;
+  if((p.path||'').includes('/v1/models')){
+    const n=(rb.models||[]).length;
+    return `拉取账号可用的【模型目录】,共 ${n} 个模型(每个 ~40 个能力字段)。Codex 用它决定:用哪个模型、是否走 WebSocket、verbosity / 推理档位等默认值 —— 是整场对话的"配置说明书",握手前先读它。`;
+  }
+  if(inN===0 && !acts.length && b.type==='response.create'){
+    return `【启动预热】:发一个空 input 的 response.create,目的不是提问,而是暖好 WebSocket 连接、并把"系统提示+工具"这段固定前缀的 KV 在服务端缓存住(in ${inTok??'?'} tokens)。因为没带问题,所以本包无输出(out 0);下一包真正提问时就能命中这份缓存。`;
+  }
+  const sysTxt=Array.isArray(b.system)?b.system.map(x=>x.text||'').join(' '):(typeof b.system==='string'?b.system:'');
+  if(sysTxt.includes('Generate a concise')) return `【会话标题生成】辅助调用:把任务内容当数据,让模型起一个 3–7 词的简短标题(返回 {"title":…})。无工具,与主 agent 循环无关。`;
+  if(sysTxt.includes('decide which of four states')) return `【通知判断】辅助调用:读 agent 最近的输出,判断它处于哪种状态(done / blocked …),决定要不要提醒用户。`;
+  const hasType=(arr,t)=>Array.isArray(arr)&&arr.some(x=>x&&x.type===t);
+  const inpStr=JSON.stringify(b.input||[]), msgStr=JSON.stringify(b.messages||[]);
+  if((p.path||'').includes('count_tokens'))
+    return `【上下文测量 · Claude 专用】调 count_tokens 端点量一下当前上下文有多大(这次 = ${rb.input_tokens??'?'} tokens),据此判断要不要触发压缩。Codex 没有这一步——它直接看响应里的 usage。`;
+  if(hasType(rb.output,'compaction'))
+    return `【压缩 · 服务端(Codex)】上下文顶到阈值,触发 remote_compaction:请求末尾只带一个裸信号 compaction_trigger,服务端把历史蒸馏成一个加密胶囊 encrypted_content(gAAAA…),客户端读不到内文,下一轮拿它顶替臃肿历史。(in ${inTok} tokens)`;
+  if(hasType(b.input,'compaction')&&!hasType(b.input,'compaction_trigger'))
+    return `【压缩后(Codex)】历史里那一大坨工具输出已被换成加密 compaction 胶囊,所以 input 从峰值骤降到 ${inTok} tokens。模型基于"摘要胶囊 + 新消息"继续往下跑。`;
+  if(msgStr.includes('Respond with TEXT ONLY'))
+    return `【压缩 · 客户端(Claude)】注入一段明文指令:"把对话总结成 <analysis>/<summary>,期间禁止调用工具"。模型据此产出一段人类可读的摘要——和 Codex 的加密胶囊正相反。`;
+  if((b.messages&&b.messages[0]&&JSON.stringify(b.messages[0]).includes('ran out of context')))
+    return `【压缩后(Claude)】臃肿的读文件历史已被顶替成开头那段明文摘要(messages[0]:"…continued…ran out of context…")。之后就是"摘要 + 新消息"继续。`;
+  if(inpStr.includes('subagent_notification'))
+    return `【父代理 · 收结果】子代理干完了,父代理收到 subagent_notification——里面只有子代理的最终输出(HELLO_FROM_SUBAGENT),中间过程不回传。这就是上下文隔离。`;
+  if(inpStr.includes('Run exactly this shell command')&&inpStr.includes('HELLO_FROM_SUBAGENT'))
+    return `【子代理 · 自己的请求】instructions(系统提示)和父代理字节一致(21335 字),但上下文是全新的——只装分给它的子任务(echo …),看不到父代理历史。同一个大脑,隔离的工作台。`;
+  const final=extractFinalText(rb).replace(/\s+/g,' ').trim();
+  const eff=(b.reasoning||{}).effort;
+  const rtok=((rb.usage||{}).output_tokens_details||{}).reasoning_tokens;
+  const head=inN?`带着 ${inN} 条历史发起请求`:`发起请求`;
+  let think='';
+  if(eff!=null) think=rtok?`(思考档=${eff}:答案前先做了 ${rtok} 个 reasoning token 的推理——内容加密)`:`(思考档=${eff}:reasoning=0,直接作答)`;
+  let mid;
+  if(acts.length){ const c={}; acts.forEach(a=>c[a]=(c[a]||0)+1);
+    mid=`模型用了:${Object.entries(c).map(([k,v])=>v>1?`${k}×${v}`:k).join('、')}`; }
+  else mid=`未调用工具`;
+  const tail=final?`,最终回答:"${final.slice(0,70)}${final.length>70?'…':''}"`:'';
+  const tok=(inTok!=null||outTok!=null)?`(in ${inTok??'–'} / out ${outTok??'–'} tokens)`:'';
+  return `${head}${think};${mid}${tail}。${tok}`;
+}
+
+const AG=[{k:'codex',label:'◆ Codex'},{k:'claude',label:'✦ Claude Code'}];
+const LABS=[
+  {key:'hi',     label:'① 一句 Hi',     sub:'最小请求',     variants:AG},
+  {key:'node',   label:'② Node 版本',   sub:'web_search',   variants:AG},
+  {key:'image',  label:'③ 生成一张图',  sub:'原生 vs 委托', variants:AG},
+  {key:'webpage',label:'④ 第一性原理网页',sub:'完整 agent loop',variants:AG},
+  {key:'thinking',label:'⑤ Thinking 开/关',sub:'想 vs 不想',variants:[{k:'off',label:'○ 关·轻 (low)'},{k:'on',label:'● 开·重 (xhigh)'}]},
+  {key:'compact', label:'⑥ 上下文压缩', sub:'加密 vs 明文', variants:AG},
+  {key:'subagent',label:'⑦ 子代理',     sub:'共享 prompt·隔离上下文', variants:[{k:'codex',label:'◆ Codex'}]},
+];
+const curLab=()=>LABS.find(L=>L.key===lab);
+const FILE=(lab,v)=>`trace_${lab}_${v}.json`;
+let lab='thinking', variant='off', CACHE={}, DATA=null, cur=0;
+let mode='guide', gExp=null, annoOn=true, _banner=null, _target=null;
+function specificAnno(key,value){
+  if(value&&typeof value==='object'&&!Array.isArray(value)&&value.type){
+    if(value.type==='message'&&value.role){const rd={developer:'应用开发者指令(权限/skills 清单),优先级高于 user',user:'用户层输入(环境信息或你打的话)',assistant:'模型自己过去的回答'};return `消息(${value.role}):${rd[value.role]||''}`;}
+    if((value.type==='input_text'||value.type==='text')&&typeof value.text==='string'){
+      for(const [m,d] of PAT_DICT){if(value.text.includes(m))return d;}
+    }
+    if(TYPE_DICT[value.type])return TYPE_DICT[value.type];
+  }
+  const s=(typeof value==='string')?value:'';
+  for(const [m,d] of PAT_DICT){if(s.includes(m))return d;}
+  if(KEY_DICT[key])return KEY_DICT[key];
+  return '';
+}
+function appendAnno(line,key,value){if(!annoOn)return;const a=specificAnno(key,value);if(a)line.append(el('span','anno','← '+a));}
+const labName=k=>{const L=LABS.find(x=>x.key===k);return L?L.label:k;};
+const vName=(l,v)=>{const L=LABS.find(x=>x.key===l);const vv=L&&L.variants.find(x=>x.k===v);return vv?vv.label:v;};
+const EXP={
+ hi:{prompt:'hi',summary:'即便只说一句 "hi",一个请求里也塞满了东西:~21KB 系统提示、17 个工具、完整鉴权;而且分三步走——先问能用啥、再预热、最后才真发问。'},
+ node:{prompt:'Node.js 最新稳定版是多少?(联网搜)',summary:'查"Node 最新版本"要联网搜索。同一需求,Codex 在服务端一次闭环搜完;Claude 则是"客户端壳 + 服务端子调用"两层。两边都答 v26.4.0。'},
+ image:{prompt:'生成一张白底红苹果的 PNG',summary:'"画一张苹果":Codex 有原生服务端生图工具,一调即出;Claude 没有原生能力,改用 codex-image skill 去 shell 调 codex exec——反过来借了 Codex 来画。'},
+ webpage:{prompt:'做一个讲"第一性原理"的自包含单页 HTML',summary:'Codex 做一个第一性原理网页:读前端 skill → 写文件 → 然后疯狂自验(xmllint/tidy/node)。写 1 次验 6 次,input 从 3 条滚到 44 条。'},
+ thinking:{prompt:'两枚硬币凑 30 分,其中一枚不是 5 分,是哪两枚?',summary:'同一道陷阱题,关思考(low)直接蹦答案;开思考(xhigh)在答案前先做一段推理——reasoning 块 85 token,内容加密。'},
+ compact:{prompt:'(把上下文顶过阈值)让 Agent 连读大文件,触发自动压缩',summary:'上下文顶到阈值会触发压缩,两个 Agent 走法正相反。Codex 走服务端 remote_compaction:客户端末尾只发一个裸信号 compaction_trigger,服务端回一个加密胶囊 encrypted_content(gAAAA…),客户端读不到内文、原样回放顶替臃肿历史——看 input 从 25.7K 骤降到 17.4K 的锯齿。Claude 走客户端:先用 count_tokens 端点量上下文,超阈值就注入一段"请你总结"的明文指令,模型产出可读的 <analysis>/<summary>,顶替历史(开头变成"…continued…ran out of context…")。一个加密、一个明文。'},
+ subagent:{prompt:'委派一个子代理去跑 echo,再把结果拿回来',summary:'子代理 = "同一个大脑、隔离的工作台"。实测:父请求(#2)与子请求(#5)的 instructions(系统提示)字节一致(21335 字、指纹 14c501c2),权限/环境也继承;但子代理跑在全新上下文里,只装分给它的那条子任务(echo),看不到父代理历史,干完只把最终结果经 subagent_notification 回传——中间过程不回来。这正是子代理对抗"上下文越长越糊"的用法。(Claude 侧鉴权过期没抓到,待补)'},
+};
+
+function jsonNode(key,value,depth,openDepth){
+  const wrap=el('div','node'); const isObj=value&&typeof value==='object';
+  if(isObj){
+    const isArr=Array.isArray(value); const entries=isArr?value.map((v,i)=>[i,v]):Object.entries(value);
+    const line=el('div','line clk'); const tog=el('span','tog','▸'); line.append(tog);
+    if(key!=null){line.append(el('span','key',key));line.append(el('span','meta2',': '));}
+    line.append(el('span','meta2',isArr?`[${value.length}]`:`{${entries.length}}`)); line.append(mkCopy(value));appendAnno(line,key,value);
+    const kids=el('div','kids'); for(const [ck,cv] of entries) kids.append(jsonNode(String(ck),cv,depth+1,openDepth));
+    const open=depth<openDepth; kids.style.display=open?'block':'none'; tog.textContent=open?'▾':'▸';
+    line.onclick=()=>{const o=kids.style.display==='none';kids.style.display=o?'block':'none';tog.textContent=o?'▾':'▸';};
+    wrap.append(line,kids);
+  }else{
+    const line=el('div','line'); let cls='null';
+    if(typeof value==='string')cls='str'; else if(typeof value==='number')cls='num'; else if(typeof value==='boolean')cls='bool';
+    if(typeof value==='string'&&value.length>180){
+      const tog=el('span','tog','▸');line.append(tog);line.className='line clk';
+      if(key!=null){line.append(el('span','key',key));line.append(el('span','meta2',': '));}
+      const v=el('span','str');let exp=false;const short=JSON.stringify(value.slice(0,180))+` …(${value.length} chars)`;
+      v.textContent=short;line.append(v);line.append(mkCopy(value));appendAnno(line,key,value);
+      line.onclick=()=>{exp=!exp;v.textContent=exp?JSON.stringify(value):short;tog.textContent=exp?'▾':'▸';};
+    }else{
+      line.append(el('span','tog',' '));
+      if(key!=null){line.append(el('span','key',key));line.append(el('span','meta2',': '));}
+      const v=el('span',cls,JSON.stringify(value));v.title='双击复制';v.ondblclick=()=>copyVal(value);line.append(v);line.append(mkCopy(value));appendAnno(line,key,value);
+    }
+    wrap.append(line);
+  }
+  return wrap;
+}
+function renderList(){
+  const L=$('#list');L.innerHTML='';
+  DATA.packets.forEach((p,i)=>{
+    const d=el('div','pk'+(i===cur?' sel':''));d.style.animationDelay=(i*0.03)+'s';
+    const r1=el('div','row1');r1.append(el('span','n',String(p.index)));
+    r1.append(el('span','pp',`${p.method} ${(p.path||'').replace('?beta=true','')}`));
+    const ok=(p.http_status>=200&&p.http_status<300);r1.append(el('span','st '+(ok?'ok':'err'),p.http_status));d.append(r1);
+    const m=el('div','meta');const s=p.summary||{};
+    m.append(document.createTextNode(`${s.model||''} · in ${s.input_tokens??'–'}/out ${s.output_tokens??'–'}`));m.append(document.createElement('br'));
+    if((s.actions||[]).length) s.actions.forEach(a=>m.append(el('span','act',a))); else m.append(el('span','act','· 无工具调用'));
+    d.append(m);d.onclick=()=>{cur=i;document.querySelectorAll('#list .pk').forEach((x,j)=>x.classList.toggle('sel',j===i));renderDetail();};L.append(d);
+  });
+}
+function renderDetail(){
+  const D=$('#detail');D.innerHTML='';const p=DATA.packets[cur];
+  const ab=el('div','detailtop');
+  const seg=el('div','annobar');
+  const mk=(lbl,on,fn)=>{const b=el('button','annobtn'+(on?' on':''),lbl);b.onclick=fn;return b;};
+  seg.append(mk('💬 概括(每个字段在干啥)',annoOn,()=>{annoOn=true;renderDetail();}));
+  seg.append(mk('{ } 原始抓包',!annoOn,()=>{annoOn=false;renderDetail();}));
+  ab.append(seg);
+  const cpAll=el('button','copybig','⧉ 复制整包 JSON');cpAll.onclick=()=>copyVal(p);ab.append(cpAll);
+  D.append(ab);
+  if(annoOn){D.append(el('div','overview',packetOverview(p)));}
+  const rq=el('div','rootlabel req');rq.append(el('span',null,'REQUEST'));rq.append(el('span','tag','请求'));D.append(rq);
+  D.append(jsonNode('headers',p.request.headers,0,1));D.append(jsonNode('body',p.request.body,0,1));
+  const rs=el('div','rootlabel res');rs.append(el('span',null,'RESPONSE'));rs.append(el('span','tag','响应'));D.append(rs);
+  D.append(jsonNode('status',p.response.status,0,1));D.append(jsonNode('headers',p.response.headers,0,1));D.append(jsonNode('body',p.response.body,0,1));
+}
+function expandAll(open){document.querySelectorAll('#detail .kids').forEach(k=>{k.style.display=open?'block':'none';
+  const tog=k.previousElementSibling&&k.previousElementSibling.querySelector('.tog');if(tog)tog.textContent=open?'▾':'▸';});}
+
+function buildLabTabs(){const c=$('#labtabs');c.innerHTML='';
+  LABS.forEach(L=>{const b=el('button','labtab'+(L.key===lab?' active':''));
+    b.innerHTML=`${L.label}<span class="sub">${L.sub}</span>`;b.onclick=()=>selectLab(L.key);c.append(b);});}
+function buildAgentTabs(){const c=$('#agenttabs');c.innerHTML='';
+  curLab().variants.forEach(v=>{const b=el('button','tab'+(v.k===variant?' active':''),v.label);
+    b.dataset.k=v.k;b.onclick=()=>selectVariant(v.k);c.append(b);});
+  $('#agentName').textContent=curLab().label;}
+function selectLab(k){lab=k;variant=curLab().variants[0].k;buildLabTabs();buildAgentTabs();loadCurrent();}
+function selectVariant(v){variant=v;_banner=null;buildAgentTabs();loadCurrent();}
+function renderHub(){const h=$('#hub');h.innerHTML='';h.classList.remove('expview');$('#agentName').textContent='全部实验';
+  LABS.forEach((L,i)=>{const c=el('div','hubcard');c.style.animationDelay=(i*0.05)+'s';
+    const e=EXP[L.key];
+    c.append(el('div','hubkicker',L.label));
+    c.append(el('h3',null,`Prompt：${e&&e.prompt?('"'+e.prompt+'"'):''}`));
+    c.append(el('p',null,e?e.summary:L.sub));
+    c.append(el('div','hubmeta',`变体:${L.variants.map(v=>v.label.replace(/^\S+\s/,'')).join(' / ')}`));
+    c.append(el('div','go','进入抓包详情 →'));
+    c.onclick=()=>enterExp(L.key);h.append(c);});
+  const ex=el('div','hubcard');ex.style.animationDelay=(LABS.length*0.05)+'s';
+  ex.append(el('div','hubkicker','◈ 图解 · 原理'));
+  ex.append(el('h3',null,'图解:上下文 · 注意力 · 压缩'));
+  ex.append(el('p',null,'5 张图把抓包背后的原理讲清楚:token 锯齿走势 & 成本、U 形注意力(为何长上下文会降级)、注意力矩阵(为什么是 n²)、下一个 token 概率分布、RNN vs Transformer 架构对比。'));
+  ex.append(el('div','hubmeta','走势 / 注意力 / 概率 / 架构'));
+  ex.append(el('div','go','打开图解页 →'));
+  ex.onclick=()=>{location.href='explainers.html';};h.append(ex);}
+function enterExp(k){lab=k;variant=curLab().variants[0].k;buildLabTabs();buildAgentTabs();setMode('packets');loadCurrent();}
+function setMode(m){mode=m;document.body.classList.toggle('guide',m==='guide');
+  if(m==='guide')renderHub();
+  if(window.__updSidebar)window.__updSidebar();}
+async function loadCurrent(){
+  const key=`${lab}_${variant}`;$('#detail').innerHTML='<div class="loading">载入 '+FILE(lab,variant)+' …</div>';
+  if(!CACHE[key]){
+    try{CACHE[key]=await fetch(FILE(lab,variant)).then(r=>{if(!r.ok)throw 0;return r.json();});}
+    catch(e){$('#list').innerHTML='';$('#detail').innerHTML='<div class="err">加载 '+FILE(lab,variant)+' 失败 — 请经 http://localhost:8090 打开。</div>';return;}
+  }
+  DATA=CACHE[key];
+  if(_target!=null){const i=DATA.packets.findIndex(p=>(p.orig??p.index)===_target);cur=i>=0?i:0;_target=null;}else cur=0;
+  const ws=DATA.packets.filter(p=>p.method==='WEBSOCKET').length;
+  $('#task').textContent=`「${DATA.task}」· ${DATA.packets.length} packets (${ws?ws+' WebSocket':'HTTP POST'}) · ${DATA.session.slice(0,8)}`;
+  renderList();renderDetail();
+}
+const sp=new URLSearchParams(location.search);
+const hasParams=sp.get('lab')||sp.get('v')||sp.get('agent');
+if(sp.get('lab')&&LABS.some(L=>L.key===sp.get('lab')))lab=sp.get('lab');
+const _v=sp.get('v')||sp.get('agent');
+variant=(_v&&curLab().variants.some(x=>x.k===_v))?_v:curLab().variants[0].k;
+buildLabTabs();buildAgentTabs();loadCurrent();
+setMode(hasParams?'packets':'guide');
+(function(){
+  const rz=document.getElementById('resizer'),listEl=document.getElementById('list'),mainEl=document.querySelector('.main');
+  const K='tracelab.listw',KO='tracelab.listw.open';
+  const getLS=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
+  const setLS=(k,v)=>{try{localStorage.setItem(k,String(v));}catch(e){}};
+  const btn=document.createElement('button');btn.id='expandSidebar';btn.textContent='▸ 侧栏';btn.title='展开侧栏';document.body.appendChild(btn);
+  const W=()=>listEl.offsetWidth;
+  const upd=()=>{btn.style.display=(!document.body.classList.contains('guide')&&W()<10)?'block':'none';};
+  window.__updSidebar=upd;
+  const setW=w=>{listEl.style.width=w+'px';upd();};
+  const openW=()=>{const v=parseInt(getLS(KO)||'');return (v>=120)?v:316;};
+  let drag=false;
+  rz.addEventListener('mousedown',e=>{drag=true;rz.classList.add('dragging');document.body.style.userSelect='none';e.preventDefault();});
+  window.addEventListener('mousemove',e=>{if(!drag)return;const left=mainEl.getBoundingClientRect().left;let w=e.clientX-left;if(w<120)w=0;else if(w>680)w=680;listEl.style.width=w+'px';upd();});
+  window.addEventListener('mouseup',()=>{if(!drag)return;drag=false;rz.classList.remove('dragging');document.body.style.userSelect='';const w=W();setLS(K,w);if(w>=120)setLS(KO,w);});
+  rz.addEventListener('dblclick',()=>{const w=W()<10?openW():0;setW(w);setLS(K,w);});       // 双击:隐藏 ↔ 上次宽度
+  btn.onclick=()=>{const w=openW();setW(w);setLS(K,w);};                                      // 浮标:展开到上次宽度
+  const saved=getLS(K);if(saved!==null){const n=parseInt(saved);if(!isNaN(n))setW(n);}        // 刷新后恢复宽度
+  upd();
+})();
+</script>
+</body>
+</html>

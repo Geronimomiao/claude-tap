@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex CLI · 系统提示词演进史</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,500;0,600;0,800;0,900;1,900&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  /* === STYLE C — "BROADSIDE" ===========================================
+     Protest-poster editorial. Type is so large it stops being text and
+     becomes graphic primitive. One fire-orange is *the* color. Dark slides
+     with cream ink, IBM Plex Mono chrome, 1px hairline hierarchy. Bilingual.
+     ===================================================================== */
+  :root{
+    --ink:#111111; --ink-alt:#1A1A18; --fire:#E85D26; --cream:#F0ECE5;
+    --cream-muted:#888880; --cream-hint:#54544c; --border:#282826;
+    --display:"Barlow","Noto Sans SC",sans-serif;
+    --cn:"Noto Sans SC",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  /* --- viewport-base.css (fixed 16:9 stage) --- */
+  html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000}
+  .deck-viewport{position:fixed;inset:0;overflow:hidden;background:var(--ink)}
+  .deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0;background:var(--ink)}
+  .slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;background:var(--ink);color:var(--cream);font-family:var(--cn)}
+
+  /* faint vertical hairlines — broadside column ledger */
+  .slide::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background-image:linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);background-size:160px 100%;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 30%);mask-image:linear-gradient(90deg,transparent,#000 30%)}
+  /* the fire margin */
+  .slide::after{content:"";position:absolute;left:0;top:0;bottom:0;width:18px;background:var(--fire);z-index:2}
+
+  .pad{position:relative;z-index:1;height:100%;padding:70px 104px 64px 122px;display:flex;flex-direction:column}
+
+  /* top chrome */
+  .chrome{display:flex;align-items:center;gap:18px;font-family:var(--mono);font-size:18px;letter-spacing:.06em;color:var(--cream-muted);text-transform:uppercase;
+    padding-bottom:22px;border-bottom:1px solid var(--border)}
+  .chrome .sp{flex:1}
+  .chrome b{color:var(--cream);font-weight:500}
+
+  /* hero */
+  .hero{margin:auto 0;display:flex;flex-direction:column;justify-content:center}
+  .kick{font-family:var(--mono);font-size:21px;letter-spacing:.12em;text-transform:uppercase;color:var(--fire);margin-bottom:30px;display:flex;align-items:center;gap:16px}
+  .kick::before{content:"";width:54px;height:2px;background:var(--fire)}
+  h1{font-family:var(--display);font-weight:900;line-height:.84;letter-spacing:-.01em}
+  h1 .cn{display:block;font-size:228px;color:var(--cream)}
+  h1 .cn .fire{color:var(--fire)}
+  h1 .en{display:block;font-family:var(--display);font-weight:900;font-style:italic;font-size:62px;text-transform:lowercase;letter-spacing:-.01em;color:var(--cream);margin-top:28px;line-height:1}
+  h1 .en u{text-decoration:none;box-shadow:inset 0 -.14em var(--fire);}
+  .lede{margin-top:40px;max-width:1080px;font-size:25px;line-height:1.6;color:var(--cream-muted);font-weight:400}
+  .lede b{color:var(--cream);font-weight:700}
+
+  /* bottom chrome with big stat */
+  .foot{display:flex;align-items:flex-end;gap:30px;padding-top:26px;border-top:1px solid var(--border);font-family:var(--mono);font-size:18px;color:var(--cream-muted)}
+  .foot .big{font-family:var(--display);font-weight:900;font-size:66px;line-height:.8;color:var(--cream)}
+  .foot .big .u{font-family:var(--mono);font-weight:400;font-size:17px;color:var(--cream-muted);display:block;margin-top:10px;letter-spacing:.04em}
+  .foot .big .o{color:var(--fire)}
+  .foot .sp{flex:1}
+  .foot .r-col{text-align:right;line-height:1.9}
+  .foot b{color:var(--cream);font-weight:500}
+
+  /* entrance */
+  .r{opacity:0;transform:translateY(30px);animation:rise .85s cubic-bezier(.16,1,.3,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .clip{opacity:0;transform:translateY(110px);animation:rise .95s cubic-bezier(.16,1,.3,1) forwards}
+  .r1{animation-delay:.05s}.r2{animation-delay:.18s}.r3{animation-delay:.32s}.r4{animation-delay:.46s}.r5{animation-delay:.6s}
+  @media (prefers-reduced-motion:reduce){.r,.clip{animation:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+  <main class="deck-stage" id="deckStage">
+    <section class="slide title-slide active">
+      <div class="pad">
+        <div class="chrome r r1">
+          <span>phistory</span><span>/</span><span><b>codex-cli</b></span>
+          <span class="sp"></span>
+          <span>system prompt diff</span><span>·</span><span><b>2026</b></span>
+        </div>
+
+        <div class="hero">
+          <div class="kick r r2">60 releases · 17 substantive rewrites</div>
+          <h1>
+            <span class="cn clip" style="animation-delay:.2s">系统提示词<span class="fire">演进史</span></span>
+            <span class="en r r4">how codex cli's <u>constitution</u> was rewritten, version by version</span>
+          </h1>
+          <p class="lede r r5">从删去整段沙箱说明，到首次确立<b>人格框架</b>，到落地又废除<b>子智能体</b>体系——一份系统提示词的六个月。</p>
+        </div>
+
+        <div class="foot r r5">
+          <div class="big"><span class="o">17</span><span class="u">SUBSTANTIVE CHANGES</span></div>
+          <div class="big">11<span class="u">THEMES TRACKED</span></div>
+          <span class="sp"></span>
+          <div class="r-col">
+            <div>2026.01.09 → 2026.06.26</div>
+            <div>source — <b>phistory.cc ↗</b></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+  (function(){
+    var stage=document.getElementById('deckStage');
+    function scale(){var f=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+      stage.style.transform='translate('+((window.innerWidth-1920*f)/2)+'px,'+((window.innerHeight-1080*f)/2)+'px) scale('+f+')';}
+    scale();window.addEventListener('resize',scale);
+  })();
+</script>
+</body>
+</html>

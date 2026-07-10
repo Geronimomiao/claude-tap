@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Алтай — путешествие, которое изменит вас</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant:ital,wght@0,400;0,500;0,600&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --olive:#3a4222;
+  --lime:#c2d383;
+  --sage:#b5c29c;
+  --ink:#3c4429;
+  --paper:#f4f4ee;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased}
+body{font-family:'Montserrat',sans-serif;background:#fff;min-width:1200px}
+a{text-decoration:none}
+button{font-family:inherit;border:0;cursor:pointer}
+
+/* ============ HERO ============ */
+.hero{position:relative;width:100%;aspect-ratio:1200/735;min-height:620px;overflow:hidden;background:#46503f}
+.hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 38%;z-index:0}
+.hero-shade{position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(180deg,rgba(24,30,20,.42) 0%,rgba(24,30,20,.10) 14%,rgba(24,30,20,0) 26%)}
+.hero-warm{position:absolute;inset:0;z-index:1;pointer-events:none;mix-blend-mode:soft-light;
+  background:linear-gradient(180deg,rgba(0,0,0,0) 58%,rgba(196,178,96,.55) 88%,rgba(196,178,96,.6) 100%)}
+.hero-frame{position:relative;z-index:2;max-width:1200px;height:100%;margin:0 auto}
+
+/* layered title (between bg and person) */
+.hero-title{position:absolute;left:178px;top:142px;z-index:2;transform:scaleY(1.1);transform-origin:left top;
+  font-family:'Cormorant',serif;font-weight:500;font-size:186px;line-height:1;letter-spacing:.005em;
+  background:linear-gradient(180deg,#ffffff 4%,#efece4 40%,#a9aca4 78%,#8b8f87 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;opacity:.88;user-select:none}
+.hero-sub{position:absolute;left:184px;top:366px;z-index:2;font-size:18px;font-weight:400;color:#f3f3ec;letter-spacing:.01em}
+
+/* person layer (above title) */
+.hero-person{position:absolute;left:552px;top:228px;width:446px;z-index:3;
+  -webkit-mask-image:linear-gradient(180deg,#000 44.5%,rgba(0,0,0,.5) 47.5%,transparent 49.5%);
+  mask-image:linear-gradient(180deg,#000 44.5%,rgba(0,0,0,.5) 47.5%,transparent 49.5%);
+  filter:drop-shadow(0 14px 26px rgba(15,20,12,.4))}
+
+/* header */
+.hero-head{position:absolute;top:0;left:0;right:0;z-index:4;display:flex;align-items:center;
+  padding:12px 110px 0 100px}
+.logo{display:block;color:rgba(244,244,238,.92)}
+.hero-head nav{margin-left:auto;display:flex;align-items:center;gap:40px}
+.hero-head nav a{color:#f3f3ec;font-size:15px;font-weight:400;letter-spacing:.01em}
+.hero-head nav a.accent{color:var(--lime)}
+
+/* left social rail */
+.rail{position:absolute;left:63px;top:198px;z-index:4;display:flex;flex-direction:column;align-items:center;gap:24px}
+.rail .line{width:1px;height:56px;background:rgba(244,244,238,.55)}
+.rail a{color:rgba(240,242,232,.9);display:block;line-height:0}
+
+/* CTA */
+.cta{position:absolute;left:96px;top:566px;z-index:4;width:274px;height:64px;border-radius:15px;
+  background:rgba(50,57,29,.94);display:flex;align-items:center;gap:13px;padding:0 20px 0 22px;
+  color:#f3f3ec;font-size:16px;font-weight:400}
+.cta .dot{width:6px;height:6px;border-radius:50%;background:#e9edda;flex:none}
+.cta svg{margin-left:auto;color:#dfe5c8}
+.tagline{position:absolute;left:96px;top:648px;z-index:4;font-size:21px;font-weight:500;color:#fff;letter-spacing:.01em}
+
+/* calendar button */
+.cal{position:absolute;right:42px;bottom:58px;z-index:4;width:48px;height:48px;border-radius:12px;
+  background:rgba(178,192,153,.88);display:grid;place-items:center;color:#333a1e}
+
+/* micro-interactions */
+.hero-head nav a,.rail a{transition:opacity .25s ease}
+.hero-head nav a:hover,.rail a:hover{opacity:.65}
+.cta{transition:background .25s ease,transform .25s ease}
+.cta:hover{background:rgba(60,68,36,.97);transform:translateY(-1px)}
+.cal{transition:transform .25s ease}
+.cal:hover{transform:translateY(-2px)}
+.card>img{transition:transform .6s cubic-bezier(.22,.61,.36,1)}
+.card:hover>img{transform:scale(1.045)}
+.card .go{transition:transform .3s ease}
+.card .go:hover{transform:translate(2px,-2px)}
+
+/* ============ TOURS SECTION ============ */
+.tours{position:relative;background:linear-gradient(180deg,#e9ece6 0%,#f7f8f5 34%,#ffffff 100%);
+  padding:92px 0 78px;overflow:hidden}
+.fog{position:absolute;pointer-events:none;z-index:3;
+  background:radial-gradient(closest-side,rgba(255,255,255,.8),rgba(255,255,255,0) 72%)}
+
+.tours h2{position:relative;z-index:2;text-align:center;
+  font-family:'Cormorant',serif;font-weight:500;font-size:82px;line-height:1;color:var(--ink);letter-spacing:.035em}
+.tours .lead{position:relative;z-index:2;margin-top:16px;text-align:center;font-size:17px;font-weight:400;color:#5f6849}
+
+.grid{position:relative;z-index:2;width:990px;margin:44px auto 0;
+  display:grid;grid-template-columns:repeat(6,1fr);gap:20px}
+.card{position:relative;height:256px;border-radius:20px;overflow:hidden;background:#c9cfc4}
+.card.w3{grid-column:span 3}
+.card.w2{grid-column:span 2}
+.card>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.card::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(8,12,6,0) 42%,rgba(8,12,6,.52) 100%)}
+.badge{position:absolute;top:14px;right:16px;z-index:2;padding:7px 15px;border-radius:999px;
+  background:rgba(22,24,16,.34);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);
+  font-size:12px;font-weight:400;color:#f0f1e8}
+.card h3{position:absolute;left:22px;bottom:42px;z-index:2;
+  font-family:'Cormorant',serif;font-weight:600;font-size:29px;line-height:1;color:#fff;letter-spacing:.03em}
+.card .price{position:absolute;left:23px;bottom:16px;z-index:2;font-size:16px;font-weight:400;color:#fff}
+.card .go{position:absolute;right:14px;bottom:14px;z-index:2;width:45px;height:45px;border-radius:13px;
+  background:#f7f6f1;display:grid;place-items:center;color:#3a4222}
+</style>
+</head>
+<body>
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <img class="hero-bg" src="images/hero-bg.png" alt="">
+  <div class="hero-shade"></div>
+  <div class="hero-warm"></div>
+
+  <div class="hero-frame">
+    <!-- layer 2: title behind person -->
+    <h1 class="hero-title">АЛТАЙ</h1>
+    <p class="hero-sub">путешествие, которое изменит вас</p>
+
+    <!-- layer 3: person -->
+    <img class="hero-person" src="images/person.png" alt="" onerror="this.style.display='none'">
+
+    <!-- layer 4: UI -->
+    <header class="hero-head">
+      <a class="logo" href="#" aria-label="Алтай">
+        <svg width="62" height="62" viewBox="0 0 62 62" fill="none" stroke="currentColor" stroke-width="1.4">
+          <circle cx="31" cy="31" r="24.5"/>
+          <path d="M17 38.5 L26 25 L31.5 32.5 L37 23 L45 38.5 Z" stroke-linejoin="round"/>
+          <path d="M24.8 27.8 l1.8 2 1.6-1.8 M35.2 26.2 l1.7 2.4 1.5-1.6" stroke-width="1.1" stroke-linecap="round"/>
+        </svg>
+      </a>
+      <nav>
+        <a href="#">О нас</a>
+        <a href="#">Наши туры</a>
+        <a href="#">Гиды</a>
+        <a href="#">Отзывы</a>
+        <a href="#">Контакты</a>
+        <a href="#" class="accent">Получить консультацию</a>
+      </nav>
+    </header>
+
+    <div class="rail">
+      <span class="line"></span>
+      <a href="#" aria-label="Instagram">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="5.5"/>
+          <circle cx="12" cy="12" r="4.2"/>
+          <circle cx="17.3" cy="6.7" r="1" fill="currentColor" stroke="none"/>
+        </svg>
+      </a>
+      <a href="#" aria-label="Telegram">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+          <path d="M21 4 L3.4 11.1 c-.6.25 -.55 1.1.1 1.3 L8.6 14 L10.5 19.6 c.2.6 1 .7 1.35.15 L14 16.4 L18.6 19.7 c.5.36 1.2.1 1.33-.5 L21.9 5 c.12-.7-.4-1.2-.9-1 Z"/>
+          <path d="M8.6 14 L21 4 L10.5 15.2"/>
+        </svg>
+      </a>
+      <a href="#" aria-label="WhatsApp">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3.5 a8.5 8.5 0 0 1 0 17 c-1.5 0-2.9-.38-4.1-1.05 L3.5 20.5 l1.1-4.2 A8.46 8.46 0 0 1 3.5 12 A8.5 8.5 0 0 1 12 3.5 Z"/>
+          <path d="M9 8.8 c-.3 1.5.6 3.4 2 4.8 1.4 1.4 3.3 2.3 4.8 2 l.4-1.6 -2-.9 -.9.9 c-.9-.3-2.1-1.5-2.4-2.4 l.9-.9 -.9-2 Z" stroke-width="1.2"/>
+        </svg>
+      </a>
+      <span class="line"></span>
+    </div>
+
+    <button class="cta">
+      <span class="dot"></span>
+      Оставить заявку
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 15 L15 5 M7.5 5 H15 V12.5"/>
+      </svg>
+    </button>
+    <p class="tagline">Авторские туры с заботой о каждом моменте</p>
+
+    <button class="cal" aria-label="Календарь туров">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+        <rect x="3.5" y="5" width="17" height="15.5" rx="3"/>
+        <path d="M3.5 9.5 H20.5 M8 3 V6.5 M16 3 V6.5"/>
+        <path d="M7.5 13 h.01 M12 13 h.01 M16.5 13 h.01 M7.5 16.5 h.01 M12 16.5 h.01 M16.5 16.5 h.01" stroke-width="2.2"/>
+      </svg>
+    </button>
+  </div>
+</section>
+
+<!-- ================= TOURS ================= -->
+<section class="tours">
+  <h2>СЕРДЦЕ АЛТАЯ</h2>
+  <p class="lead">От активного отдыха до спокойного релакса в горах</p>
+
+  <div class="grid">
+    <article class="card w3">
+      <img src="images/card-ring.png" alt="" onerror="this.src='images/hero-bg.png';this.style.objectPosition='36% 74%';this.onerror=null">
+      <span class="badge">7 дней</span>
+      <h3>ПО КОЛЬЦУ АЛТАЯ</h3>
+      <p class="price">81.500 ₽</p>
+      <button class="go" aria-label="Подробнее">
+        <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 15 L15 5 M7.5 5 H15 V12.5"/>
+        </svg>
+      </button>
+    </article>
+
+    <article class="card w3">
+      <img src="images/card-glacier.png" alt="" onerror="this.src='images/hero-bg.png';this.style.objectPosition='70% 8%';this.style.filter='saturate(.45) brightness(1.2) contrast(.92)';this.onerror=null">
+      <span class="badge">6 дней</span>
+      <h3>К ЛЕДНИКАМ АКТРУ</h3>
+      <p class="price">69.000 ₽</p>
+      <button class="go" aria-label="Подробнее">
+        <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 15 L15 5 M7.5 5 H15 V12.5"/>
+        </svg>
+      </button>
+    </article>
+
+    <article class="card w2">
+      <img src="images/card-spring.png" alt="" onerror="this.src='images/hero-bg.png';this.style.objectPosition='82% 28%';this.style.filter='sepia(.5) saturate(1.6) hue-rotate(-20deg) brightness(.9)';this.onerror=null">
+      <span class="badge">5 дней</span>
+      <h3>ВЕСЕННИЙ ТУР</h3>
+      <p class="price">56.500 ₽</p>
+      <button class="go" aria-label="Подробнее">
+        <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 15 L15 5 M7.5 5 H15 V12.5"/>
+        </svg>
+      </button>
+    </article>
+
+    <article class="card w2">
+      <img src="images/card-glamping.png" alt="" onerror="this.src='images/hero-bg.png';this.style.objectPosition='8% 58%';this.style.filter='brightness(.82) saturate(.95)';this.onerror=null">
+      <span class="badge">6 дней</span>
+      <h3>ГЛЭМПИНГ ТУР</h3>
+      <p class="price">от 24.000 ₽</p>
+      <button class="go" aria-label="Подробнее">
+        <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 15 L15 5 M7.5 5 H15 V12.5"/>
+        </svg>
+      </button>
+    </article>
+
+    <article class="card w2">
+      <img src="images/card-lakes.png" alt="" onerror="this.src='images/hero-bg.png';this.style.objectPosition='58% 16%';this.style.filter='saturate(1.5) hue-rotate(150deg) brightness(1.08)';this.onerror=null">
+      <span class="badge">7 дней</span>
+      <h3>СИЯНИЕ ОЗЕР</h3>
+      <p class="price">47.500 ₽</p>
+      <button class="go" aria-label="Подробнее">
+        <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 15 L15 5 M7.5 5 H15 V12.5"/>
+        </svg>
+      </button>
+    </article>
+
+    <!-- fog wisps drifting over the cards -->
+    <div class="fog" style="left:-160px;bottom:-90px;width:560px;height:260px"></div>
+    <div class="fog" style="right:-180px;bottom:-70px;width:620px;height:290px"></div>
+    <div class="fog" style="right:-100px;top:80px;width:460px;height:220px;opacity:.6"></div>
+    <div class="fog" style="left:-80px;top:245px;width:480px;height:170px;opacity:.45"></div>
+  </div>
+</section>
+
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex CLI · 系统提示词演进史</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  /* === STYLE A — "DIFF CONSOLE" =========================================
+     A near-black developer console. The title slide reads like a git diff of
+     a system prompt: monospace, +green / −red stat bars, a blinking cursor.
+     Maximally on-theme for "system-prompt evolution".
+     ===================================================================== */
+  :root{
+    --bg:#0a0d13; --bg-2:#0e121b; --panel:#11161f; --panel-2:#151b26;
+    --line:#222a38; --line-soft:#1a212d;
+    --ink:#e6edf3; --ink-2:#aeb9c8; --muted:#6e7a8c; --muted-2:#515c6d;
+    --add:#3fb950; --add-dim:#1f6f33; --rem:#f85149; --rem-dim:#8b2c2c;
+    --accent:#58a6ff; --violet:#bc8cff;
+    --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+    --sans:"Noto Sans SC","Helvetica Neue",Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  /* --- viewport-base.css (fixed 16:9 stage) --- */
+  html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000}
+  .deck-viewport{position:fixed;inset:0;overflow:hidden;background:var(--bg)}
+  .deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0;background:var(--bg)}
+  .slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden}
+
+  /* --- atmosphere: console grid + corner glow --- */
+  .slide{
+    background:
+      radial-gradient(1200px 680px at 16% -6%, rgba(88,166,255,.10), transparent 60%),
+      radial-gradient(1000px 600px at 96% 8%, rgba(188,140,255,.07), transparent 62%),
+      var(--bg);
+    color:var(--ink);font-family:var(--sans);
+    padding:84px 110px 72px;display:flex;flex-direction:column;
+  }
+  .slide::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+    background-size:52px 52px;
+    -webkit-mask-image:radial-gradient(circle at 30% 18%,#000,transparent 78%);mask-image:radial-gradient(circle at 30% 18%,#000,transparent 78%);opacity:.5}
+  .slide>*{position:relative;z-index:1}
+
+  /* --- top breadcrumb / editor chrome --- */
+  .topbar{display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:17px;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--add);box-shadow:0 0 12px var(--add)}
+  .topbar .path{color:var(--ink-2)}
+  .topbar .path b{color:var(--accent);font-weight:500}
+  .topbar .sp{flex:1}
+  .topbar .tag{border:1px solid var(--line);border-radius:7px;padding:5px 12px;color:var(--ink-2);background:rgba(255,255,255,.02)}
+
+  /* --- hero --- */
+  .hero{margin-top:64px;display:grid;grid-template-columns:1.05fr .95fr;gap:54px;align-items:center;flex:1}
+  .kicker{font-family:var(--mono);font-size:18px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);display:flex;align-items:center;gap:14px}
+  .kicker::before{content:"";width:46px;height:1px;background:linear-gradient(90deg,var(--accent),transparent)}
+  h1{margin:30px 0 0;font-weight:900;line-height:.98;letter-spacing:-.01em;font-size:118px}
+  h1 .en{display:block;font-family:var(--mono);font-weight:800;font-size:38px;letter-spacing:.02em;color:var(--ink-2);margin-bottom:18px;font-feature-settings:"ss02"}
+  h1 .cn{display:block;background:linear-gradient(180deg,#fff,#9fb0c8);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lede{margin-top:30px;max-width:640px;font-size:22px;line-height:1.7;color:var(--ink-2);font-weight:300}
+  .lede b{color:var(--ink);font-weight:500}
+  .lede code{font-family:var(--mono);font-size:.86em;color:var(--accent);background:rgba(88,166,255,.1);padding:2px 8px;border-radius:6px}
+
+  /* --- diff panel (focal element) --- */
+  .diff{border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,var(--panel-2),var(--panel));overflow:hidden;
+    box-shadow:0 40px 90px -50px #000,0 0 0 1px rgba(255,255,255,.02) inset}
+  .diff .dh{display:flex;align-items:center;gap:10px;padding:16px 22px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:16px;color:var(--muted)}
+  .diff .dh .hunk{color:var(--violet)}
+  .diff .dh .sp{flex:1}
+  .diff .dh .stat .p{color:var(--add)}
+  .diff .dh .stat .m{color:var(--rem)}
+  .diff .body{padding:14px 0;font-family:var(--mono);font-size:18.5px;line-height:1.92}
+  .diff .ln{display:grid;grid-template-columns:30px 1fr;padding:0 22px}
+  .diff .ln .g{color:var(--muted-2);text-align:center}
+  .diff .ln.add{background:rgba(63,185,80,.08)}.diff .ln.add .g,.diff .ln.add .t{color:var(--add)}
+  .diff .ln.rem{background:rgba(248,81,73,.08)}.diff .ln.rem .g,.diff .ln.rem .t{color:var(--rem)}
+  .diff .ln.ctx .t{color:var(--ink-2)}
+  .diff .ln .t code{color:inherit;background:rgba(255,255,255,.06);padding:0 5px;border-radius:4px}
+  .cursor{display:inline-block;width:11px;height:21px;background:var(--accent);margin-left:4px;vertical-align:-3px;animation:blink 1.1s steps(1) infinite;box-shadow:0 0 10px var(--accent)}
+  @keyframes blink{50%{opacity:0}}
+
+  /* --- footer stat row --- */
+  .foot{margin-top:8px;display:flex;align-items:center;gap:32px;font-family:var(--mono);font-size:18px;color:var(--muted);border-top:1px solid var(--line-soft);padding-top:26px}
+  .foot .stat b{color:var(--ink);font-weight:700;font-size:26px}
+  .foot .stat .u{color:var(--ink-2);font-weight:400}
+  .foot .vline{width:1px;height:26px;background:var(--line)}
+  .foot .src{margin-left:auto;color:var(--muted-2)}
+  .foot .src b{color:var(--accent);font-weight:500}
+
+  /* --- staggered entrance --- */
+  .r{opacity:0;transform:translateY(26px);animation:rise .8s cubic-bezier(.16,1,.3,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .r1{animation-delay:.05s}.r2{animation-delay:.18s}.r3{animation-delay:.3s}.r4{animation-delay:.42s}
+  .r5{animation-delay:.54s}.r6{animation-delay:.66s}.r7{animation-delay:.78s}
+  @media (prefers-reduced-motion:reduce){.r{animation:none;opacity:1;transform:none}.cursor{animation:none}}
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+  <main class="deck-stage" id="deckStage">
+    <section class="slide title-slide active">
+      <!-- editor chrome -->
+      <div class="topbar r r1">
+        <span class="dot"></span>
+        <span class="path">~/.codex/<b>system-prompt.md</b></span>
+        <span class="sp"></span>
+        <span class="tag">main ↵ 60 releases</span>
+        <span class="tag">2026.01 — 2026.06</span>
+      </div>
+
+      <div class="hero">
+        <!-- left: title -->
+        <div>
+          <div class="kicker r r2">Prompt Archaeology · 提示词考古</div>
+          <h1>
+            <span class="en r r2">CODEX&nbsp;CLI&nbsp;/&nbsp;SYSTEM&nbsp;PROMPT</span>
+            <span class="cn r r3">系统提示词<br>演进史</span>
+          </h1>
+          <p class="lede r r4">逐版本拆解 Codex CLI 系统提示词的每一次<b>实质性重写</b>——从沙箱说明，到首个<b>人格框架</b>，再到 <code>子智能体</code> 体系的兴与废。</p>
+        </div>
+
+        <!-- right: live diff -->
+        <div class="diff r r5">
+          <div class="dh">
+            <span class="hunk">@@ 0.81.0 → 0.142.3 @@</span>
+            <span class="sp"></span>
+            <span class="stat"><span class="p">+912</span> / <span class="m">−689</span></span>
+          </div>
+          <div class="body">
+            <div class="ln rem"><span class="g">−</span><span class="t">整段 “harness, sandboxing &amp; approvals” 说明</span></div>
+            <div class="ln add"><span class="g">+</span><span class="t">你是与用户共享工作区的<b>协作者</b></span></div>
+            <div class="ln add"><span class="g">+</span><span class="t"><code>request_user_input</code> 带选项提问</span></div>
+            <div class="ln ctx"><span class="g">~</span><span class="t">shell_command → <code>exec_command</code>（PTY）</span></div>
+            <div class="ln add"><span class="g">+</span><span class="t">整套子智能体委派体系 (+232)</span></div>
+            <div class="ln rem"><span class="g">−</span><span class="t">移除常驻子智能体，转向目标管理 (−190)<span class="cursor"></span></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- stats -->
+      <div class="foot r r6">
+        <span class="stat"><b>60</b> <span class="u">个版本</span></span>
+        <span class="vline"></span>
+        <span class="stat"><b>17</b> <span class="u">次实质变更</span></span>
+        <span class="vline"></span>
+        <span class="stat"><b>11</b> <span class="u">类主题</span></span>
+        <span class="src">数据抓取自 <b>phistory.cc</b></span>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+  /* scale the fixed 1920×1080 stage to fit any viewport (letterbox) */
+  (function(){
+    var stage=document.getElementById('deckStage');
+    function scale(){var f=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+      stage.style.transform='translate('+((window.innerWidth-1920*f)/2)+'px,'+((window.innerHeight-1080*f)/2)+'px) scale('+f+')';}
+    scale();window.addEventListener('resize',scale);
+  })();
+</script>
+</body>
+</html>

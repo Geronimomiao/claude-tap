@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex CLI · 系统提示词演进史（Cobalt Grid · 网格切屏）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Hanken+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   CODEX CLI · 系统提示词演进史 — "COBALT GRID" · 2D GRID PAGING
+   Horizontal (← →) = chapters (columns). Vertical (↑ ↓ / wheel) = the
+   version nodes inside the current chapter (rows). One full screen per
+   step, snap. Like fullPage.js / reveal.js. Each slide carries data-col
+   and data-row; the controller translates the whole grid in 2D.
+   ===================================================================== */
+:root{
+  --paper:#F0EBDE; --paper-2:#E6E0CE; --ink:#1F2BE0; --ink-soft:#5560E5;
+  --grid:rgba(31,43,224,.10); --faint:rgba(31,43,224,.18); --tint:rgba(31,43,224,.07);
+  --serif:"Newsreader","Noto Serif SC",Georgia,serif;
+  --cn:"Noto Serif SC","Newsreader",serif;
+  --body:"Hanken Grotesk","Noto Serif SC",sans-serif;
+  --mono:"DM Mono",ui-monospace,monospace;
+  --edge:80px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0c0c0a}
+.deck-viewport{position:fixed;inset:0;overflow:hidden;background:var(--paper)}
+.deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0;background:var(--paper)}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;background:var(--paper);color:var(--ink);font-family:var(--body);
+  transition:transform .6s cubic-bezier(.77,0,.175,1);pointer-events:none;will-change:transform}
+.slide.active{pointer-events:auto;z-index:1}
+html.no-anim .slide{transition:none!important}
+.reveal,.fade{opacity:1}
+@media print{html,body{width:1920px;height:auto;overflow:visible;background:#fff}.deck-viewport{position:static;overflow:visible}.deck-stage{position:static;width:auto;height:auto;transform:none!important}.slide{position:relative;transform:none!important;width:1920px;height:1080px;break-after:page}.col-dots,.row-dots,.aff,.status,.edit-hotzone,.edit-toggle,.edit-bar{display:none!important}}
+@media (prefers-reduced-motion:reduce){.slide{transition-duration:.2s}.aff-down{animation:none}}
+
+.slide::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(to right,var(--grid) 1px,transparent 1px),linear-gradient(to bottom,var(--grid) 1px,transparent 1px);background-size:40px 40px}
+.hl-t,.hl-b{position:absolute;left:var(--edge);right:var(--edge);height:0;border-top:1.5px solid var(--ink);z-index:2}
+.hl-t{top:34px}.hl-b{bottom:30px}
+.pagenum{position:absolute;right:var(--edge);bottom:52px;z-index:3;font-family:var(--mono);font-size:14px;letter-spacing:.06em;color:var(--ink)}
+.frame{position:absolute;left:var(--edge);right:var(--edge);top:112px;bottom:92px;z-index:1;display:flex;flex-direction:column}
+
+.cn-h{font-family:var(--cn);font-weight:700;color:var(--ink);line-height:1.08;letter-spacing:0}
+.it{font-family:var(--serif);font-style:italic;font-weight:500;color:var(--ink)}
+.kicker{font-family:var(--body);font-weight:600;font-size:15px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink)}
+.labtag{font-family:var(--mono);font-size:15px;letter-spacing:.05em;color:var(--ink);white-space:nowrap}
+.lede{font-family:var(--body);font-weight:400;font-size:22px;line-height:1.6;color:var(--ink)}
+em{font-style:normal;font-weight:700;color:var(--ink)}b{font-weight:700}
+code{font-family:var(--mono);font-size:.8em;background:var(--tint);color:var(--ink);padding:1px 6px;white-space:nowrap}
+
+.topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;padding-bottom:16px;border-bottom:1.5px solid var(--ink);flex:none}
+.topbar .cn-h{font-size:56px;line-height:1.06}
+.topbar .labtag{padding-bottom:8px;font-size:16px}
+.dbody{flex:1;display:grid;grid-template-columns:.82fr 1.18fr;gap:60px;align-items:center;padding-top:24px}
+.dleft{display:flex;flex-direction:column;gap:26px}
+.catzh{align-self:flex-start;font-family:var(--body);font-weight:600;font-size:15px;letter-spacing:.04em;color:var(--ink);border:1px solid var(--ink);padding:6px 13px}
+.delta{display:flex;gap:46px}
+.delta .d{display:flex;flex-direction:column;gap:9px}
+.delta .num{font-family:var(--serif);font-weight:400;font-size:86px;line-height:.8;letter-spacing:-.015em;color:var(--ink)}
+.delta .d.dn .num{opacity:.4}
+.delta .lab{font-family:var(--mono);font-size:13px;letter-spacing:.08em;color:var(--ink)}
+.delta .d.dn .lab{opacity:.55}
+.dright{display:flex;flex-direction:column}
+.rlabel{font-family:var(--body);font-weight:600;font-size:14px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink);padding-bottom:12px;border-bottom:1.5px solid var(--ink);margin-bottom:4px}
+.dindex{display:flex;flex-direction:column}
+.irow{display:grid;grid-template-columns:46px 1fr;gap:18px;align-items:baseline;padding:13px 0;border-bottom:1px solid var(--faint)}
+.irow .ix{font-family:var(--mono);font-size:14px;color:var(--ink);opacity:.65}
+.irow .t{font-family:var(--body);font-size:18.5px;line-height:1.5;color:var(--ink)}
+.irow .t b{font-weight:700}
+
+.ledger{flex:1;display:flex;flex-direction:column;justify-content:center;padding-top:14px}
+.lhead,.lrow{display:grid;grid-template-columns:96px 1fr 150px 150px;gap:24px;align-items:baseline}
+.lhead{font-family:var(--mono);font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);padding-bottom:13px;border-bottom:1.5px solid var(--ink)}
+.lrow{padding:13px 0;border-bottom:1px solid var(--faint)}
+.lrow .lv{font-family:var(--mono);font-size:18px;color:var(--ink)}
+.lrow .lt{font-family:var(--serif);font-weight:400;font-size:22px;line-height:1.15;color:var(--ink)}
+.lrow .lc{font-family:var(--body);font-size:15px;color:var(--ink);opacity:.85}
+.lrow .ld{font-family:var(--mono);font-size:16px;color:var(--ink);white-space:nowrap}
+.lrow .ld .dn{opacity:.45}
+
+.cover .frame{justify-content:space-between}
+.cover .top{display:flex;justify-content:space-between;align-items:baseline}
+.cover .hero{display:flex;flex-direction:column}
+.cover .hero .it{font-size:84px;line-height:1;margin-bottom:8px}
+.cover .hero .cn-h{font-family:var(--cn);font-weight:900;font-size:150px;line-height:.98;letter-spacing:.01em}
+.cover .cal{font-family:var(--serif);font-style:italic;font-size:30px;color:var(--ink);margin-top:26px}
+.cover .bot{display:flex;justify-content:space-between;align-items:flex-end;font-family:var(--mono);font-size:16px;letter-spacing:.04em;color:var(--ink)}
+
+.chapter .frame{justify-content:center}
+.chnum{font-family:var(--mono);font-size:17px;letter-spacing:.1em;color:var(--ink);position:absolute;top:84px;left:var(--edge)}
+.chapter .ch-cn{font-family:var(--cn);font-weight:700;font-size:128px;line-height:1.1;color:var(--ink)}
+.chapter .lede{margin-top:30px;max-width:900px}
+
+.colophon .frame{align-items:flex-end;justify-content:center;text-align:right}
+.colophon .ctitle{font-family:var(--cn);font-weight:700;font-size:118px;line-height:1.1;color:var(--ink)}
+.colophon .kicker{margin-bottom:22px}
+.colophon .creds{display:grid;grid-template-columns:repeat(3,minmax(0,300px));gap:30px;margin-top:54px;text-align:left}
+.colophon .creds .c{border-top:1.5px solid var(--ink);padding-top:15px}
+.colophon .creds .c .h{font-family:var(--mono);font-size:13px;letter-spacing:.06em;color:var(--ink);margin-bottom:9px}
+.colophon .creds .c .b{font-family:var(--body);font-size:17px;line-height:1.5;color:var(--ink)}
+.colophon .src{margin-top:36px;font-family:var(--mono);font-size:14px;color:var(--ink);opacity:.7}
+
+.glitch{position:absolute;top:172px;bottom:172px;z-index:1;display:flex;flex-direction:column;justify-content:center;gap:18px;pointer-events:none;opacity:.6}
+.glitch.right{right:104px;align-items:flex-end}.glitch.left{left:104px;align-items:flex-start}
+.glitch i{display:block;height:74px;background:repeating-linear-gradient(90deg,var(--ink) 0 3px,transparent 3px 12px)}
+.glitch i:nth-child(1){width:300px}.glitch i:nth-child(2){width:230px}.glitch i:nth-child(3){width:268px}
+.glitch i:nth-child(4){width:170px}.glitch i:nth-child(5){width:240px}.glitch i:nth-child(6){width:140px}
+.qr{position:absolute;width:84px;height:84px;display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);gap:1.5px;background:var(--paper);padding:4px;box-shadow:0 0 0 1.5px var(--paper);z-index:4}
+.qr i{background:transparent}.qr i.on{background:var(--ink)}
+
+/* === 2D NAV INDICATORS === */
+.col-dots{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:1000;display:flex;gap:9px}
+.col-dots button{width:9px;height:9px;border:none;background:var(--faint);cursor:pointer;padding:0;transition:.2s}
+.col-dots button.on{background:var(--ink);transform:scale(1.5)}
+.row-dots{position:fixed;right:24px;top:50%;transform:translateY(-50%);z-index:1000;display:none;flex-direction:column;gap:8px;align-items:center}
+.row-dots .axislab{font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--ink);opacity:.5;writing-mode:vertical-rl;margin-bottom:6px}
+.row-dots button{width:8px;height:8px;border:none;background:var(--faint);cursor:pointer;padding:0;transition:.2s}
+.row-dots button.on{background:var(--ink);transform:scale(1.6)}
+.aff{position:fixed;z-index:1000;font-family:var(--mono);font-size:16px;color:var(--ink);pointer-events:none;transition:opacity .3s;opacity:0}
+.aff-down{left:50%;bottom:44px;transform:translateX(-50%);animation:bob 1.7s ease-in-out infinite}
+.aff-right{right:52px;top:50%;transform:translateY(-50%)}
+@keyframes bob{0%,100%{transform:translate(-50%,0)}50%{transform:translate(-50%,6px)}}
+.status{position:fixed;left:var(--edge);bottom:50px;z-index:1000;font-family:var(--mono);font-size:13px;letter-spacing:.05em;color:var(--ink);opacity:.55}
+
+/* edit */
+.edit-hotzone{position:fixed;top:0;left:0;width:84px;height:84px;z-index:10000;cursor:pointer}
+.edit-toggle{position:fixed;top:18px;left:18px;z-index:10001;width:44px;height:44px;border:1.5px solid var(--ink);background:var(--paper);color:var(--ink);font-size:18px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s;display:flex;align-items:center;justify-content:center}
+.edit-toggle.show,.edit-toggle.active{opacity:1;pointer-events:auto}
+.edit-toggle.active{background:var(--ink);color:var(--paper)}
+body.editing [contenteditable]{outline:1px dashed var(--ink-soft);outline-offset:5px;cursor:text}
+body.editing [contenteditable]:focus{outline:1.5px solid var(--ink);background:var(--tint)}
+.edit-bar{position:fixed;top:18px;left:74px;z-index:10001;display:none;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);background:var(--paper);border:1.5px solid var(--ink);padding:8px 14px}
+body.editing .edit-bar{display:flex}
+.edit-bar button{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.06em;background:var(--ink);color:var(--paper);border:none;padding:6px 12px;cursor:pointer}
+.edit-bar button.ghost{background:transparent;color:var(--ink);border:1px solid var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="deck-viewport">
+  <main class="deck-stage" id="deckStage">
+<section data-col="0" data-row="0" class="slide cover">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">01 / 25</span>
+  <div class="glitch right"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="qr" style="top:250px;right:120px" data-qr></div>
+  <div class="frame">
+    <div class="top"><span class="kicker">Phistory — System Prompt Bulletin</span><span class="labtag">No. 01</span></div>
+    <div class="hero"><span class="it">Codex CLI</span><span class="cn-h">系统提示词演进史</span><span class="cal">横向走章节 · 纵向走节点 · 60 releases · 17 rewrites</span></div>
+    <div class="bot"><span>2026.01.09 → 2026.06.26</span><span>SOURCE — phistory.cc</span></div>
+  </div>
+</section>
+<section data-col="1" data-row="0" class="slide">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">02 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">修订索引 I — 地基 · 立人格</h2><span class="labtag">REVISION INDEX / 01–07</span></div>
+    <div class="ledger"><div class="lhead"><span>VER</span><span>变更内容 · WHAT CHANGED</span><span>主题</span><span>± DIFF</span></div><div class="lrow"><span class="lv">0.81</span><span class="lt">拆分出独立的 Developer Prompt</span><span class="lc">结构 · 流程</span><span class="ld"><span class="up">+5</span> <span class="dn">−41</span></span></div><div class="lrow"><span class="lv">0.93</span><span class="lt">引入可复用的审批前缀规则</span><span class="lc">权限 · 安全</span><span class="ld"><span class="up">+12</span> <span class="dn">−2</span></span></div><div class="lrow"><span class="lv">0.94</span><span class="lt">新增 request_user_input 工具</span><span class="lc">工具 · 执行</span><span class="ld"><span class="up">+70</span> <span class="dn">−3</span></span></div><div class="lrow"><span class="lv">0.96</span><span class="lt">shell_command → exec_command（PTY 化）</span><span class="lc">工具 · 执行</span><span class="ld"><span class="up">+91</span> <span class="dn">−48</span></span></div><div class="lrow"><span class="lv">0.99</span><span class="lt">首次确立“人格框架”</span><span class="lc">身份 · 人格</span><span class="ld"><span class="up">+57</span> <span class="dn">−41</span></span></div><div class="lrow"><span class="lv">0.102</span><span class="lt">暂时下线 MCP 资源工具</span><span class="lc">MCP · 集成</span><span class="ld"><span class="up">+0</span> <span class="dn">−67</span></span></div><div class="lrow"><span class="lv">0.106</span><span class="lt">双通道沟通 + 端到端自主性</span><span class="lc">结构 · 流程</span><span class="ld"><span class="up">+63</span> <span class="dn">−43</span></span></div></div>
+  </div>
+</section>
+<section data-col="1" data-row="1" class="slide">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">03 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">修订索引 II — 委派 · 收口</h2><span class="labtag">REVISION INDEX / 08–17</span></div>
+    <div class="ledger"><div class="lhead"><span>VER</span><span>变更内容 · WHAT CHANGED</span><span>主题</span><span>± DIFF</span></div><div class="lrow"><span class="lv">0.115</span><span class="lt">引入整套子智能体委派体系</span><span class="lc">子智能体</span><span class="ld"><span class="up">+232</span> <span class="dn">−6</span></span></div><div class="lrow"><span class="lv">0.117</span><span class="lt">加回 MCP，并新增 imagegen / plugin-creator</span><span class="lc">MCP · 集成</span><span class="ld"><span class="up">+80</span> <span class="dn">−11</span></span></div><div class="lrow"><span class="lv">0.119</span><span class="lt">工具 Schema 字段整理</span><span class="lc">结构 · 流程</span><span class="ld"><span class="up">+23</span> <span class="dn">−20</span></span></div><div class="lrow"><span class="lv">0.123</span><span class="lt">重写编辑规范与最终答复规范</span><span class="lc">结构 · 流程</span><span class="ld"><span class="up">+51</span> <span class="dn">−40</span></span></div><div class="lrow"><span class="lv">0.125</span><span class="lt">转为叙事口吻 + 详尽前端规范</span><span class="lc">身份 · 人格</span><span class="ld"><span class="up">+100</span> <span class="dn">−68</span></span></div><div class="lrow"><span class="lv">0.131</span><span class="lt">引入 GPT-5.5 与 service_tier</span><span class="lc">模型</span><span class="ld"><span class="up">+10</span> <span class="dn">−6</span></span></div><div class="lrow"><span class="lv">0.132</span><span class="lt">精简模型清单格式</span><span class="lc">模型</span><span class="ld"><span class="up">+11</span> <span class="dn">−7</span></span></div><div class="lrow"><span class="lv">0.133</span><span class="lt">移除子智能体，转向目标管理 + tool_search</span><span class="lc">规划 · 任务</span><span class="ld"><span class="up">+57</span> <span class="dn">−190</span></span></div><div class="lrow"><span class="lv">0.136</span><span class="lt">注入文件系统权限画像</span><span class="lc">权限 · 安全</span><span class="ld"><span class="up">+35</span> <span class="dn">−23</span></span></div><div class="lrow"><span class="lv">0.140</span><span class="lt">技能支持多来源定位符</span><span class="lc">技能 · 插件</span><span class="ld"><span class="up">+15</span> <span class="dn">−11</span></span></div></div>
+  </div>
+</section>
+<section data-col="2" data-row="0" class="slide chapter">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">04 / 25</span>
+  <div class="glitch right"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <span class="chnum">CH.01 — FOUNDATIONS</span>
+  <div class="frame">
+    <div class="kicker" style="margin-bottom:22px">Chapter 01 · 2026.01 — 02 · 4 个节点 · ↓ 往下看</div>
+    <h1 class="ch-cn">地基<br>权限与工具</h1>
+    <p class="lede">先把脚手架说清楚——谁能动文件、怎么问用户、命令怎么跑。</p>
+  </div>
+</section>
+<section data-col="2" data-row="1" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">05 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">拆分出独立的 Developer Prompt</h2><span class="labtag">v0.81.0 · 01.14 · WORKFLOW</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.01 地基 · 结构 · 流程</span>
+        <p class="lede">删除内联的大段沙箱/审批说明，把权限配置收敛进独立的 Developer Prompt 与精简版 <code>&lt;permissions&gt;</code> 块。</p>
+        <div class="delta"><div class="d up"><span class="num">+5</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−41</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">删除 System Prompt 里整段 “Codex CLI harness, sandboxing, and approvals” 说明（约 40 行）</span></div><div class="irow"><span class="ix">02</span><span class="t">新增独立的 <code>#&nbsp;Developer&nbsp;Prompt</code> 段，权限说明压缩为一句话</span></div><div class="irow"><span class="ix">03</span><span class="t">从 <code>&lt;environment_context&gt;</code> 移除 approval_policy / sandbox_mode / network_access 字段</span></div><div class="irow"><span class="ix">04</span><span class="t"><code>view_image</code> 语义收紧：仅在用户给出完整路径且图片未附加时才用</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="2" data-row="2" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">06 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">引入可复用的审批前缀规则</h2><span class="labtag">v0.93.0 · 01.31 · SAFETY</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.01 地基 · 权限 · 安全</span>
+        <p class="lede">shell 命令新增 <code>prefix_rule</code>，批准一次后可复用同类命令前缀；细化 justification 文案。</p>
+        <div class="delta"><div class="d up"><span class="num">+12</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−2</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">新增 <code>prefix_rule</code> 参数：如 <code>["git","pull"]</code>，用于复用同类命令的审批</span></div><div class="irow"><span class="ix">02</span><span class="t"><code>justification</code> 从“一句话解释”改为“面向用户的审批问句”</span></div><div class="irow"><span class="ix">03</span><span class="t"><code>&lt;permissions instructions&gt;</code> 由单行改为多行排版</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="2" data-row="3" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">07 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">新增 request_user_input 工具</h2><span class="labtag">v0.94.0 · 02.02 · TOOLS</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.01 地基 · 工具 · 执行</span>
+        <p class="lede">新增可向用户提 1–3 个带选项问题的 <code>request_user_input</code>；细化技能渐进式披露的路径解析。</p>
+        <div class="delta"><div class="d up"><span class="num">+70</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−3</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">新增 <code>request_user_input</code>：单/多选问题，含 header / options，推荐项置顶并标注 “(Recommended)”</span></div><div class="irow"><span class="ix">02</span><span class="t">技能相对路径（如 <code>scripts/foo.py</code>）优先以技能目录为基准解析</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="2" data-row="4" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">08 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">shell_command → exec_command（PTY 化）</h2><span class="labtag">v0.96.0 · 02.04 · TOOLS</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.01 地基 · 工具 · 执行</span>
+        <p class="lede">用基于 PTY 的 <code>exec_command</code> 取代旧的 <code>shell_command</code>，并新增 <code>write_stdin</code> 支持交互式长驻会话。</p>
+        <div class="delta"><div class="d up"><span class="num">+91</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−48</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">移除 <code>shell_command</code>，引入 <code>exec_command</code>（在 PTY 中运行，可返回 session_id 持续交互）</span></div><div class="irow"><span class="ix">02</span><span class="t">新增 <code>write_stdin</code>：向已有 unified-exec 会话写入字符并取回输出</span></div><div class="irow"><span class="ix">03</span><span class="t">支持 tty / login / yield_time_ms 等更精细的执行控制</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="3" data-row="0" class="slide chapter">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">09 / 25</span>
+  <div class="glitch right"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <span class="chnum">CH.02 — PERSONHOOD</span>
+  <div class="frame">
+    <div class="kicker" style="margin-bottom:22px">Chapter 02 · 2026.02 · 3 个节点 · ↓ 往下看</div>
+    <h1 class="ch-cn">立人格<br>从工具到协作者</h1>
+    <p class="lede">提示词第一次开始回答一个非技术问题——“你是谁”。</p>
+  </div>
+</section>
+<section data-col="3" data-row="1" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">10 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">首次确立“人格框架”</h2><span class="labtag">v0.99.0 · 02.11 · IDENTITY</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.02 立人格 · 身份 · 人格</span>
+        <p class="lede">引入 Personality / Values / Interaction Style / Escalation 四段式人格；开场改为“与用户共享工作区、协作达成目标”。</p>
+        <div class="delta"><div class="d up"><span class="num">+57</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−41</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">开场白从“运行在 Codex CLI 中的编码代理”改为“你和用户共享同一工作区、协作完成目标”</span></div><div class="irow"><span class="ix">02</span><span class="t">新增 Values（Clarity / Pragmatism / Rigor）与 Escalation 行为准则</span></div><div class="irow"><span class="ix">03</span><span class="t">用更克制的 “Working with the user” + 格式规则，替换原冗长的 “Presenting your work” 段</span></div><div class="irow"><span class="ix">04</span><span class="t"><code>&lt;permissions&gt;</code> 块进一步压缩为一句话</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="3" data-row="2" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">11 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">暂时下线 MCP 资源工具</h2><span class="labtag">v0.102.0 · 02.17 · MCP</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.02 立人格 · MCP · 集成</span>
+        <p class="lede">移除 <code>list_mcp_resources</code> / <code>list_mcp_resource_templates</code> / <code>read_mcp_resource</code> 三个工具。</p>
+        <div class="delta"><div class="d up"><span class="num">+0</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−67</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">净删除 67 行：暂时取消通过 MCP 读取资源与资源模板的能力（后于 0.117 重新加回）</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="3" data-row="3" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">12 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">双通道沟通 + 端到端自主性</h2><span class="labtag">v0.106.0 · 02.26 · WORKFLOW</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.02 立人格 · 结构 · 流程</span>
+        <p class="lede">引入 <code>commentary</code> / <code>final</code> 双通道与进度播报；新增 “Autonomy and persistence”；人格基调转为“直接、就事论事”。</p>
+        <div class="delta"><div class="d up"><span class="num">+63</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−43</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">新增 <code>commentary</code>（过程更新）与 <code>final</code>（最终答复）两个通道</span></div><div class="irow"><span class="ix">02</span><span class="t">新增 “Autonomy and persistence”：端到端把任务做完，不停在分析或半成品</span></div><div class="irow"><span class="ix">03</span><span class="t">新增 “Intermediary updates”：约每 20s 播报进度，且句式需多变</span></div><div class="irow"><span class="ix">04</span><span class="t">人格从“安静的喜悦 / 适度热情”改为“直接、事实性表达，不灌水”</span></div><div class="irow"><span class="ix">05</span><span class="t">新增“尽量并行工具调用”，删除独立的 “Plan tool” 段</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="4" data-row="0" class="slide chapter">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">13 / 25</span>
+  <div class="glitch right"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <span class="chnum">CH.03 — DELEGATION</span>
+  <div class="frame">
+    <div class="kicker" style="margin-bottom:22px">Chapter 03 · 2026.03 — 04 · 5 个节点 · ↓ 往下看</div>
+    <h1 class="ch-cn">委派体系<br>兴起与改写</h1>
+    <p class="lede">子智能体被郑重加上，编辑规范与口吻随之重写。</p>
+  </div>
+</section>
+<section data-col="4" data-row="1" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">14 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">引入整套子智能体委派体系</h2><span class="labtag">v0.115.0 · 03.16 · SUBAGENTS</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.03 委派体系 · 子智能体</span>
+        <p class="lede">一次性新增 spawn / close / resume / send_input / wait 全套子代理工具，附 explorer/worker 角色与并行委派规范——单次最大新增。</p>
+        <div class="delta"><div class="d up"><span class="num">+232</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−6</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">新增子代理生命周期工具：<code>spawn_agent</code> / <code>close_agent</code> / <code>resume_agent</code> / <code>send_input</code> / <code>wait_agent</code></span></div><div class="irow"><span class="ix">02</span><span class="t">定义 explorer（只读探查）与 worker（执行 / 改码）两类角色</span></div><div class="irow"><span class="ix">03</span><span class="t">大段“何时委派、如何拆分写权范围、并行委派模式、委派后如何整合”指南</span></div><div class="irow"><span class="ix">04</span><span class="t">强约束：仅当用户明确要求子代理 / 并行时才允许 spawn</span></div><div class="irow"><span class="ix">05</span><span class="t">技能区块改用 <code>&lt;skills_instructions&gt;</code> 包裹（从 AGENTS.md 抽出）</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="4" data-row="2" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">15 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">加回 MCP，并新增 imagegen / plugin-creator</h2><span class="labtag">v0.117.0 · 03.26 · MCP</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.03 委派体系 · MCP · 集成</span>
+        <p class="lede">重新引入三个 MCP 资源工具；新增 imagegen、plugin-creator 技能；close_agent 支持级联关闭，参数 id→target。</p>
+        <div class="delta"><div class="d up"><span class="num">+80</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−11</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">重新加回 <code>list_mcp_resources</code> / <code>list_mcp_resource_templates</code> / <code>read_mcp_resource</code></span></div><div class="irow"><span class="ix">02</span><span class="t">新增技能：<code>imagegen</code>（生成 / 编辑位图）、<code>plugin-creator</code>（脚手架插件）</span></div><div class="irow"><span class="ix">03</span><span class="t"><code>close_agent</code> 改为关闭目标及其所有子代理</span></div><div class="irow"><span class="ix">04</span><span class="t">代理标识参数统一从 <code>id</code>/<code>ids</code> 改为 <code>target</code>/<code>targets</code></span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="4" data-row="3" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">16 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">工具 Schema 字段整理</h2><span class="labtag">v0.119.0 · 04.10 · WORKFLOW</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.03 委派体系 · 结构 · 流程</span>
+        <p class="lede">主要是工具 JSON schema 的字段顺序与文案整理（description 前置等），以及 spawn_agent 块的小幅重排。</p>
+        <div class="delta"><div class="d up"><span class="num">+23</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−20</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">多个工具参数把 <code>description</code> 调整到 <code>items</code> 之前</span></div><div class="irow"><span class="ix">02</span><span class="t">为 questions / options / plan 等补齐 description 文案</span></div><div class="irow"><span class="ix">03</span><span class="t">spawn_agent 的授权说明顺序微调（偏结构性，无行为改变）</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="4" data-row="4" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">17 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">重写编辑规范与最终答复规范</h2><span class="labtag">v0.123.0 · 04.23 · WORKFLOW</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.03 委派体系 · 结构 · 流程</span>
+        <p class="lede">apply_patch 改为“手动编辑一律使用”；文件引用改 Markdown 链接；最终答复强调精简（≤2–3 个分区）；新增 React 现代写法指引。</p>
+        <div class="delta"><div class="d up"><span class="num">+51</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−40</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">编辑：从“尽量用 apply_patch”改为“手动改码一律用 <code>apply_patch</code>”</span></div><div class="irow"><span class="ix">02</span><span class="t">新增禁止用 <code>echo "===";</code> 这类分隔符串联 bash 命令</span></div><div class="irow"><span class="ix">03</span><span class="t">文件引用从 inline code 改为可点击的 Markdown 链接</span></div><div class="irow"><span class="ix">04</span><span class="t">重写 “Final answer”：默认精简、最多 2–3 个高层分区、像 changelog 就压缩</span></div><div class="irow"><span class="ix">05</span><span class="t">新增 React 指引（<code>useEffectEvent</code> / <code>startTransition</code> 等，按团队约定）</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="4" data-row="5" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">18 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">转为叙事口吻 + 详尽前端规范</h2><span class="labtag">v0.125.0 · 04.24 · IDENTITY</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.03 委派体系 · 身份 · 人格</span>
+        <p class="lede">全篇转为第二人称叙事口吻；新增 “Engineering judgment” 与大段 “Frontend guidance”；加入上下文压缩处理与多条口吻禁令。</p>
+        <div class="delta"><div class="d up"><span class="num">+100</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−68</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">开场改为“与用户协作，直到目标被真正解决”</span></div><div class="irow"><span class="ix">02</span><span class="t">General / Interaction 改写为有“人味”的第二人称叙述</span></div><div class="irow"><span class="ix">03</span><span class="t">新增 “Engineering judgment”：遵循仓库既有模式、最小化改动范围、测试随风险扩展</span></div><div class="irow"><span class="ix">04</span><span class="t">新增大段 “Frontend guidance”：用 lucide 图标、禁止卡中卡、hero 页规范、配色禁忌等</span></div><div class="irow"><span class="ix">05</span><span class="t">新增上下文压缩（compaction）后的接续策略</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="5" data-row="0" class="slide chapter">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">19 / 25</span>
+  <div class="glitch right"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <span class="chnum">CH.04 — SETTLING</span>
+  <div class="frame">
+    <div class="kicker" style="margin-bottom:22px">Chapter 04 · 2026.05 — 06 · 5 个节点 · ↓ 往下看</div>
+    <h1 class="ch-cn">转向与收口<br>模型 · 权限 · 技能</h1>
+    <p class="lede">又把常驻子代理删掉，转向目标管理；其余是把边界收紧的小步。</p>
+  </div>
+</section>
+<section data-col="5" data-row="1" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">20 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">引入 GPT-5.5 与 service_tier</h2><span class="labtag">v0.131.0 · 05.18 · MODELS</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.04 转向与收口 · 模型</span>
+        <p class="lede">模型清单加入 GPT-5.5；spawn_agent 增加 <code>service_tier</code> 覆盖；模型描述补充 priority 服务档。</p>
+        <div class="delta"><div class="d up"><span class="num">+10</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−6</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">可选模型清单新增 <code>gpt-5.5</code>（前沿模型）</span></div><div class="irow"><span class="ix">02</span><span class="t">spawn_agent 新增 <code>service_tier</code> 覆盖参数</span></div><div class="irow"><span class="ix">03</span><span class="t">模型描述补充 service tier 信息（priority：1.5x 速度）</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="5" data-row="2" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">21 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">精简模型清单格式</h2><span class="labtag">v0.132.0 · 05.20 · MODELS</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.04 转向与收口 · 模型</span>
+        <p class="lede">把冗长的模型覆盖描述压缩为简洁单行；view image 的 detail 参数补充 <code>high</code> 枚举值。</p>
+        <div class="delta"><div class="d up"><span class="num">+11</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−7</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">模型清单从多句描述压缩为“名称 + 推理档 + 服务档”单行</span></div><div class="irow"><span class="ix">02</span><span class="t">view image 的 <code>detail</code> 参数明确 <code>high</code> / <code>original</code> 枚举</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="5" data-row="3" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">22 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">移除子智能体，转向目标管理 + tool_search</h2><span class="labtag">v0.133.0 · 05.21 · PLANNING</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.04 转向与收口 · 规划 · 任务</span>
+        <p class="lede">删除整套常驻子代理工具，改为目标管理 create/get/update_goal 与 BM25 延迟加载 tool_search——单次最大删除（−190）。</p>
+        <div class="delta"><div class="d up"><span class="num">+57</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−190</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">删除 spawn / close / resume / send_input / wait 五个常驻子代理工具</span></div><div class="irow"><span class="ix">02</span><span class="t">新增目标管理：<code>create_goal</code> / <code>get_goal</code> / <code>update_goal</code>（含 token 预算与 blocked 判定门槛）</span></div><div class="irow"><span class="ix">03</span><span class="t">新增 <code>tool_search</code>：用 BM25 检索“延迟工具”，多智能体工具改为按需暴露</span></div><div class="irow"><span class="ix">04</span><span class="t">MCP 工具也改为通过 <code>tool_search</code> 发现，不再常驻 list_mcp_*</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="5" data-row="4" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">23 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">注入文件系统权限画像</h2><span class="labtag">v0.136.0 · 06.01 · SAFETY</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.04 转向与收口 · 权限 · 安全</span>
+        <p class="lede"><code>&lt;environment_context&gt;</code> 新增 <code>&lt;filesystem&gt;</code> 权限画像；大量工具参数描述精简并补充枚举与默认值。</p>
+        <div class="delta"><div class="d up"><span class="num">+35</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−23</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">environment_context 注入 <code>&lt;filesystem&gt;</code>（workspace_roots + 受限读权限画像）</span></div><div class="irow"><span class="ix">02</span><span class="t">exec_command / update_plan 等参数描述大幅精简，补 enum（sandbox_permissions、plan status）</span></div><div class="irow"><span class="ix">03</span><span class="t">明确默认值（如 max_output_tokens 默认 10000、yield_time_ms 区间）</span></div><div class="irow"><span class="ix">04</span><span class="t">openai-docs 技能扩展到“Codex 自身知识”问答</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="5" data-row="5" class="slide detail">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">24 / 25</span>
+  <div class="frame">
+    <div class="topbar"><h2 class="cn-h">技能支持多来源定位符</h2><span class="labtag">v0.140.0 · 06.15 · SKILLS</span></div>
+    <div class="dbody">
+      <div class="dleft">
+        <span class="catzh">CH.04 转向与收口 · 技能 · 插件</span>
+        <p class="lede">技能来源从单一文件路径扩展为 file / environment / orchestrator / custom 四类资源定位符；request_user_input 支持非阻塞自动放行。</p>
+        <div class="delta"><div class="d up"><span class="num">+15</span><span class="lab">↑ ADDED</span></div><div class="d dn"><span class="num">−11</span><span class="lab">↓ REMOVED</span></div></div>
+      </div>
+      <div class="dright"><div class="rlabel">本次改了什么 · WHAT CHANGED</div><div class="dindex"><div class="irow"><span class="ix">01</span><span class="t">技能来源扩展为 <code>file</code> / <code>environment resource</code> / <code>orchestrator resource</code> / <code>custom resource</code></span></div><div class="irow"><span class="ix">02</span><span class="t">orchestrator 技能通过 <code>skills.list</code> / <code>skills.read</code> 访问，不能当本地路径</span></div><div class="irow"><span class="ix">03</span><span class="t"><code>request_user_input</code> 新增 <code>autoResolutionMs</code>（60–240s 自动放行的非阻塞提问）</span></div><div class="irow"><span class="ix">04</span><span class="t"><code>create_goal</code> 允许在旧目标完成后替换为新目标</span></div></div></div>
+    </div>
+  </div>
+</section>
+<section data-col="6" data-row="0" class="slide colophon">
+  <span class="hl-t"></span><span class="hl-b"></span><span class="pagenum">25 / 25</span>
+  <div class="glitch left"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="frame">
+    <div class="kicker">回望 · What the diffs say</div>
+    <h1 class="ctitle">六个月的 diff，<br>说了三件事</h1>
+    <div class="creds"><div class="c"><div class="h">01 / IDENTITY</div><div class="b">从“运行中的代理”到“共享工作区的协作者”——人格被显式写了出来（v0.99 / v0.125）。</div></div><div class="c"><div class="h">02 / HUMILITY</div><div class="b">+232 引入子智能体（v0.115）、−190 又删掉（v0.133）：敢加，也敢承认加错。</div></div><div class="c"><div class="h">03 / RESTRAINT</div><div class="b">从堆叠工具，转向目标管理 + 按需 tool_search——少即是多。</div></div></div>
+    <div class="src">SOURCE — phistory.cc · 共 17 个实质性节点 · ← → 章节 · ↑ ↓ 节点</div>
+  </div>
+</section>
+  </main>
+</div>
+
+<!-- 2D nav indicators -->
+<div class="col-dots" id="colDots" title="← → 章节"></div>
+<div class="row-dots" id="rowDots"><span class="axislab">NODES</span></div>
+<div class="aff aff-down" id="affDown">↓</div>
+<div class="aff aff-right" id="affRight">→</div>
+<div class="status" id="status"></div>
+
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle" title="编辑模式 (E)">✎</button>
+<div class="edit-bar" id="editBar"><span>编辑模式 · 点击文字直接改</span><button id="btnExport">导出 HTML</button><button class="ghost" id="btnReset">还原</button><button class="ghost" id="btnDone">完成</button></div>
+
+<script>
+(function(){
+  const stage=document.getElementById('deckStage');
+  const slides=[...document.querySelectorAll('.slide')];
+  slides.forEach(s=>{s._c=+s.dataset.col;s._r=+s.dataset.row;});
+  const ncols=Math.max(...slides.map(s=>s._c))+1;
+  const grid=Array.from({length:ncols},()=>[]);
+  slides.forEach(s=>{grid[s._c][s._r]=s;});
+  const colH=grid.map(col=>col.length);
+  const order=[]; grid.forEach(col=>col.forEach(s=>order.push(s)));   // column-major reading order
+  let C=0; const rowState=new Array(ncols).fill(0);
+  const pad=n=>String(n).padStart(2,'0');
+
+  const QR=["11101011","10001101","10111001","10010111","01101100","11010010","00111011","10101101"];
+  document.querySelectorAll('[data-qr]').forEach(el=>{QR.join('').split('').forEach(b=>{const c=document.createElement('i');if(b==='1')c.className='on';el.appendChild(c);});});
+
+  /* scale stage to viewport */
+  function scale(){const f=Math.min(window.innerWidth/1920,window.innerHeight/1080);stage.style.transform=`translate(${(window.innerWidth-1920*f)/2}px,${(window.innerHeight-1080*f)/2}px) scale(${f})`;}
+  scale();window.addEventListener('resize',scale);
+
+  /* indicators */
+  const colDots=document.getElementById('colDots'), rowDots=document.getElementById('rowDots');
+  const affDown=document.getElementById('affDown'), affRight=document.getElementById('affRight'), status=document.getElementById('status');
+  for(let c=0;c<ncols;c++){const b=document.createElement('button');b.addEventListener('click',()=>goCol(c));colDots.appendChild(b);}
+  const colBtns=[...colDots.children];
+  function indicators(){
+    colBtns.forEach((b,c)=>b.classList.toggle('on',c===C));
+    /* rebuild vertical node-dots for the current chapter */
+    rowDots.querySelectorAll('button').forEach(b=>b.remove());
+    if(colH[C]>1){
+      for(let r=0;r<colH[C];r++){const b=document.createElement('button');if(r===rowState[C])b.className='on';b.addEventListener('click',()=>goRow(r));rowDots.appendChild(b);}
+      rowDots.style.display='flex';
+    } else rowDots.style.display='none';
+    affDown.style.opacity = rowState[C]<colH[C]-1 ? .7 : 0;
+    affRight.style.opacity = C<ncols-1 ? .55 : 0;
+    status.textContent = `${pad(C+1)}/${ncols} 章 · 第 ${rowState[C]+1}/${colH[C]} 屏  —  ← → 章节 · ↑ ↓ 节点`;
+  }
+
+  /* layout: translate every slide to (col−C, row−rowState[col]) screens */
+  function place(){
+    slides.forEach(s=>{
+      const x=(s._c-C)*100, y=(s._r-rowState[s._c])*100;
+      s.style.transform=`translate(${x}%,${y}%)`;
+      s.classList.toggle('active', s._c===C && s._r===rowState[C]);
+    });
+    indicators();
+    try{history.replaceState(null,'','#s'+(order.indexOf(grid[C][rowState[C]])+1));}catch(_){}
+  }
+  function goCol(c){C=Math.max(0,Math.min(c,ncols-1));place();}
+  function goRow(r){rowState[C]=Math.max(0,Math.min(r,colH[C]-1));place();}
+  const right=()=>goCol(C+1), left=()=>goCol(C-1);
+  const down=()=>goRow(rowState[C]+1), up=()=>goRow(rowState[C]-1);
+  const next=()=>{ if(rowState[C]<colH[C]-1) down(); else right(); };  /* snake: down the chapter, then next chapter */
+  const prev=()=>{ if(rowState[C]>0) up(); else left(); };
+
+  /* keyboard */
+  window.addEventListener('keydown',e=>{
+    if(document.body.classList.contains('editing')&&e.target.isContentEditable){if((e.key==='s'||e.key==='S')&&(e.metaKey||e.ctrlKey)){e.preventDefault();exportHTML();}return;}
+    switch(e.key){
+      case'ArrowRight':e.preventDefault();right();break;
+      case'ArrowLeft':e.preventDefault();left();break;
+      case'ArrowDown':e.preventDefault();down();break;
+      case'ArrowUp':e.preventDefault();up();break;
+      case' ':case'PageDown':e.preventDefault();e.shiftKey?prev():next();break;
+      case'PageUp':e.preventDefault();prev();break;
+      case'Home':goCol(0);goRow(0);break;case'End':C=ncols-1;goRow(colH[C]-1);break;
+      case'e':case'E':if(!e.metaKey&&!e.ctrlKey)toggleEdit();break;
+      case'Escape':if(document.body.classList.contains('editing'))toggleEdit();break;
+    }
+  });
+  /* wheel: vertical drills the chapter, horizontal (trackpad) changes chapter */
+  let wlock=false;
+  window.addEventListener('wheel',e=>{
+    if(document.body.classList.contains('editing'))return;
+    const ax=Math.abs(e.deltaX), ay=Math.abs(e.deltaY);
+    if(wlock||Math.max(ax,ay)<18)return; wlock=true;
+    if(ax>ay) (e.deltaX>0?right():left()); else (e.deltaY>0?down():up());
+    setTimeout(()=>wlock=false,560);
+  },{passive:true});
+  /* touch: vertical swipe = nodes, horizontal swipe = chapters */
+  let tx=0,ty=0;
+  window.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+  window.addEventListener('touchend',e=>{
+    const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+    if(Math.abs(dx)>Math.abs(dy)){ if(Math.abs(dx)>46)(dx<0?right():left()); }
+    else { if(Math.abs(dy)>46)(dy<0?down():up()); }
+  },{passive:true});
+
+  /* init (no-anim on first paint), honor #sN */
+  const m=(location.hash||'').match(/^#s(\d+)/);
+  if(m){const s=order[Math.max(0,Math.min(+m[1]-1,order.length-1))];if(s){C=s._c;rowState[C]=s._r;}}
+  document.documentElement.classList.add('no-anim'); place(); void stage.offsetWidth;
+  requestAnimationFrame(()=>document.documentElement.classList.remove('no-anim'));
+  window.addEventListener('hashchange',()=>{const mm=(location.hash||'').match(/^#s(\d+)/);if(!mm)return;const s=order[+mm[1]-1];if(s&&(s._c!==C||s._r!==rowState[s._c])){C=s._c;rowState[C]=s._r;place();}});
+
+  /* ---- inline editing ---- */
+  const EDIT_SEL='.slide .cn-h,.slide .ch-cn,.slide .ctitle,.slide .lede,.slide .irow .t,.slide .kicker,.slide .lrow .lt,.slide .creds .b,.slide .cal,.slide .catzh,.slide .rlabel';
+  const editEls=[...document.querySelectorAll(EDIT_SEL)];
+  editEls.forEach((el,k)=>el.dataset.k='e'+k);
+  const STORE='codex-cobalt-edits-v3';
+  function loadEdits(){try{const m=JSON.parse(localStorage.getItem(STORE)||'{}');editEls.forEach(el=>{const v=m[el.dataset.k];if(v!=null)el.innerHTML=v;});}catch(_){}}
+  function saveEdits(){const m={};editEls.forEach(el=>m[el.dataset.k]=el.innerHTML);localStorage.setItem(STORE,JSON.stringify(m));}
+  loadEdits();
+  const toggle=document.getElementById('editToggle'),hot=document.getElementById('editHotzone');
+  let hideT=null,editing=false;
+  function toggleEdit(){editing=!editing;document.body.classList.toggle('editing',editing);toggle.classList.toggle('active',editing);editEls.forEach(el=>el.contentEditable=editing);if(!editing)saveEdits();}
+  toggle.addEventListener('click',toggleEdit);hot.addEventListener('click',toggleEdit);
+  hot.addEventListener('mouseenter',()=>{clearTimeout(hideT);toggle.classList.add('show');});
+  hot.addEventListener('mouseleave',()=>{hideT=setTimeout(()=>{if(!editing)toggle.classList.remove('show');},400);});
+  toggle.addEventListener('mouseenter',()=>clearTimeout(hideT));
+  toggle.addEventListener('mouseleave',()=>{hideT=setTimeout(()=>{if(!editing)toggle.classList.remove('show');},400);});
+  document.addEventListener('input',e=>{if(editing&&e.target.dataset&&e.target.dataset.k)saveEdits();});
+  document.getElementById('btnDone').addEventListener('click',()=>{if(editing)toggleEdit();});
+  document.getElementById('btnReset').addEventListener('click',()=>{localStorage.removeItem(STORE);location.reload();});
+  document.getElementById('btnExport').addEventListener('click',exportHTML);
+  function exportHTML(){if(editing)editEls.forEach(el=>el.contentEditable=false);const clone=document.documentElement.cloneNode(true);clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));clone.classList.remove('no-anim');const b=clone.querySelector('body');if(b)b.classList.remove('editing');const blob=new Blob(['<!DOCTYPE html>\n'+clone.outerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='codex-prompt-evolution-cobalt.html';a.click();URL.revokeObjectURL(a.href);if(editing)editEls.forEach(el=>el.contentEditable=true);}
+})();
+</script>
+</body>
+</html>

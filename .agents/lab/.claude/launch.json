@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "lab",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8090"],
+      "port": 8090
+    },
+    {
+      "name": "lab-preview",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "cd /private/tmp/claude-501/-Users-simiao-Desktop-claude-ai/f1d7dac4-a63d-41aa-bc71-e19fe921f6e9/scratchpad/preview-serve && exec /usr/bin/python3 -m http.server 8091"],
+      "port": 8091
+    },
+    {
+      "name": "altai",
+      "runtimeExecutable": "/bin/bash",
+      "runtimeArgs": ["-c", "cd /private/tmp/claude-501/-Users-simiao-Desktop-claude-ai/ff72b3e6-025e-43de-bbc4-7b15afc38761/scratchpad/altai-serve && exec /usr/bin/python3 -m http.server 8123"],
+      "port": 8123
+    }
+  ]
+}
