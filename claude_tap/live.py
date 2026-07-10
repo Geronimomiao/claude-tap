@@ -45,6 +45,9 @@ MAX_SESSION_PAGE_LIMIT = 500
 
 _DASHBOARD_QUIT_TOKEN_HEADER = "X-Claude-Tap-Dashboard-Token"
 
+_PINNED_SESSIONS_PREF_KEY = "pinned_sessions"
+_MAX_PINNED_SESSIONS = 500
+
 ANALYZE_LAB_INDEX = "index.html"
 
 
@@ -243,6 +246,8 @@ class LiveViewerServer:
         app.router.add_get("/api/traces/{date}", self._handle_traces_by_date)
         app.router.add_delete("/api/traces/{date}", self._handle_delete_traces_by_date)
         app.router.add_get("/api/agents", self._handle_agents)
+        app.router.add_get("/api/dashboard/prefs/pinned-sessions", self._handle_get_pinned_sessions)
+        app.router.add_put("/api/dashboard/prefs/pinned-sessions", self._handle_put_pinned_sessions)
         app.router.add_get("/api/sessions", self._handle_sessions)
         app.router.add_delete("/api/sessions", self._handle_delete_sessions)
         app.router.add_delete("/api/sessions/{session_id}", self._handle_delete_session)
@@ -388,6 +393,32 @@ class LiveViewerServer:
         if ensure_trace_store().load_session_row(session_id) is None:
             return web.Response(status=404, text="Session not found")
         return await self._handle_dashboard_index(request)
+
+    async def _handle_get_pinned_sessions(self, request: web.Request) -> web.Response:
+        store = ensure_trace_store()
+        session_ids: list[str] = []
+        raw = store.get_dashboard_pref(_PINNED_SESSIONS_PREF_KEY)
+        if raw:
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = []
+            if isinstance(parsed, list):
+                session_ids = [item for item in parsed if isinstance(item, str)]
+        return web.json_response({"session_ids": session_ids})
+
+    async def _handle_put_pinned_sessions(self, request: web.Request) -> web.Response:
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError:
+            return web.json_response({"error": "Invalid JSON body"}, status=400)
+        session_ids = payload.get("session_ids") if isinstance(payload, dict) else None
+        if not isinstance(session_ids, list) or not all(isinstance(item, str) for item in session_ids):
+            return web.json_response({"error": "session_ids must be a list of strings"}, status=400)
+        deduped = list(dict.fromkeys(session_ids))[:_MAX_PINNED_SESSIONS]
+        store = ensure_trace_store()
+        store.set_dashboard_pref(_PINNED_SESSIONS_PREF_KEY, json.dumps(deduped))
+        return web.json_response({"session_ids": deduped})
 
     async def _handle_analyze_index(self, request: web.Request) -> web.Response:
         raise web.HTTPFound(f"/analyze/{ANALYZE_LAB_INDEX}")
