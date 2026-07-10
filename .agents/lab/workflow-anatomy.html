@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow 解剖报告 · wf_b6a72ee5-7aa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Spline+Sans+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0e12;
+    --panel: #11151c;
+    --panel-2: #151b24;
+    --line: #232c39;
+    --line-soft: #1a212c;
+    --ink: #e9e4d6;
+    --dim: #8b95a7;
+    --faint: #5b6474;
+    --amber: #ffb454;
+    --amber-dim: #b97f3a;
+    --green: #8fd9a0;
+    --pink: #f0788c;
+    --cyan: #6ed3e0;
+    --violet: #b8a4ee;
+    --mono: 'Spline Sans Mono', 'PingFang SC', ui-monospace, monospace;
+    --serif: 'Instrument Serif', 'Songti SC', 'STSong', serif;
+    --sans: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  /* grain + scanline atmosphere */
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 999;
+    background:
+      repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.12) 2px 4px);
+    opacity: .35;
+  }
+  body::after {
+    content: ''; position: fixed; inset: -50%; pointer-events: none; z-index: 998;
+    background: radial-gradient(ellipse at 30% 0%, rgba(255,180,84,.05), transparent 55%),
+                radial-gradient(ellipse at 85% 100%, rgba(110,211,224,.04), transparent 50%);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 28px 120px; position: relative; z-index: 1; }
+
+  /* ruler tape at very top */
+  .ruler {
+    height: 26px; border-bottom: 1px solid var(--line);
+    background: repeating-linear-gradient(90deg,
+      var(--line) 0 1px, transparent 1px 10px),
+      repeating-linear-gradient(90deg, var(--amber-dim) 0 1px, transparent 1px 100px);
+    background-size: 100% 8px, 100% 16px;
+    background-position: bottom, bottom;
+    background-repeat: repeat-x;
+    opacity: .8;
+  }
+
+  @keyframes rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+  .rise { opacity: 0; animation: rise .7s cubic-bezier(.2,.7,.2,1) forwards; }
+
+  /* ============ masthead ============ */
+  header { padding: 64px 0 40px; border-bottom: 1px solid var(--line); position: relative; }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .32em;
+    color: var(--amber); text-transform: uppercase; margin-bottom: 22px;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .eyebrow::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--amber-dim), transparent); }
+  h1 {
+    font-family: var(--serif); font-weight: 400; font-size: clamp(38px, 6vw, 64px);
+    line-height: 1.12; letter-spacing: .01em;
+  }
+  h1 em { font-style: italic; color: var(--amber); }
+  .runchips { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 10px; font-family: var(--mono); font-size: 12px; }
+  .chip {
+    border: 1px solid var(--line); border-radius: 3px; padding: 5px 12px; color: var(--dim);
+    background: var(--panel);
+  }
+  .chip b { color: var(--ink); font-weight: 500; }
+  .chip.hot { border-color: var(--amber-dim); color: var(--amber); }
+
+  /* stat strip */
+  .stats {
+    display: grid; grid-template-columns: repeat(5, 1fr); border: 1px solid var(--line);
+    border-radius: 4px; margin-top: 36px; background: var(--panel); overflow: hidden;
+  }
+  .stat { padding: 20px 22px 16px; border-right: 1px solid var(--line-soft); }
+  .stat:last-child { border-right: none; }
+  .stat .n { font-family: var(--serif); font-style: italic; font-size: 40px; line-height: 1; color: var(--ink); }
+  .stat .n small { font-size: 18px; color: var(--dim); }
+  .stat .l { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--faint); text-transform: uppercase; margin-top: 8px; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, 1fr); } .stat { border-bottom: 1px solid var(--line-soft); } }
+
+  /* ============ sections ============ */
+  section { margin-top: 88px; }
+  .sec-head { display: flex; align-items: baseline; gap: 18px; margin-bottom: 10px; }
+  .sec-no { font-family: var(--mono); font-size: 12px; color: var(--amber); letter-spacing: .2em; white-space: nowrap; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: clamp(26px, 3.4vw, 36px); letter-spacing: .01em; }
+  .sec-sub { color: var(--dim); max-width: 720px; margin-bottom: 34px; }
+  .sec-sub code, p code, li code, td code {
+    font-family: var(--mono); font-size: .85em; color: var(--cyan);
+    background: rgba(110,211,224,.07); padding: 1px 6px; border-radius: 3px;
+  }
+
+  /* ---- SEC 01: effort rail ---- */
+  .rail-box { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); padding: 46px 40px 40px; }
+  .rail { position: relative; height: 2px; background: linear-gradient(90deg, var(--line), var(--amber-dim) 72%); margin: 40px 8% 0 2%; }
+  .rail .stop { position: absolute; top: 50%; transform: translate(-50%,-50%); }
+  .rail .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bg); border: 2px solid var(--faint); margin: 0 auto; }
+  .rail .stop.lit .dot { border-color: var(--amber); background: var(--amber); box-shadow: 0 0 14px rgba(255,180,84,.55); }
+  .rail .tag { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 11px; color: var(--dim); letter-spacing: .1em; white-space: nowrap; }
+  .rail .stop.lit .tag { color: var(--amber); }
+  .fork { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 84px; }
+  .fork-card { border: 1px solid var(--line); border-radius: 4px; padding: 24px 26px; background: var(--panel-2); position: relative; }
+  .fork-card::before {
+    content: ''; position: absolute; top: -42px; left: 50%; width: 1px; height: 42px;
+    background: linear-gradient(180deg, var(--amber-dim), var(--line));
+  }
+  .fork-card h3 { font-family: var(--mono); font-size: 14px; letter-spacing: .14em; margin-bottom: 10px; }
+  .fork-card.max h3 { color: var(--violet); }
+  .fork-card.ultra h3 { color: var(--amber); }
+  .fork-card p { font-size: 13.5px; color: var(--dim); }
+  .fork-card .verdict { margin-top: 14px; font-size: 12.5px; font-family: var(--mono); padding-top: 12px; border-top: 1px dashed var(--line); }
+  .fork-card.max .verdict { color: var(--violet); }
+  .fork-card.ultra .verdict { color: var(--amber); }
+  .note { margin-top: 24px; font-size: 13px; color: var(--faint); border-left: 2px solid var(--amber-dim); padding-left: 14px; }
+  @media (max-width: 700px) { .fork { grid-template-columns: 1fr; } }
+
+  /* ---- SEC 02: topology ---- */
+  .topo { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); padding: 40px 34px 44px; }
+  .node {
+    border: 1px solid var(--line); background: var(--panel-2); border-radius: 4px;
+    padding: 14px 18px; font-family: var(--mono);
+  }
+  .node .nt { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--faint); }
+  .node .nn { font-size: 13.5px; color: var(--ink); margin-top: 3px; }
+  .node.session { max-width: 430px; margin: 0 auto; border-color: var(--amber-dim); text-align: center; }
+  .node.session .nt { color: var(--amber); }
+  .vline { width: 1px; height: 34px; background: var(--line); margin: 0 auto; }
+  .vlabel { font-family: var(--mono); font-size: 10.5px; color: var(--faint); text-align: center; letter-spacing: .12em; margin: 4px 0; }
+  .phase-band {
+    display: flex; align-items: center; gap: 12px; margin: 6px 0 16px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .22em; text-transform: uppercase;
+  }
+  .phase-band::before, .phase-band::after { content: ''; flex: 1; height: 1px; background: var(--line-soft); }
+  .phase-band.p1 { color: var(--cyan); }
+  .phase-band.p2 { color: var(--green); }
+  .node.inv { max-width: 460px; margin: 0 auto; border-color: rgba(110,211,224,.4); }
+  .node.inv .nn { color: var(--cyan); }
+  /* fan-out tree */
+  .fan { position: relative; margin-top: 34px; }
+  .fan-bus { position: absolute; top: 0; left: 10%; right: 10%; height: 1px; background: var(--line); }
+  .fan-bus::before { content: ''; position: absolute; left: 50%; top: -34px; width: 1px; height: 34px; background: var(--line); }
+  .fan-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; padding-top: 26px; }
+  .fan-col { position: relative; }
+  .fan-col::before { content: ''; position: absolute; top: -26px; left: 50%; width: 1px; height: 26px; background: var(--line); }
+  .node.worker .nn { color: var(--green); font-size: 12.5px; word-break: break-all; }
+  .node.worker .aid { font-size: 10px; color: var(--faint); margin-top: 6px; word-break: break-all; }
+  .ret { max-width: 380px; margin: 0 auto; border-color: var(--amber-dim); text-align: center; }
+  .ret .nn { color: var(--amber); }
+  .topo-notes { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; margin-top: 34px; }
+  .topo-note { font-size: 12.5px; color: var(--dim); border-top: 2px solid var(--line); padding-top: 10px; }
+  .topo-note b { color: var(--ink); font-weight: 500; }
+  @media (max-width: 820px) {
+    .fan-row { grid-template-columns: 1fr 1fr; } .fan-bus { display: none; } .fan-col::before { display: none; }
+    .topo-notes { grid-template-columns: 1fr; }
+  }
+
+  /* ---- SEC 03: script ---- */
+  .code-frame { border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: #0d1117; }
+  .code-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel);
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+  }
+  .code-bar .path { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .code-scroll { overflow-x: auto; }
+  pre {
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.85;
+    padding: 22px 24px; min-width: 640px; color: #c6cdd8;
+  }
+  .k { color: var(--pink); } /* keyword */
+  .s { color: var(--green); } /* string */
+  .f { color: var(--cyan); } /* function */
+  .c { color: var(--faint); font-style: italic; } /* comment */
+  .p { color: var(--violet); } /* property */
+  .mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 17px; height: 17px; border-radius: 50%; background: var(--amber); color: #0b0e12;
+    font-size: 10.5px; font-weight: 700; font-style: normal; margin-left: 10px; vertical-align: 1px;
+  }
+  .legend { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; }
+  .legend li { list-style: none; display: flex; gap: 12px; font-size: 13px; color: var(--dim); }
+  .legend .mark { flex-shrink: 0; margin: 4px 0 0; }
+  .legend b { color: var(--ink); font-weight: 500; }
+  @media (max-width: 700px) { .legend { grid-template-columns: 1fr; } }
+
+  /* ---- SEC 04: disk map ---- */
+  .disk { display: grid; grid-template-columns: 1.25fr .75fr; gap: 22px; align-items: start; }
+  .tree-frame { border: 1px solid var(--line); border-radius: 4px; background: var(--panel); overflow-x: auto; }
+  .tree { font-family: var(--mono); font-size: 12px; line-height: 2.1; padding: 22px 24px; white-space: pre; color: var(--dim); min-width: 520px; }
+  .tree .dir { color: var(--ink); }
+  .tree .hot { color: var(--amber); }
+  .tree .aj { color: var(--green); }
+  .tree .cm { color: var(--faint); font-style: italic; }
+  .promo { border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); padding: 22px 24px; }
+  .promo h3 { font-family: var(--mono); font-size: 12px; letter-spacing: .2em; color: var(--amber); text-transform: uppercase; margin-bottom: 16px; }
+  .promo ol { margin-left: 18px; font-size: 13px; color: var(--dim); display: grid; gap: 12px; }
+  .promo li::marker { color: var(--amber); font-family: var(--mono); }
+  .promo b { color: var(--ink); font-weight: 500; }
+  @media (max-width: 860px) { .disk { grid-template-columns: 1fr; } }
+
+  /* ---- SEC 05: lab map cards ---- */
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .card {
+    border: 1px solid var(--line); border-radius: 4px; background: var(--panel);
+    padding: 22px 24px; transition: border-color .25s, transform .25s;
+  }
+  .card:hover { border-color: var(--amber-dim); transform: translateY(-2px); }
+  .card-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .card h3 { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--ink); }
+  .badge { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; padding: 3px 9px; border-radius: 2px; white-space: nowrap; }
+  .badge.active { color: var(--green); border: 1px solid rgba(143,217,160,.45); background: rgba(143,217,160,.08); }
+  .badge.done { color: var(--amber); border: 1px solid rgba(255,180,84,.4); background: rgba(255,180,84,.07); }
+  .badge.scratch { color: var(--pink); border: 1px solid rgba(240,120,140,.4); background: rgba(240,120,140,.07); }
+  .card p { font-size: 13.5px; color: var(--dim); }
+  .card .files { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line-soft); font-family: var(--mono); font-size: 11px; color: var(--faint); line-height: 1.9; }
+  .card.wide { grid-column: 1 / -1; }
+  @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+
+  /* footer */
+  footer { margin-top: 100px; border-top: 1px solid var(--line); padding-top: 30px; display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  footer .repro { color: var(--dim); }
+  footer .repro code { color: var(--amber); background: none; padding: 0; }
+</style>
+</head>
+<body>
+<div class="ruler"></div>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow rise" style="animation-delay:.05s">Dynamic Workflow · 黑匣子判读报告</div>
+    <h1 class="rise" style="animation-delay:.15s">一次 <em>Workflow</em> 的完整解剖</h1>
+    <div class="runchips rise" style="animation-delay:.25s">
+      <span class="chip hot">run <b>wf_b6a72ee5-7aa</b></span>
+      <span class="chip">name <b>lab-map</b></span>
+      <span class="chip">session <b>e8f2bfaf-…c6e0</b></span>
+      <span class="chip">2026-07-06</span>
+    </div>
+    <div class="stats rise" style="animation-delay:.35s">
+      <div class="stat"><div class="n">6</div><div class="l">Agents</div></div>
+      <div class="stat"><div class="n">2</div><div class="l">Phases</div></div>
+      <div class="stat"><div class="n">183<small>,242</small></div><div class="l">Subagent Tokens</div></div>
+      <div class="stat"><div class="n">25</div><div class="l">Tool Calls</div></div>
+      <div class="stat"><div class="n">62<small>.5s</small></div><div class="l">Wall Clock</div></div>
+    </div>
+  </header>
+
+  <!-- ============ SEC 01 ============ -->
+  <section class="rise" style="animation-delay:.45s">
+    <div class="sec-head"><span class="sec-no">SEC.01</span><h2>Ultracode 在坐标系里的位置</h2></div>
+    <p class="sec-sub">Effort 档位控制单个模型的思考深度；滑杆顶端其实是一个<b>分叉</b>——同样的预算，两种花法。Ultracode 严格说不是模型档位，而是 harness 的 setting：发给模型的仍是 <code>xhigh</code>，编排行为是 Claude Code 这一层加上去的。</p>
+    <div class="rail-box">
+      <div class="rail">
+        <span class="stop" style="left:0%"><span class="dot"></span><span class="tag">low</span></span>
+        <span class="stop" style="left:24%"><span class="dot"></span><span class="tag">medium</span></span>
+        <span class="stop" style="left:48%"><span class="dot"></span><span class="tag">high</span></span>
+        <span class="stop lit" style="left:72%"><span class="dot"></span><span class="tag">xhigh</span></span>
+        <span class="stop lit" style="left:100%"><span class="dot"></span><span class="tag">⑂ 分叉</span></span>
+      </div>
+      <div class="fork">
+        <div class="fork-card max">
+          <h3>MAX</h3>
+          <p>一个脑子想到极限：最深推理、token 花费不设上限。官方文档：「可能边际收益递减、容易 overthinking，建议先测试再广泛采用」。Session-only。</p>
+          <div class="verdict">深度极限 → 单体押注</div>
+        </div>
+        <div class="fork-card ultra">
+          <h3>ULTRACODE = xhigh + workflows</h3>
+          <p>每个脑子想得足够深（xhigh），把余量花在<b>结构</b>上：多 agent 并行覆盖 + 对抗验证 + 评审团。质量增益来自交叉核对，而非单体思考的最后一格。Session-only。</p>
+          <div class="verdict">深度够用 + 广度拉满 → 结构押注</div>
+        </div>
+      </div>
+      <div class="note">为什么不配 max？workflow 一次最多派 1,000 个子代理、并发 16——「无上限 + 易 overthink」的档位乘以几百份会失控。而脚本里每个 <code>agent()</code> 可以单独指定 <code>effort</code>：本次 run 全部用了 <code>'low'</code>（机械性摸底），最难的裁决阶段才值得升 max。全局 xhigh、刀刃上按需，比全局 max 精细。</div>
+    </div>
+  </section>
+
+  <!-- ============ SEC 02 ============ -->
+  <section class="rise" style="animation-delay:.55s">
+    <div class="sec-head"><span class="sec-no">SEC.02</span><h2>编排拓扑：谁派了谁</h2></div>
+    <p class="sec-sub">主会话只发起、不参与——脚本由独立 runtime 在后台执行，中间结果留在脚本变量里，不占主会话上下文。下面每个 agent ID 都是真实落盘的转录文件名。</p>
+    <div class="topo">
+      <div class="node session"><div class="nt">Main Session</div><div class="nn">Workflow(script) → 立即返回 task id</div></div>
+      <div class="vline"></div>
+      <div class="vlabel">runtime 接管，后台执行</div>
+      <div class="phase-band p1">Phase 1 · Inventory</div>
+      <div class="node inv">
+        <div class="nt">agent × 1 · effort low · schema 强制</div>
+        <div class="nn">扫顶层目录 → 挑出 5 个子项目</div>
+        <div class="aid" style="font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:6px">agent-a2e12f4c6ad8de5d3</div>
+      </div>
+      <div class="vline"></div>
+      <div class="vlabel">inv.items ── 5 项，进入 pipeline（无 barrier，并行）</div>
+      <div class="phase-band p2">Phase 2 · Summarize</div>
+      <div class="fan">
+        <div class="fan-bus"></div>
+        <div class="fan-row">
+          <div class="fan-col"><div class="node worker"><div class="nt">agent</div><div class="nn">mini-agent</div><div class="aid">a7167dbcc5a8cb422</div></div></div>
+          <div class="fan-col"><div class="node worker"><div class="nt">agent</div><div class="nn">cmp_claude</div><div class="aid">a84f52a5f774d5980</div></div></div>
+          <div class="fan-col"><div class="node worker"><div class="nt">agent</div><div class="nn">cmp_codex</div><div class="aid">af8cb63b877df4659</div></div></div>
+          <div class="fan-col"><div class="node worker"><div class="nt">agent</div><div class="nn">ppt-playground</div><div class="aid">a8c768b511e4e69d2</div></div></div>
+          <div class="fan-col"><div class="node worker"><div class="nt">agent</div><div class="nn">.frontend-slides</div><div class="aid">a5be4ad4bb3fc8217</div></div></div>
+        </div>
+      </div>
+      <div class="vline" style="margin-top:30px"></div>
+      <div class="node ret"><div class="nt">return</div><div class="nn">{ inventory, subprojects } → 主会话</div></div>
+      <div class="topo-notes">
+        <div class="topo-note"><b>并发上限 16</b>（随 CPU 核数下调），超出排队；单 run 总量封顶 1,000 个 agent，防失控循环。</div>
+        <div class="topo-note"><b>journal.jsonl 是 resume 账本</b>：每个 agent() 调用按 prompt 内容哈希记 started/result。改脚本重跑时，哈希没变的步骤直接回放缓存结果。</div>
+        <div class="topo-note"><b>schema 即契约</b>：子代理被强制调用 StructuredOutput 工具返回合法 JSON，不匹配会自动重试——脚本拿到的是可 <code>.map()</code> 的对象，不是要解析的文本。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SEC 03 ============ -->
+  <section class="rise" style="animation-delay:.6s">
+    <div class="sec-head"><span class="sec-no">SEC.03</span><h2>脚本本体（即兴写成，已落盘）</h2></div>
+    <p class="sec-sub">这就是"即兴发挥"的实物：为这个任务现写的纯 JavaScript，runtime 在隔离环境里执行。无文件系统、无 <code>Date.now()</code>/<code>Math.random()</code>（会破坏 resume 的确定性）。</p>
+    <div class="code-frame">
+      <div class="code-bar">
+        <span>lab-map-wf_b6a72ee5-7aa.js</span>
+        <span class="path">…/e8f2bfaf-…c6e0/workflows/scripts/</span>
+      </div>
+      <div class="code-scroll">
+<pre><span class="k">export const</span> meta = {                                      <span class="c">// ← 纯字面量，不许计算</span><span class="mark">1</span>
+  <span class="p">name</span>: <span class="s">'lab-map'</span>,
+  <span class="p">description</span>: <span class="s">'Map the claude-ai lab directory…'</span>,
+  <span class="p">phases</span>: [{ <span class="p">title</span>: <span class="s">'Inventory'</span> }, { <span class="p">title</span>: <span class="s">'Summarize'</span> }],
+}
+
+<span class="f">phase</span>(<span class="s">'Inventory'</span>)                                           <span class="c">// 进度分组</span><span class="mark">2</span>
+<span class="k">const</span> inv = <span class="k">await</span> <span class="f">agent</span>(
+  <span class="s">`List the top-level directories in /Users/simiao/Desktop/claude-ai…
+   Pick up to 5 subprojects. Do not deep-read files.`</span>,
+  {
+    <span class="p">label</span>: <span class="s">'inventory'</span>,
+    <span class="p">effort</span>: <span class="s">'low'</span>,                                          <span class="c">// 机械活，便宜档</span><span class="mark">3</span>
+    <span class="p">schema</span>: { <span class="p">type</span>: <span class="s">'object'</span>, <span class="p">required</span>: [<span class="s">'items'</span>], … },     <span class="c">// 强制结构化返回</span><span class="mark">4</span>
+  },
+)
+
+<span class="f">log</span>(<span class="s">`Inventory picked ${inv.items.length} subprojects`</span>)      <span class="c">// 用户可见的进度线</span>
+
+<span class="f">phase</span>(<span class="s">'Summarize'</span>)
+<span class="k">const</span> summaries = <span class="k">await</span> <span class="f">pipeline</span>(inv.items.<span class="f">slice</span>(0, 5), (item) =&gt;  <span class="mark">5</span>
+  <span class="f">agent</span>(
+    <span class="s">`Look inside …/${item.dir}. Skim: read a README or entry file,
+     sample at most 2-3 small files. Verify or correct: "${item.guess}".`</span>,
+    { <span class="p">label</span>: item.dir, <span class="p">phase</span>: <span class="s">'Summarize'</span>, <span class="p">effort</span>: <span class="s">'low'</span>, <span class="p">schema</span>: … },
+  ),
+)
+
+<span class="k">return</span> {                                                     <span class="c">// 只有这个回到主会话</span><span class="mark">6</span>
+  <span class="p">inventory</span>: inv.items,
+  <span class="p">subprojects</span>: summaries.<span class="f">filter</span>(Boolean),                    <span class="c">// 被跳过/挂掉的 agent 是 null</span>
+}</pre>
+      </div>
+    </div>
+    <ul class="legend">
+      <li><span class="mark">1</span><span><b>meta 必须是纯字面量</b>——harness 在执行前就要读出名字、描述、phase 列表，用于审批弹窗和进度 UI。</span></li>
+      <li><span class="mark">2</span><span><b>phase() 只管展示</b>——把后续 agent 归到进度树的同一个组里，方便在 /workflows 里围观。</span></li>
+      <li><span class="mark">3</span><span><b>effort 按步定价</b>——摸底用 low，若有"裁决哪个发现是真 bug"的阶段才值得 xhigh/max。</span></li>
+      <li><span class="mark">4</span><span><b>schema 换来免解析</b>——返回不合法 JSON 会在工具层自动重试，脚本永远拿到干净对象。</span></li>
+      <li><span class="mark">5</span><span><b>pipeline 无 barrier</b>——5 个摸底 agent 同时起跑，谁先完谁先回，墙钟时间 = 最慢一条链。</span></li>
+      <li><span class="mark">6</span><span><b>中间结果不进上下文</b>——18 万 token 的过程量留在脚本变量里，主会话只收 return 的那一小包。</span></li>
+    </ul>
+  </section>
+
+  <!-- ============ SEC 04 ============ -->
+  <section class="rise" style="animation-delay:.65s">
+    <div class="sec-head"><span class="sec-no">SEC.04</span><h2>落盘地图：它们现在就在你磁盘上</h2></div>
+    <p class="sec-sub">这些是 run 结束后真实存在的文件——回答之前的问题：「即兴发挥的 workflow 存在哪里」。</p>
+    <div class="disk">
+      <div class="tree-frame">
+<div class="tree"><span class="dir">~/.claude/projects/-Users-simiao-Desktop-claude-ai/</span>
+└─ <span class="dir">e8f2bfaf-…c6e0/</span>                <span class="cm">← 本会话的存档目录</span>
+   ├─ <span class="dir">workflows/scripts/</span>
+   │  └─ <span class="hot">lab-map-wf_b6a72ee5-7aa.js</span>   <span class="cm">← 即兴脚本落盘处</span>
+   └─ <span class="dir">subagents/workflows/wf_b6a72ee5-7aa/</span>
+      ├─ <span class="hot">journal.jsonl</span>              <span class="cm">← resume 账本（哈希→结果）</span>
+      ├─ <span class="aj">agent-a2e12f4c6ad8de5d3.jsonl</span>   <span class="cm">inventory</span>
+      ├─ <span class="aj">agent-a7167dbcc5a8cb422.jsonl</span>   <span class="cm">mini-agent</span>
+      ├─ <span class="aj">agent-a84f52a5f774d5980.jsonl</span>   <span class="cm">cmp_claude</span>
+      ├─ <span class="aj">agent-af8cb63b877df4659.jsonl</span>   <span class="cm">cmp_codex</span>
+      ├─ <span class="aj">agent-a8c768b511e4e69d2.jsonl</span>   <span class="cm">ppt-playground</span>
+      ├─ <span class="aj">agent-a5be4ad4bb3fc8217.jsonl</span>   <span class="cm">.frontend-slides</span>
+      └─ <span class="dir">agent-*.meta.json</span> <span class="cm">× 6</span></div>
+      </div>
+      <div class="promo">
+        <h3>晋升路径 · 从即兴到命令</h3>
+        <ol>
+          <li><b>现在：</b>一次性但可追溯。脚本可读、可 diff、可手改后 resume（缓存命中未变步骤）。</li>
+          <li><b>保存：</b>CLI 里 <code>/workflows</code> 选中按 <code>s</code>，或直接让 Claude 存——写入项目 <code>.claude/workflows/</code>（随 repo 分发）或 <code>~/.claude/workflows/</code>（个人全局）。</li>
+          <li><b>之后：</b>变成 <code>/lab-map</code> 斜杠命令，可带 <code>args</code> 参数化调用。开源分享 = 把它 commit 进仓库。</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SEC 05 ============ -->
+  <section class="rise" style="animation-delay:.7s">
+    <div class="sec-head"><span class="sec-no">SEC.05</span><h2>产出：实验室地图</h2></div>
+    <p class="sec-sub">62 秒摸底的实际收获——5 个子项目的身份、关键文件和状态判定（摘要自各 agent 的结构化返回）。</p>
+    <div class="cards">
+      <div class="card wide">
+        <div class="card-top"><h3>mini-agent/</h3><span class="badge active">在用 · 演示就绪</span></div>
+        <p>约 100 行核心、零依赖的 TypeScript 手写 coding agent——「同模型不同 agent」分享的现场 demo。System Prompt + 三工具（read_file / edit_file / run_shell）+ while 循环调 Anthropic API；每次原始请求/响应全量落盘 <b>traces/</b>，可与 claude-tap 抓到的 Claude Code / Codex 捕获并排 diff；代码注释逐点对应分享的七层框架（4.1–4.7）。demo_repo/ 里是预埋空数组 bug 的计算器，留着现场修。README 今天（7/6）刚更新，7/5 已有三次 trace 运行。</p>
+        <div class="files">mini-agent.ts · README.md · demo_repo/calculator.ts · traces/</div>
+      </div>
+      <div class="card">
+        <div class="card-top"><h3>cmp_claude/</h3><span class="badge done">已完结 · 对照样本</span></div>
+        <p>只有一个 index.html：「第一性原理」中英双语页面，水墨 + 朱砂的工程蓝图审美，完全自包含。是同一 prompt 下 <b>Claude Code 侧</b>的输出样本，6/28 生成后未动，留作 agent 对比的证据。</p>
+        <div class="files">index.html（唯一文件）</div>
+      </div>
+      <div class="card">
+        <div class="card-top"><h3>cmp_codex/</h3><span class="badge done">已完结 · 对照样本</span></div>
+        <p>同一 prompt 下 <b>Codex 侧</b>的输出：~21KB 单文件同主题页面（电池成本的类比 vs 第一性原理拆解等章节）。trace 不在这里——在父目录的 trace_webpage_codex.json / compare.html。6/28 后未动。</p>
+        <div class="files">index.html · ../trace_webpage_codex.json</div>
+      </div>
+      <div class="card">
+        <div class="card-top"><h3>ppt-playground/</h3><span class="badge done">休眠 · 工具可用</span></div>
+        <p>HTML 幻灯风格对比馆：<b>58 套风格</b>（每套 meta.json + 四种标准版式），采自四个社区模板仓库；collect_styles.py 聚合出 styles.json，index.html 是带筛选/目录/选中高亮的深色 playground。7/2 最后更新，功能完整但无 README 无 git——像一个已完成使命的选型工具。</p>
+        <div class="files">index.html · collect_styles.py · styles.json · slides/ ×58</div>
+      </div>
+      <div class="card">
+        <div class="card-top"><h3>.frontend-slides/</h3><span class="badge scratch">一次性草稿 · 可归档</span></div>
+        <p>「Codex CLI · 系统提示词演进史」deck 的三张标题页风格预览（1920×1080）：style-a「Diff Console」暗色 git-diff 风、style-b、style-c「Broadside」火橙海报风。6/29 一次性生成后未动，选型使命已完成——agent 判定：可归档或删除。</p>
+        <div class="files">slide-previews/style-{a,b,c}.html</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span class="repro">复现：prompt 带 <code>ultracode</code> 关键词 · 或 <code>/effort ultracode</code> · 围观 <code>/workflows</code> · 保存后即 <code>/lab-map</code></span>
+    <span>WF-ANATOMY · e8f2bfaf session · 2026-07-06</span>
+  </footer>
+
+</div>
+</body>
+</html>

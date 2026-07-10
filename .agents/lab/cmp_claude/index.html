@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第一性原理 · First Principles Thinking</title>
+<style>
+  /* ============================================================
+     FIRST PRINCIPLES THINKING — 第一性原理
+     Aesthetic: ink & cinnabar on bone paper, engineering blueprint.
+     All self-contained. No external resources.
+     ============================================================ */
+
+  :root{
+    --paper:      #efe8d8;
+    --paper-2:    #e7dec9;
+    --ink:        #1c1a15;
+    --ink-soft:   #534d40;
+    --ink-faint:  #8a8170;
+    --cinnabar:   #c33b22;
+    --cinnabar-2: #9c2a14;
+    --teal:       #2c4a47;
+    --line:       rgba(28,26,21,0.14);
+    --grid:       rgba(28,26,21,0.045);
+    --serif: "Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,"Songti SC","STSong",Georgia,"Times New Roman",serif;
+    --mono: "SFMono-Regular","SF Mono","JetBrains Mono",Menlo,Consolas,"Courier New",monospace;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html{ scroll-behavior:smooth; }
+
+  body{
+    margin:0;
+    background-color:var(--paper);
+    color:var(--ink);
+    font-family:var(--serif);
+    line-height:1.6;
+    font-size:18px;
+    -webkit-font-smoothing:antialiased;
+    text-rendering:optimizeLegibility;
+    /* faint engineering grid + soft vignette */
+    background-image:
+      radial-gradient(120% 90% at 50% -10%, rgba(255,250,240,0.7), transparent 55%),
+      radial-gradient(130% 130% at 100% 100%, rgba(28,26,21,0.05), transparent 60%),
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 30px 30px, 30px 30px;
+    background-attachment: fixed;
+  }
+
+  /* paper grain overlay */
+  body::before{
+    content:"";
+    position:fixed; inset:0; z-index:1; pointer-events:none;
+    opacity:.5; mix-blend-mode:multiply;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  }
+
+  .wrap{ position:relative; z-index:2; max-width:1140px; margin:0 auto; padding:0 28px; }
+
+  /* ---------- shared type ---------- */
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:.72rem;
+    letter-spacing:.32em;
+    text-transform:uppercase;
+    color:var(--cinnabar-2);
+    display:flex; align-items:center; gap:.8em;
+    margin:0 0 1.4rem;
+  }
+  .eyebrow::before{
+    content:""; width:30px; height:1px; background:var(--cinnabar); display:inline-block;
+  }
+  .cn-mark{ font-family:var(--serif); }
+
+  h2{
+    font-size:clamp(1.9rem,4.4vw,3.1rem);
+    line-height:1.05;
+    letter-spacing:-.01em;
+    margin:0 0 .4rem;
+    font-weight:600;
+  }
+  h2 .en{
+    display:block;
+    font-family:var(--mono);
+    font-size:.8rem;
+    font-weight:400;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin-top:1rem;
+  }
+
+  section{ padding:clamp(64px,9vw,128px) 0; position:relative; }
+  .rule{ height:1px; background:var(--line); border:0; margin:0; }
+
+  /* reveal-on-scroll */
+  .reveal{ opacity:0; transform:translateY(22px); transition:opacity .9s cubic-bezier(.2,.7,.2,1), transform .9s cubic-bezier(.2,.7,.2,1); }
+  .reveal.in{ opacity:1; transform:none; }
+
+  /* ============================================================
+     TOP BAR — engineering drawing header
+     ============================================================ */
+  .topbar{
+    position:relative; z-index:2;
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--mono); font-size:.68rem; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--ink-soft);
+    padding:18px 28px;
+    border-bottom:1px solid var(--line);
+    max-width:1140px; margin:0 auto;
+  }
+  .topbar .dot{ width:7px; height:7px; border-radius:50%; background:var(--cinnabar); display:inline-block; margin-right:.7em; vertical-align:middle; }
+  .topbar span:last-child{ color:var(--ink-faint); }
+
+  /* ============================================================
+     HERO
+     ============================================================ */
+  .hero{ padding:clamp(70px,11vw,150px) 0 clamp(56px,8vw,110px); overflow:hidden; }
+  .hero-grid{ display:grid; grid-template-columns:1fr auto; gap:48px; align-items:end; }
+
+  .hero h1{
+    font-size:clamp(4.2rem,17vw,12.5rem);
+    line-height:.86;
+    letter-spacing:-.02em;
+    margin:.2em 0 0;
+    font-weight:600;
+    position:relative;
+  }
+  .hero h1 .stroke{ color:var(--ink); }
+  .hero h1 .accent{ color:var(--cinnabar); }
+  .hero-sub{
+    font-family:var(--mono);
+    font-size:clamp(.85rem,2.2vw,1.25rem);
+    letter-spacing:.34em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin:1.6rem 0 0;
+  }
+  .hero-lede{
+    max-width:30ch;
+    font-size:clamp(1.05rem,1.5vw,1.3rem);
+    color:var(--ink-soft);
+    margin:0 0 .4rem;
+    text-align:right;
+  }
+  .hero-lede .cn{ display:block; color:var(--ink); font-size:1.15em; margin-bottom:.6rem; }
+
+  /* big ghost numeral behind hero */
+  .ghost{
+    position:absolute; right:-2vw; top:-6vw; z-index:0;
+    font-family:var(--serif); font-weight:600;
+    font-size:42vw; line-height:1; color:var(--ink);
+    opacity:.035; pointer-events:none; user-select:none;
+  }
+  .hero-grid > *{ position:relative; z-index:1; }
+
+  /* staggered load animation */
+  @keyframes rise{ from{ opacity:0; transform:translateY(26px);} to{ opacity:1; transform:none;} }
+  .load{ opacity:0; animation:rise .95s cubic-bezier(.2,.7,.2,1) forwards; }
+  .d1{ animation-delay:.05s; } .d2{ animation-delay:.2s; } .d3{ animation-delay:.38s; } .d4{ animation-delay:.55s; }
+
+  /* ============================================================
+     WHAT IT IS
+     ============================================================ */
+  .def-grid{ display:grid; grid-template-columns:1.1fr 1fr; gap:clamp(36px,6vw,90px); align-items:start; }
+  .def-body p{ margin:0 0 1.3rem; color:var(--ink-soft); }
+  .def-body strong{ color:var(--ink); font-weight:600; }
+  .def-body .lead{ font-size:1.22rem; color:var(--ink); }
+
+  .quote{
+    border-left:3px solid var(--cinnabar);
+    padding:1.4rem 0 1.4rem 1.8rem;
+    margin:0;
+    background:linear-gradient(90deg, rgba(195,59,34,.05), transparent 70%);
+  }
+  .quote p{
+    font-size:clamp(1.4rem,2.6vw,1.95rem);
+    line-height:1.3; font-style:italic; margin:0 0 1rem; color:var(--ink);
+  }
+  .quote cite{
+    font-family:var(--mono); font-style:normal; font-size:.72rem;
+    letter-spacing:.22em; text-transform:uppercase; color:var(--ink-faint);
+  }
+
+  .contrast-chips{ display:flex; flex-wrap:wrap; gap:14px; margin-top:2.2rem; }
+  .chip{
+    font-family:var(--mono); font-size:.72rem; letter-spacing:.12em; text-transform:uppercase;
+    padding:.6em 1em; border:1px solid var(--line); border-radius:2px; color:var(--ink-soft);
+    background:var(--paper-2);
+  }
+  .chip b{ color:var(--cinnabar-2); }
+
+  /* ============================================================
+     WORKED EXAMPLE
+     ============================================================ */
+  .ex-head{ display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:24px; margin-bottom:3rem; }
+  .ex-head p{ max-width:42ch; color:var(--ink-soft); margin:.8rem 0 0; }
+
+  .cols{ display:grid; grid-template-columns:1fr 1fr; gap:28px; }
+
+  .card{
+    border:1px solid var(--line);
+    border-radius:4px;
+    padding:30px 30px 34px;
+    background:linear-gradient(180deg, rgba(255,251,243,.55), rgba(255,251,243,0));
+    position:relative;
+    overflow:hidden;
+  }
+  .card .tag{
+    font-family:var(--mono); font-size:.68rem; letter-spacing:.2em; text-transform:uppercase;
+    display:inline-block; padding:.4em .8em; border-radius:2px; margin-bottom:1.4rem;
+  }
+  .card h3{ font-size:1.6rem; margin:0 0 .2rem; font-weight:600; }
+  .card h3 .en{ display:block; font-family:var(--mono); font-size:.7rem; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-faint); margin-top:.5rem; font-weight:400; }
+
+  .card.analogy{ background-color:rgba(44,74,71,.035); }
+  .card.analogy .tag{ background:rgba(44,74,71,.12); color:var(--teal); }
+  .card.principles{ border-color:rgba(195,59,34,.5); box-shadow:0 22px 50px -34px rgba(195,59,34,.55); }
+  .card.principles .tag{ background:rgba(195,59,34,.13); color:var(--cinnabar-2); }
+  .card.principles::after{
+    content:""; position:absolute; top:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg,var(--cinnabar),var(--cinnabar-2));
+  }
+
+  /* reasoning chain (analogy) */
+  .chain{ list-style:none; margin:1.8rem 0 0; padding:0; counter-reset:c; }
+  .chain li{ position:relative; padding:0 0 1.4rem 0; color:var(--ink-soft); }
+  .chain li:not(:last-child)::before{
+    content:"↓"; position:absolute; left:50%; bottom:.3rem; transform:translateX(-50%);
+    color:var(--teal); font-family:var(--mono); opacity:.6;
+  }
+  .chain .box{ border:1px dashed rgba(44,74,71,.4); padding:.7rem 1rem; border-radius:3px; background:var(--paper); }
+  .chain .verdict{ color:var(--teal); font-weight:600; }
+
+  /* material list (principles) */
+  .mats{ list-style:none; margin:1.8rem 0 0; padding:0; }
+  .mats li{ display:grid; grid-template-columns:9em 1fr; align-items:center; gap:14px; margin-bottom:.85rem; font-family:var(--mono); font-size:.78rem; letter-spacing:.04em; }
+  .mats .name{ color:var(--ink); }
+  .bar{ height:9px; background:rgba(28,26,21,.08); border-radius:6px; overflow:hidden; }
+  .bar i{ display:block; height:100%; width:0; background:linear-gradient(90deg,var(--cinnabar),var(--cinnabar-2)); border-radius:6px; transition:width 1.1s cubic-bezier(.2,.7,.2,1); }
+  .in .bar i{ width:var(--w); }
+
+  .bignum{ display:flex; align-items:baseline; gap:.5rem; margin-top:2rem; font-family:var(--mono); }
+  .bignum .val{ font-size:clamp(2.6rem,6vw,3.6rem); font-weight:700; letter-spacing:-.02em; line-height:1; }
+  .analogy .bignum .val{ color:var(--teal); }
+  .principles .bignum .val{ color:var(--cinnabar); }
+  .bignum .unit{ font-size:.8rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); }
+
+  /* comparison scale */
+  .scale-wrap{ margin-top:46px; border:1px solid var(--line); border-radius:4px; padding:32px clamp(20px,4vw,44px); background:var(--paper-2); }
+  .scale-wrap h4{ font-family:var(--mono); font-size:.72rem; letter-spacing:.22em; text-transform:uppercase; color:var(--ink-soft); margin:0 0 1.8rem; }
+  .scale-row{ margin-bottom:1.7rem; }
+  .scale-row .lbl{ display:flex; justify-content:space-between; font-family:var(--mono); font-size:.74rem; letter-spacing:.06em; margin-bottom:.5rem; }
+  .scale-row .lbl .num{ font-weight:700; }
+  .track{ height:26px; background:repeating-linear-gradient(90deg, rgba(28,26,21,.05) 0 1px, transparent 1px 60px); border:1px solid var(--line); border-radius:3px; position:relative; overflow:hidden; }
+  .fill{ height:100%; width:0; transition:width 1.3s cubic-bezier(.2,.7,.2,1); }
+  .in .fill{ width:var(--w); }
+  .fill.hist{ background:repeating-linear-gradient(45deg, var(--teal) 0 8px, #243d3a 8px 16px); }
+  .fill.mat{ background:linear-gradient(90deg,var(--cinnabar),var(--cinnabar-2)); }
+  .scale-foot{ display:flex; justify-content:space-between; font-family:var(--mono); font-size:.66rem; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-faint); margin-top:.4rem; }
+  .gap-note{ margin-top:1.6rem; font-size:.95rem; color:var(--ink-soft); border-top:1px dashed var(--line); padding-top:1.2rem; }
+  .gap-note b{ color:var(--cinnabar-2); }
+
+  .footnote{ font-family:var(--mono); font-size:.66rem; letter-spacing:.06em; color:var(--ink-faint); margin-top:1.4rem; line-height:1.7; }
+
+  /* ============================================================
+     METHOD
+     ============================================================ */
+  .steps{ display:grid; grid-template-columns:repeat(5,1fr); gap:0; margin-top:3rem; border:1px solid var(--line); border-radius:4px; overflow:hidden; }
+  .step{ padding:30px 26px 38px; border-right:1px solid var(--line); background:linear-gradient(180deg, rgba(255,251,243,.4), transparent); transition:background .4s ease, transform .4s ease; position:relative; }
+  .step:last-child{ border-right:0; }
+  .step:hover{ background:rgba(195,59,34,.06); }
+  .step .no{ font-family:var(--mono); font-size:.8rem; letter-spacing:.1em; color:var(--cinnabar); margin-bottom:1.6rem; display:flex; align-items:center; gap:.6em; }
+  .step .no::after{ content:""; flex:1; height:1px; background:var(--line); }
+  .step h3{ font-size:1.3rem; margin:0 0 .3rem; font-weight:600; line-height:1.15; }
+  .step h3 .en{ display:block; font-family:var(--mono); font-size:.62rem; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint); margin-top:.5rem; font-weight:400; }
+  .step p{ font-size:.92rem; color:var(--ink-soft); margin:1rem 0 0; }
+
+  /* ============================================================
+     FOOTER
+     ============================================================ */
+  footer{ position:relative; z-index:2; border-top:1px solid var(--line); margin-top:0; padding:clamp(60px,8vw,100px) 0 50px; }
+  .foot-grid{ display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:40px; }
+  .foot-mark{ font-size:clamp(2.4rem,6vw,4rem); font-weight:600; line-height:1; }
+  .foot-mark .accent{ color:var(--cinnabar); }
+  .foot-tag{ font-family:var(--mono); font-size:.72rem; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-soft); margin-top:1rem; }
+  .foot-right{ font-family:var(--mono); font-size:.7rem; letter-spacing:.1em; color:var(--ink-faint); text-align:right; line-height:1.9; }
+  .foot-right a{ color:var(--cinnabar-2); text-decoration:none; border-bottom:1px solid rgba(156,42,20,.3); }
+  .foot-credit{ margin-top:48px; font-family:var(--mono); font-size:.64rem; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-faint); display:flex; justify-content:space-between; flex-wrap:wrap; gap:14px; border-top:1px solid var(--line); padding-top:24px; }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width:880px){
+    .hero-grid{ grid-template-columns:1fr; align-items:start; }
+    .hero-lede{ text-align:left; }
+    .def-grid{ grid-template-columns:1fr; }
+    .cols{ grid-template-columns:1fr; }
+    .steps{ grid-template-columns:1fr 1fr; }
+    .step{ border-bottom:1px solid var(--line); }
+    .step:nth-child(2n){ border-right:0; }
+  }
+  @media (max-width:520px){
+    body{ font-size:17px; }
+    .steps{ grid-template-columns:1fr; }
+    .step{ border-right:0; }
+    .topbar span:nth-child(2){ display:none; }
+    .mats li{ grid-template-columns:7em 1fr; }
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{ animation:none !important; transition:none !important; }
+    .reveal{ opacity:1; transform:none; }
+    .bar i, .fill{ width:var(--w) !important; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- ===== TOP BAR ===== -->
+  <div class="topbar load d1">
+    <span><span class="dot"></span>第一性原理 · FIRST PRINCIPLES</span>
+    <span>思维模型 / MENTAL MODEL</span>
+    <span>FIG. 01 — 2026</span>
+  </div>
+
+  <!-- ===== HERO ===== -->
+  <header class="hero">
+    <div class="wrap">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow load d1">从基本事实出发 <span class="cn-mark">·</span> Reason up from the facts</p>
+          <h1 class="load d2"><span class="stroke">第一</span><span class="accent">性原理</span></h1>
+          <p class="hero-sub load d3">First&nbsp;·&nbsp;Principles&nbsp;·&nbsp;Thinking</p>
+        </div>
+        <div class="hero-lede load d4">
+          <span class="cn">把任何问题拆到无法再质疑的事实，再从那里向上重建。</span>
+          Boil a problem down to the truths you cannot doubt — then build your answer up from there, owing nothing to how it was done before.
+        </div>
+        <div class="ghost" aria-hidden="true">1</div>
+      </div>
+    </div>
+  </header>
+
+  <hr class="rule">
+
+  <!-- ===== WHAT IT IS ===== -->
+  <section id="what">
+    <div class="wrap">
+      <div class="def-grid">
+        <div class="reveal">
+          <p class="eyebrow">定义 <span class="cn-mark">·</span> What it is</p>
+          <h2>从根本，<br>而非从惯例。<span class="en">From the root, not the routine</span></h2>
+        </div>
+        <div class="def-body reveal">
+          <p class="lead">第一性原理，是把一件事物追溯到它<strong>最基础、不可再分解的真相</strong>，然后只用这些真相重新推导结论。</p>
+          <p>Most of our reasoning runs by <strong>analogy</strong>: we copy what already exists and tweak it a little. It's fast and usually safe — but it quietly inherits every assumption baked into the original, including the wrong ones.</p>
+          <p>First-principles thinking does the opposite. You discard the inherited answer, strip the problem down to physics, math and verified fact, and ask: <strong>given only what is certainly true, what is actually possible?</strong></p>
+
+          <blockquote class="quote">
+            <p>“The first basis from which a thing is known.”</p>
+            <cite>— Aristotle, on πρῶτον (the first principle) · 亚里士多德</cite>
+          </blockquote>
+
+          <div class="contrast-chips">
+            <span class="chip">类比 <b>→</b> 复制已有</span>
+            <span class="chip">第一性原理 <b>→</b> 从零重建</span>
+            <span class="chip">问： <b>这真的必然成立吗？</b></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ===== WORKED EXAMPLE ===== -->
+  <section id="example">
+    <div class="wrap">
+      <div class="ex-head reveal">
+        <div>
+          <p class="eyebrow">实例 <span class="cn-mark">·</span> Worked example</p>
+          <h2>电池组的成本<span class="en">The price of a battery pack</span></h2>
+        </div>
+        <p>A classic case (Elon Musk, c. 2008): everyone “knew” battery packs were hopelessly expensive — until someone refused to reason by analogy. 同一个问题，两种推理，得出完全不同的结论。</p>
+      </div>
+
+      <div class="cols">
+
+        <!-- ANALOGY -->
+        <article class="card analogy reveal">
+          <span class="tag">推理方式 A · By analogy</span>
+          <h3>类比推理<span class="en">It's always been this way</span></h3>
+          <ol class="chain">
+            <li><div class="box">电池组历来卖到 ~$600/kWh。<br><span style="font-family:var(--mono);font-size:.72rem;color:var(--ink-faint)">Packs have always cost ~$600/kWh.</span></div></li>
+            <li><div class="box">过去贵 → 未来也会贵。<br><span style="font-family:var(--mono);font-size:.72rem;color:var(--ink-faint)">Expensive before, so expensive forever.</span></div></li>
+            <li><div class="box verdict">∴ 电动车永远做不便宜。<br><span style="font-family:var(--mono);font-size:.72rem;opacity:.8">Therefore EVs can't be cheap.</span></div></li>
+          </ol>
+          <div class="bignum"><span class="val">$600</span><span class="unit">/ kWh<br>assumed floor</span></div>
+        </article>
+
+        <!-- FIRST PRINCIPLES -->
+        <article class="card principles reveal">
+          <span class="tag">推理方式 B · From first principles</span>
+          <h3>第一性原理<span class="en">What is a battery actually made of?</span></h3>
+          <p style="color:var(--ink-soft);margin:.4rem 0 0;font-size:.95rem">别问“电池卖多少钱”，问“电池由什么构成、这些材料值多少钱”。Buy the constituent metals on the London Metal Exchange:</p>
+          <ul class="mats">
+            <li><span class="name">Cobalt 钴</span><span class="bar"><i style="--w:88%"></i></span></li>
+            <li><span class="name">Nickel 镍</span><span class="bar"><i style="--w:64%"></i></span></li>
+            <li><span class="name">Aluminum 铝</span><span class="bar"><i style="--w:42%"></i></span></li>
+            <li><span class="name">Carbon 碳</span><span class="bar"><i style="--w:30%"></i></span></li>
+            <li><span class="name">Polymers 聚合物</span><span class="bar"><i style="--w:24%"></i></span></li>
+            <li><span class="name">Steel can 钢壳</span><span class="bar"><i style="--w:18%"></i></span></li>
+          </ul>
+          <div class="bignum"><span class="val">$80</span><span class="unit">/ kWh<br>raw-material floor</span></div>
+        </article>
+      </div>
+
+      <!-- COMPARISON SCALE -->
+      <div class="scale-wrap reveal">
+        <h4>$ / kWh — 同一把尺子 · same scale, two numbers</h4>
+
+        <div class="scale-row">
+          <div class="lbl"><span>历史售价 · Historical pack price</span><span class="num">$600</span></div>
+          <div class="track"><span class="fill hist" style="--w:100%"></span></div>
+        </div>
+
+        <div class="scale-row">
+          <div class="lbl"><span>材料成本 · Spot material cost</span><span class="num">$80</span></div>
+          <div class="track"><span class="fill mat" style="--w:13.3%"></span></div>
+        </div>
+
+        <div class="scale-foot"><span>$0</span><span>$300</span><span>$600</span></div>
+
+        <p class="gap-note">材料只占售价的 ~13%。剩下的 <b>~$520/kWh ≈ 87%</b> 不是物理定律，而是制造、规模、设计与利润——<b>全部都是可压缩的</b>。If physics only demands $80, the other 87% is an engineering problem, not a law of nature. 这正是第一性原理打开的空间。</p>
+
+        <p class="footnote">⌧ Figures follow Musk's c.2008 framing of Li-ion cell economics; per-material bars are illustrative of relative cost share, not exact quotes. The point is the method, not the decimal.</p>
+      </div>
+    </div>
+  </section>
+
+  <hr class="rule">
+
+  <!-- ===== METHOD ===== -->
+  <section id="method">
+    <div class="wrap">
+      <div class="reveal">
+        <p class="eyebrow">方法 <span class="cn-mark">·</span> How to do it</p>
+        <h2>五步，落到地面。<span class="en">A five-step method</span></h2>
+      </div>
+
+      <div class="steps reveal">
+        <div class="step">
+          <div class="no">01</div>
+          <h3>定义问题<span class="en">Define</span></h3>
+          <p>说清你真正要达成的目标，剥掉任何已假设好的解法。State the goal — not a solution in disguise.</p>
+        </div>
+        <div class="step">
+          <div class="no">02</div>
+          <h3>拆到底<span class="en">Decompose</span></h3>
+          <p>不断追问“这必然为真吗？”，直到只剩物理定律与已验证的事实。Keep asking until only facts remain.</p>
+        </div>
+        <div class="step">
+          <div class="no">03</div>
+          <h3>质疑假设<span class="en">Challenge</span></h3>
+          <p>标记每一个“大家都这么做”。继承下来的，不等于正确的。Inherited ≠ true.</p>
+        </div>
+        <div class="step">
+          <div class="no">04</div>
+          <h3>重新构建<span class="en">Rebuild</span></h3>
+          <p>只用这些基本事实，向上推导出方案——无视别人怎么做。Reason upward from the fundamentals.</p>
+        </div>
+        <div class="step">
+          <div class="no">05</div>
+          <h3>验证迭代<span class="en">Test</span></h3>
+          <p>拿现实来检验，再循环。现实是唯一的裁判。Measure against reality; iterate.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer>
+    <div class="wrap">
+      <div class="foot-grid">
+        <div>
+          <div class="foot-mark">第一<span class="accent">性</span>原理</div>
+          <p class="foot-tag">Reason from atoms, not from analogies.</p>
+        </div>
+        <div class="foot-right">
+          ARISTOTLE → DESCARTES → FEYNMAN<br>
+          物理学的思考方式 · the physicist's habit<br>
+          “What do we know to be absolutely true?”
+        </div>
+      </div>
+      <div class="foot-credit">
+        <span>© 2026 · A single self-contained page on first-principles thinking</span>
+        <span>Ink &amp; cinnabar on bone paper · 朱砂 / 墨 / 纸</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Reveal-on-scroll — self-contained, no libraries.
+    (function(){
+      var els = document.querySelectorAll('.reveal');
+      if(!('IntersectionObserver' in window)){
+        els.forEach(function(e){ e.classList.add('in'); });
+        return;
+      }
+      var io = new IntersectionObserver(function(entries){
+        entries.forEach(function(en){
+          if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); }
+        });
+      }, { threshold:0.18, rootMargin:'0px 0px -8% 0px' });
+      els.forEach(function(e){ io.observe(e); });
+    })();
+  </script>
+
+</body>
+</html>

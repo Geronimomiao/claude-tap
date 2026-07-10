@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex CLI · 系统提示词演进史</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Hanken+Grotesk:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Noto+Serif+SC:wght@500;700;900&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* === STYLE B — "COBALT GRID" =========================================
+     Two-color risograph monograph: warm cream paper + one electric cobalt,
+     a permanent graph-paper grid behind everything, Newsreader serif
+     headlines, DM Mono chrome, hairline frames and a pixel-glitch patch.
+     Reads like a quietly serious design-research bulletin.
+     ===================================================================== */
+  :root{
+    --paper:#F0EBDE; --paper-2:#E6E0CE; --ink:#1F2BE0; --ink-soft:#5560E5;
+    --text:#191512; --text-2:#4a443a; --muted:#8d8676; --hair:rgba(31,43,224,.55);
+    --serif:"Newsreader","Noto Serif SC",Georgia,serif;
+    --cn-serif:"Noto Serif SC",serif;
+    --sans:"Hanken Grotesk","Noto Sans SC",sans-serif;
+    --mono:"DM Mono","Noto Sans SC",monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  /* --- viewport-base.css (fixed 16:9 stage) --- */
+  html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#1c1a14}
+  .deck-viewport{position:fixed;inset:0;overflow:hidden;background:#1c1a14}
+  .deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0;background:var(--paper)}
+  .slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;background:var(--paper);color:var(--text);font-family:var(--sans)}
+
+  /* permanent graph-paper grid (cannot be turned off) */
+  .slide::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;
+    background-image:
+      linear-gradient(rgba(31,43,224,.07) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(31,43,224,.07) 1px,transparent 1px),
+      linear-gradient(rgba(31,43,224,.12) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(31,43,224,.12) 1px,transparent 1px);
+    background-size:40px 40px,40px 40px,200px 200px,200px 200px}
+  .pad{position:relative;z-index:1;height:100%;padding:74px 96px;display:flex;flex-direction:column}
+
+  /* cobalt hairline frame top + bottom */
+  .frame-t,.frame-b{position:absolute;left:96px;right:96px;height:0;border-top:1.5px solid var(--ink)}
+  .frame-t{top:60px}.frame-b{bottom:60px}
+
+  /* topbar chrome */
+  .topbar{display:flex;align-items:baseline;gap:18px;font-family:var(--mono);font-size:18px;letter-spacing:.04em;color:var(--ink);text-transform:uppercase}
+  .topbar .sp{flex:1}
+  .topbar .muted{color:var(--muted)}
+
+  /* hero */
+  .hero{margin-top:auto;margin-bottom:auto;display:grid;grid-template-columns:1.25fr .75fr;gap:60px;align-items:end}
+  .vol{font-family:var(--mono);font-size:19px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:26px}
+  h1{font-family:var(--serif);font-weight:600;line-height:.92;letter-spacing:-.015em;color:var(--text)}
+  h1 .en{display:block;font-size:96px;font-style:italic;color:var(--ink)}
+  h1 .cn{display:block;font-family:var(--cn-serif);font-weight:900;font-size:150px;letter-spacing:.01em;margin-top:6px;color:var(--text)}
+  .sub{margin-top:34px;max-width:760px;font-size:24px;line-height:1.74;color:var(--text-2);font-weight:400}
+  .sub b{color:var(--ink);font-weight:700}
+
+  /* right index — bulletin table with hairline dividers */
+  .index{border-top:1.5px solid var(--ink)}
+  .index .row{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:baseline;padding:15px 2px;border-bottom:1px solid rgba(31,43,224,.22)}
+  .index .v{font-family:var(--mono);font-size:17px;color:var(--ink)}
+  .index .t{font-family:var(--cn-serif);font-weight:500;font-size:23px;color:var(--text)}
+  .index .n{font-family:var(--mono);font-size:15px;color:var(--muted)}
+  .index .cap{font-family:var(--mono);font-size:15px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:14px}
+
+  /* pixel-glitch decoration, top-right */
+  .glitch{position:absolute;top:108px;right:96px;display:grid;grid-template-columns:repeat(6,15px);grid-auto-rows:15px;gap:3px;z-index:1}
+  .glitch i{background:var(--ink);opacity:.9}
+  .glitch i.o{opacity:.28}.glitch i.x{opacity:0}
+
+  /* footer */
+  .foot{display:flex;align-items:baseline;gap:20px;font-family:var(--mono);font-size:17px;color:var(--text-2)}
+  .foot .sp{flex:1}
+  .foot .src b{color:var(--ink)}
+
+  /* entrance */
+  .r{opacity:0;transform:translateY(22px);animation:rise .8s cubic-bezier(.16,1,.3,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .r1{animation-delay:.05s}.r2{animation-delay:.16s}.r3{animation-delay:.28s}.r4{animation-delay:.4s}.r5{animation-delay:.52s}.r6{animation-delay:.64s}
+  @media (prefers-reduced-motion:reduce){.r{animation:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+  <main class="deck-stage" id="deckStage">
+    <section class="slide title-slide active">
+      <span class="frame-t"></span><span class="frame-b"></span>
+
+      <!-- pixel-glitch patch -->
+      <div class="glitch r r1" aria-hidden="true">
+        <i></i><i class="o"></i><i></i><i class="x"></i><i class="o"></i><i></i>
+        <i class="o"></i><i></i><i></i><i class="o"></i><i></i><i class="x"></i>
+        <i></i><i class="x"></i><i class="o"></i><i></i><i></i><i class="o"></i>
+        <i class="x"></i><i></i><i class="o"></i><i></i><i class="x"></i><i></i>
+      </div>
+
+      <div class="pad">
+        <div class="topbar r r1">
+          <span>Phistory — System Prompt Bulletin</span>
+          <span class="sp"></span>
+          <span class="muted">No. 01 · 2026.01 — 06</span>
+        </div>
+
+        <div class="hero">
+          <!-- left -->
+          <div>
+            <div class="vol r r2">A Field Study of Codex CLI</div>
+            <h1>
+              <span class="en r r2">Codex CLI</span>
+              <span class="cn r r3">系统提示词演进史</span>
+            </h1>
+            <p class="sub r r4">在 <b>60</b> 个公开版本里，追踪一个编码 Agent 的“宪法”如何被反复重写——<b>17</b> 次实质性变更，跨 <b>11</b> 类主题。</p>
+          </div>
+          <!-- right index -->
+          <div class="r r5">
+            <div class="cap">Selected Revisions</div>
+            <div class="index">
+              <div class="row"><span class="v">0.99</span><span class="t">首次确立人格框架</span><span class="n">+57</span></div>
+              <div class="row"><span class="v">0.115</span><span class="t">引入子智能体体系</span><span class="n">+232</span></div>
+              <div class="row"><span class="v">0.125</span><span class="t">转为叙事口吻</span><span class="n">+100</span></div>
+              <div class="row"><span class="v">0.133</span><span class="t">移除子智能体</span><span class="n">−190</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="foot r r6" style="margin-top:auto">
+          <span>2026.01.09 → 2026.06.26</span>
+          <span class="sp"></span>
+          <span class="src">SOURCE — <b>phistory.cc</b></span>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+<script>
+  (function(){
+    var stage=document.getElementById('deckStage');
+    function scale(){var f=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+      stage.style.transform='translate('+((window.innerWidth-1920*f)/2)+'px,'+((window.innerHeight-1080*f)/2)+'px) scale('+f+')';}
+    scale();window.addEventListener('resize',scale);
+  })();
+</script>
+</body>
+</html>

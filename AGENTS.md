@@ -91,6 +91,7 @@ These rules apply to every local dashboard restart, UI check, trace validation, 
 - 调试方法论与反模式：`.agents/docs/standards/debugging-standards.md`
 - 客户端支持矩阵与 URL 构造规则：`docs/support-matrix.md`
 - 标准文档元数据与维护流程：`.agents/docs/standards/README.md`
+- 抓包分析实验室（captures + exploration pages）：`.agents/lab/README.md`
 
 ## Skills 目录
 

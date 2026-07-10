@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>大模型是怎么读懂并回答你的？— 可交互示意</title>
+<style>
+:root{
+  --bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;
+  --text:#1c1c1a;--text-2:#5f5e5a;--text-muted:#90908a;
+  --border:rgba(20,20,16,.12);--border-strong:rgba(20,20,16,.24);--bar:rgba(20,20,16,.18);
+  --accent-bg:#e6f1fb;--accent-text:#185fa5;--accent-border:#85b7eb;--accent-fill:#378add;
+  --ok-bg:#e1f5ee;--ok-text:#0f6e56;--ok-border:#5dcaa5;--ok-fill:#1d9e75;--purple:#7f77dd;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#201f1d;--surface:#2b2b29;--surface-1:#37352f;
+  --text:#f3f1ea;--text-2:#bdbbb2;--text-muted:#8f8e86;
+  --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.24);--bar:rgba(255,255,255,.2);
+  --accent-bg:#102f49;--accent-text:#8fc0f0;--accent-border:#1f5d93;--accent-fill:#3d8ee0;
+  --ok-bg:#0c3a2d;--ok-text:#6fd0ac;--ok-border:#15725a;--ok-fill:#1f9e75;--purple:#9a93e6;
+}}
+:root[data-theme="dark"]{
+  --bg:#201f1d;--surface:#2b2b29;--surface-1:#37352f;
+  --text:#f3f1ea;--text-2:#bdbbb2;--text-muted:#8f8e86;
+  --border:rgba(255,255,255,.13);--border-strong:rgba(255,255,255,.24);--bar:rgba(255,255,255,.2);
+  --accent-bg:#102f49;--accent-text:#8fc0f0;--accent-border:#1f5d93;--accent-fill:#3d8ee0;
+  --ok-bg:#0c3a2d;--ok-text:#6fd0ac;--ok-border:#15725a;--ok-fill:#1f9e75;--purple:#9a93e6;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);line-height:1.6;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif}
+.page{max-width:920px;margin:0 auto;padding:28px 22px 48px}
+header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:22px}
+h1{font-size:24px;font-weight:600;margin:0 0 6px}
+.sub{font-size:14px;color:var(--text-2);margin:0;max-width:640px}
+.tg{flex:0 0 auto;width:38px;height:38px;border-radius:10px;border:.5px solid var(--border-strong);
+  background:var(--surface);color:var(--text);font-size:18px;cursor:pointer;line-height:1}
+.tg:hover{background:var(--surface-1)}
+.wrap{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}
+.col{display:flex;flex-direction:column;gap:11px}
+.left{flex:1.5 1 320px;min-width:290px}
+.right{flex:1 1 250px;min-width:240px}
+.lab{font-size:13px;color:var(--text-muted);margin:0 0 2px}
+.stage{background:var(--surface);border:.5px solid var(--border);border-radius:13px;padding:11px 13px;transition:border-color .25s,background .25s}
+.stage.on{border-color:var(--accent-border);background:var(--accent-bg)}
+.sh{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;color:var(--text)}
+.badge{width:21px;height:21px;border-radius:50%;background:var(--surface-1);color:var(--text-2);font-size:12px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.stage.on .badge{background:var(--accent-fill);color:#fff}
+.body{margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.chip{padding:2px 8px;border-radius:6px;background:var(--surface-1);border:.5px solid var(--border);font-size:13.5px;color:var(--text)}
+.chip.hist{font-style:italic;color:var(--text-muted);background:transparent}
+.chip.gen{background:var(--ok-bg);border-color:var(--ok-border);color:var(--ok-text)}
+.nu{animation:pop .35s ease}
+@keyframes pop{from{transform:scale(.55);opacity:0}to{transform:scale(1);opacity:1}}
+.vec{display:inline-flex;flex-direction:column;align-items:center;gap:1px;margin:2px 4px}
+.vc{font-size:11px;color:var(--text-2);font-family:ui-monospace,"SF Mono",Menlo,monospace;line-height:1.3}
+.vl{font-size:13.5px;color:var(--text);margin-bottom:1px}
+.row{display:flex;align-items:center;gap:9px;margin:4px 0}
+.bw{min-width:24px;padding:0 3px;white-space:nowrap;text-align:center;font-size:14px;color:var(--text)}
+.bar{height:14px;border-radius:4px;background:var(--bar);min-width:3px;transition:width .3s ease}
+.bar.pk{background:var(--ok-fill)}
+.pct{font-size:12px;color:var(--text-2);width:36px;text-align:right;font-variant-numeric:tabular-nums}
+.row.pk .bw{color:var(--ok-text);font-weight:500}
+.note{font-size:12px;color:var(--text-muted);margin-top:7px;line-height:1.5}
+.muted{color:var(--text-muted);font-size:12px}
+.layer{height:6px;border-radius:3px;background:var(--surface-1);overflow:hidden}
+.layer>i{display:block;height:100%;width:0;background:var(--accent-fill);transition:width .6s ease}
+.chat{display:flex;flex-direction:column;gap:7px;min-height:56px}
+.bub{max-width:92%;padding:7px 11px;border-radius:13px;font-size:14px;line-height:1.5;word-break:break-word}
+.u{align-self:flex-end;background:var(--accent-bg);color:var(--accent-text);border-bottom-right-radius:4px}
+.a{align-self:flex-start;background:var(--surface-1);color:var(--text);border-bottom-left-radius:4px}
+.cur{color:var(--accent-text);animation:bl 1s step-end infinite}
+@keyframes bl{50%{opacity:0}}
+button.act,input{font-family:inherit}
+.btn{border:.5px solid var(--border-strong);background:var(--surface);color:var(--text);
+  border-radius:9px;padding:8px 11px;font-size:13.5px;cursor:pointer;transition:background .15s,transform .05s}
+.btn:hover{background:var(--surface-1)}
+.btn:active{transform:scale(.98)}
+.preset{text-align:left}
+#inp{flex:1;min-width:0;height:38px;border:.5px solid var(--border-strong);background:var(--surface);
+  color:var(--text);border-radius:9px;padding:0 11px;font-size:13.5px}
+#inp:focus{outline:none;border-color:var(--accent-border);box-shadow:0 0 0 3px var(--accent-bg)}
+footer{margin-top:28px;padding-top:14px;border-top:.5px solid var(--border);font-size:12.5px;color:var(--text-muted);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>大模型是怎么读懂并回答你的？</h1>
+      <p class="sub">切词 → 向量 → 注意力 → 按词表概率逐字生成 → 结束符收尾。点右边提问，看左边一步步算。</p>
+    </div>
+    <button class="tg" id="themeb" aria-label="切换深浅色">☾</button>
+  </header>
+
+  <div class="wrap">
+    <div class="col left">
+      <p class="lab">大模型内部（示意 · 数字为模拟）</p>
+      <div class="stage" id="s1"><div class="sh"><span class="badge">1</span>分词　tokenize</div><div class="body"><div class="chips" id="tok"><span class="muted">右边点一个问题开始…</span></div></div></div>
+      <div class="stage" id="s2"><div class="sh"><span class="badge">2</span>向量化　embedding</div><div class="body"><div class="chips" id="vecs"></div><div class="note">每个 token → 一串约 4096 个数字（这里只画 3 个）</div></div></div>
+      <div class="stage" id="s3"><div class="sh"><span class="badge">3</span>进入模型</div><div class="body"><div class="layer"><i id="layer"></i></div><div class="note">注意力：每个字回头看所有字 · 乘固定权重 · 逐层加工</div></div></div>
+      <div class="stage" id="s4"><div class="sh"><span class="badge">4</span><span id="genHead">预测下一个字</span></div><div class="body"><div id="cands"><span class="muted">取最后位置的向量，和词表里每个词比一比…</span></div></div></div>
+      <div class="stage" id="s5"><div class="sh"><span class="badge">5</span>接到末尾，循环</div><div class="body"><div class="chips" id="seq"></div><div class="note" id="status">每生成一个字，这排就长一格，再整排跑一遍</div></div></div>
+    </div>
+
+    <div class="col right">
+      <p class="lab">提问（点一下试试）</p>
+      <div class="chat" id="chat"></div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="btn preset" data-k="cap">中国的首都是哪里？</button>
+        <button class="btn preset" data-k="math">1 + 1 = ?</button>
+        <button class="btn preset" data-k="hi">你好呀</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <input id="inp" placeholder="或自己输入一句…">
+        <button class="btn" id="sendb">发送</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn" id="playb">▶ 播放</button>
+        <button class="btn" id="stepb">下一步</button>
+        <button class="btn" id="resetb" aria-label="重置">↻</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    示意演示 · 词表概率与向量数字均为模拟，仅用于说明机制。真实模型规模大得多（词表约 10 万、向量约 4096 维、几十层、数千亿参数），但原理一致。<br>
+    小彩蛋：先问一句、再问第二句，第 1 步和第 5 步会多出一个灰色的「之前的对话」——这就是模型自己不记事、历史每轮被重新塞进来的意思。
+  </footer>
+</div>
+
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var el=function(t,c){var e=document.createElement(t);if(c)e.className=c;return e};
+  var tok=$('tok'),vecs=$('vecs'),layer=$('layer'),cands=$('cands'),seq=$('seq'),status=$('status'),genHead=$('genHead'),chat=$('chat'),inp=$('inp');
+  var stages=[null,$('s1'),$('s2'),$('s3'),$('s4'),$('s5')];
+  var P={
+    cap:{q:'中国的首都是哪里？',tokens:['中','国','的','首','都','是','哪','里','？'],steps:[
+      {cands:[['北',0.90],['上',0.04],['南',0.03],['天',0.02]],pick:'北'},
+      {cands:[['京',0.98],['方',0.01],['边',0.005]],pick:'京'},
+      {cands:[['。',0.62],['市',0.30],['，',0.05]],pick:'。'},
+      {cands:[['⟨结束⟩',0.96],['还',0.02]],pick:'⟨结束⟩'}]},
+    math:{q:'1 + 1 = ?',tokens:['1','+','1','=','?'],steps:[
+      {cands:[['2',0.95],['3',0.02],['11',0.01],['0',0.01]],pick:'2'},
+      {cands:[['⟨结束⟩',0.94],['。',0.03]],pick:'⟨结束⟩'}]},
+    hi:{q:'你好呀',tokens:['你','好','呀'],steps:[
+      {cands:[['你',0.66],['您',0.20],['哈',0.06],['嗨',0.04]],pick:'你'},
+      {cands:[['好',0.90],['们',0.04],['呀',0.03]],pick:'好'},
+      {cands:[['！',0.55],['呀',0.28],['，',0.10]],pick:'！'},
+      {cands:[['⟨结束⟩',0.90],['有',0.05],['请',0.03]],pick:'⟨结束⟩'}]}
+  };
+  function buildCustom(text){
+    var toks=text.match(/[A-Za-z0-9]+|[^\s]/g)||[text];
+    return {q:text,tokens:toks,steps:[
+      {cands:[['好',0.55],['我',0.18],['这',0.12],['当',0.06]],pick:'好'},
+      {cands:[['的',0.60],['呀',0.18],['，',0.10],['吧',0.05]],pick:'的'},
+      {cands:[['！',0.50],['。',0.30],['~',0.08]],pick:'！'},
+      {cands:[['⟨结束⟩',0.90],['有',0.05]],pick:'⟨结束⟩'}]};
+  }
+  function fakeVec(t){var s=0;for(var i=0;i<t.length;i++)s+=t.charCodeAt(i);var f=function(k){var x=Math.sin(s*0.7+k*2.3)*1000;return((x-Math.floor(x))*2-1).toFixed(2)};return[f(1),f(2),f(3)]}
+  var queue=[],idx=0,auto=false,timer=null,done=false,curAI=null,turns=0,nGen=0;
+  function setActive(list){for(var i=1;i<=5;i++){stages[i].classList.toggle('on',list.indexOf(i)>=0)}}
+  function resetLeft(){tok.innerHTML='';vecs.innerHTML='';cands.innerHTML='<span class="muted">取最后位置的向量，和词表里每个词比一比…</span>';seq.innerHTML='';status.textContent='每生成一个字，这排就长一格，再整排跑一遍';genHead.textContent='预测下一个字';layer.style.width='0%';nGen=0;setActive([])}
+  function renderTokens(tokens,hist){tok.innerHTML='';if(hist){var h=el('span','chip hist');h.textContent='‹之前的对话›';tok.append(h)}tokens.forEach(function(t){var c=el('span','chip');c.textContent=t;tok.append(c)})}
+  function renderVecs(tokens){vecs.innerHTML='';tokens.forEach(function(t){var col=el('div','vec');var l=el('div','vl');l.textContent=t;col.append(l);fakeVec(t).forEach(function(n){var c=el('div','vc');c.textContent=n;col.append(c)});var d=el('div','vc');d.textContent='⋮';col.append(d);vecs.append(col)})}
+  function renderCands(list,pick){var arr=list.slice().sort(function(a,b){return b[1]-a[1]});var max=arr[0][1];cands.innerHTML='';arr.forEach(function(p){var ispk=p[0]===pick;var row=el('div','row'+(ispk?' pk':''));var w=el('div','bw');w.textContent=p[0];var bar=el('div','bar'+(ispk?' pk':''));bar.style.width=Math.max(3,Math.round(p[1]/max*200))+'px';var pct=el('div','pct');pct.textContent=Math.round(p[1]*100)+'%';row.append(w,bar,pct);cands.append(row)});var rest=el('div','note');rest.textContent='⋯ 词表里其余约 10 万个词 ≈ 0%';cands.append(rest)}
+  function initSeq(tokens,hist){seq.innerHTML='';if(hist){var h=el('span','chip hist');h.textContent='‹历史›';seq.append(h)}tokens.forEach(function(t){var c=el('span','chip');c.textContent=t;seq.append(c)})}
+  function addSeq(w){var c=el('span','chip gen nu');c.textContent=w;seq.append(c)}
+  function addBubble(kind,text){var b=el('div','bub '+(kind==='u'?'u':'a'));if(kind==='a'){var t=el('span','txt');var cu=el('span','cur');cu.textContent='▌';b.append(t,cu)}else{b.textContent=text}chat.append(b);chat.scrollTop=chat.scrollHeight;return b}
+  function appendAnswer(w){var t=curAI.querySelector('.txt');t.textContent+=w;chat.scrollTop=chat.scrollHeight}
+  function endAI(){var c=curAI.querySelector('.cur');if(c)c.remove()}
+  function clearT(){if(timer){clearTimeout(timer);timer=null}}
+  function run(p){clearT();auto=false;addBubble('u',p.q);resetLeft();var hist=turns>0;turns++;queue=[];
+    queue.push({d:680,fn:function(){setActive([1]);renderTokens(p.tokens,hist)}});
+    queue.push({d:680,fn:function(){setActive([2]);renderVecs(p.tokens)}});
+    queue.push({d:780,fn:function(){setActive([3]);layer.style.width='100%'}});
+    queue.push({d:560,fn:function(){setActive([4,5]);curAI=addBubble('a','');initSeq(p.tokens,hist);genHead.textContent='准备预测…'}});
+    p.steps.forEach(function(s,i){queue.push({d:1050,fn:function(){genHead.textContent='预测第 '+(i+1)+' 个字';renderCands(s.cands,s.pick);if(s.pick==='⟨结束⟩'){status.textContent='挑中 ⟨结束⟩ → 停下，把回答交给你';endAI()}else{appendAnswer(s.pick);addSeq(s.pick);nGen++;status.textContent='已生成 '+nGen+' 个字 → 接回末尾，整排再跑一遍'}}})});
+    queue.push({d:300,fn:function(){setActive([5]);done=true;updateBtns()}});
+    idx=0;done=false;auto=true;updateBtns();tick()}
+  function tick(){if(!auto)return;if(idx>=queue.length){auto=false;updateBtns();return}var it=queue[idx];idx++;it.fn();updateBtns();if(auto&&idx<queue.length){timer=setTimeout(tick,it.d)}else if(idx>=queue.length){auto=false;updateBtns()}}
+  function stepOne(){auto=false;clearT();if(idx<queue.length){var it=queue[idx];idx++;it.fn();updateBtns()}}
+  function playPause(){if(idx>=queue.length)return;if(auto){auto=false;clearT()}else{auto=true;tick()}updateBtns()}
+  function resetAll(){auto=false;clearT();queue=[];idx=0;done=false;turns=0;chat.innerHTML='';resetLeft();tok.innerHTML='<span class="muted">右边点一个问题开始…</span>';updateBtns()}
+  function updateBtns(){$('playb').textContent=auto?'⏸ 暂停':'▶ 播放'}
+  Array.prototype.forEach.call(document.querySelectorAll('.preset'),function(b){b.addEventListener('click',function(){run(P[b.getAttribute('data-k')])})});
+  function sendCustom(){var v=inp.value.trim();if(!v)return;inp.value='';run(buildCustom(v))}
+  $('sendb').addEventListener('click',sendCustom);
+  inp.addEventListener('keydown',function(e){if(e.key==='Enter')sendCustom()});
+  $('playb').addEventListener('click',playPause);
+  $('stepb').addEventListener('click',stepOne);
+  $('resetb').addEventListener('click',resetAll);
+  var html=document.documentElement,tb=$('themeb');
+  function sysDark(){return window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches}
+  function curDark(){var a=html.getAttribute('data-theme');if(a)return a==='dark';return sysDark()}
+  function setIcon(){tb.textContent=curDark()?'☀':'☾'}
+  tb.addEventListener('click',function(){html.setAttribute('data-theme',curDark()?'light':'dark');setIcon()});
+  setIcon();
+})();
+</script>
+</body>
+</html>

@@ -95,3 +95,7 @@ log/
 
 # Ruff / lint cache
 .ruff_cache/
+
+# Secrets — never commit API key files
+.api.key
+*.api.key

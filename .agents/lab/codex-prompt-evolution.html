@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex CLI · 系统提示词演进史</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Barlow (Latin display/body) · IBM Plex Mono (chrome) · Noto Sans SC (CJK, all roles) -->
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   CODEX CLI · 系统提示词演进史 — "BROADSIDE" deck
+   Protest-poster editorial system. Two registers only:
+     · DARK  (#111111 canvas, cream ink, fire-orange accent) — content
+     · ORANGE(#E85D26 canvas, dark ink) — cover/chapter/statement/end
+   Monolithic type: Barlow + Noto Sans SC for display/headings, IBM Plex
+   Mono for chrome. Lowercase, flat plane, 1px hairlines, '/' bullets.
+   Change ':root' to retheme; each slide is authored at the 1920×1080 stage.
+   ===================================================================== */
+:root{
+  --ink:#111111; --ink-alt:#1A1A18; --fire:#E85D26;
+  --cream:#F0ECE5; --cream-muted:#888880; --cream-hint:#5b5b52; --border:#2b2b28;
+  /* ink-on-orange opacities */
+  --io-75:rgba(17,17,17,.78); --io-55:rgba(17,17,17,.58); --io-40:rgba(17,17,17,.40); --io-20:rgba(17,17,17,.20);
+  /* type */
+  --display:"Barlow","Noto Sans SC",sans-serif;
+  --cn:"Noto Sans SC","Barlow",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,monospace;
+  /* sizes authored at 1920×1080 */
+  --s-display:228px; --s-h1:130px; --s-h2:78px; --s-stat:104px;
+  --s-lead:32px; --s-body:24px; --s-label:17px;
+  --ease:cubic-bezier(.16,1,.3,1); --ease-slide:cubic-bezier(.77,0,.175,1);
+  --pad-x:104px; --pad-y:74px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+
+/* === FIXED 16:9 STAGE (viewport-base.css) === */
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#000;font-family:var(--cn)}
+.deck-viewport{position:fixed;inset:0;overflow:hidden;background:var(--ink)}
+.deck-stage{position:absolute;left:0;top:0;width:1920px;height:1080px;overflow:hidden;transform-origin:0 0;background:var(--ink)}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;overflow:hidden;display:block;visibility:hidden;opacity:0;pointer-events:none;background:var(--ink)}
+.slide.active{visibility:visible;opacity:1;pointer-events:auto;z-index:1}
+img,video,canvas,svg{max-width:100%;max-height:100%}
+@media print{
+  html,body{width:1920px;height:auto;overflow:visible;background:#fff}
+  .deck-viewport{position:static;overflow:visible}
+  .deck-stage{position:static;width:auto;height:auto;transform:none!important}
+  .slide{position:relative;display:block!important;visibility:visible!important;opacity:1!important;width:1920px;height:1080px;break-after:page;page-break-after:always}
+  .deck-controls,.edit-hotzone,.edit-toggle{display:none!important}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.2s!important}}
+
+/* === REGISTERS === */
+.slide{color:var(--cream)}
+.slide.orange{background:var(--fire);color:var(--ink)}
+
+/* === LAYOUT FRAME === */
+.pad{position:absolute;inset:0;padding:var(--pad-y) var(--pad-x);display:flex;flex-direction:column}
+
+/* === CHROME (top + foot) — suppressed on declarative slides === */
+.chrome,.foot{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);
+  font-size:var(--s-label);font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--cream-muted)}
+.chrome{padding-bottom:18px;border-bottom:1px solid var(--border)}
+.foot{padding-top:18px;border-top:1px solid var(--border);margin-top:auto}
+.slide.orange .chrome,.slide.orange .foot{color:var(--io-55);border-color:var(--io-20)}
+.chrome b,.foot b{color:var(--cream);font-weight:600}
+.slide.orange .chrome b,.slide.orange .foot b{color:var(--ink)}
+.chrome .accent{color:var(--fire)}
+
+/* === KICKER === */
+.kicker{font-family:var(--mono);font-size:var(--s-label);font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--fire);display:flex;align-items:center;gap:14px}
+.slide.orange .kicker{color:var(--io-55)}
+.kicker .v{color:var(--cream)}
+.slide.orange .kicker .v{color:var(--ink)}
+.kicker::before{content:"";width:34px;height:2px;background:var(--fire);flex:none}
+.slide.orange .kicker::before{background:var(--ink)}
+
+/* === TYPE === */
+h1{font-family:var(--display);font-weight:900;font-size:var(--s-h1);line-height:1.0;letter-spacing:-.01em;color:var(--cream)}
+.slide.orange h1{color:var(--ink)}
+h2{font-family:var(--display);font-weight:900;font-size:var(--s-h2);line-height:1.08;letter-spacing:-.005em;color:var(--cream)}
+.slide.orange h2{color:var(--ink)}
+.display{font-family:var(--display);font-weight:900;font-size:var(--s-display);line-height:1.0;letter-spacing:-.01em}
+.lead{font-family:var(--cn);font-weight:400;font-size:var(--s-lead);line-height:1.5;color:var(--cream)}
+.slide.orange .lead{color:var(--io-75)}
+.body{font-family:var(--cn);font-weight:300;font-size:var(--s-body);line-height:1.78;color:var(--cream-muted)}
+.fire{color:var(--fire)}
+.slide.orange .fire{color:var(--ink)}
+em{font-style:normal;color:var(--cream);font-weight:500}
+.slide.orange em{color:var(--ink);font-weight:600}
+code{font-family:var(--mono);font-size:.82em;background:rgba(232,93,38,.12);color:var(--fire);padding:1px 7px;border-radius:0;white-space:nowrap}
+.slide.orange code{background:rgba(17,17,17,.1);color:var(--ink)}
+
+/* === TAG (bordered mono pill) === */
+.tag{display:inline-flex;align-items:center;font-family:var(--mono);font-size:15px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--fire);border:1px solid var(--fire);padding:6px 14px}
+.slide.orange .tag{color:var(--io-75);border-color:var(--io-40)}
+
+/* === BULLETS (max 3, '/' marker) === */
+.bullets{list-style:none;display:flex;flex-direction:column;gap:22px;max-width:760px}
+.bullets li{position:relative;padding-left:42px;font-family:var(--cn);font-weight:400;font-size:var(--s-body);line-height:1.55;color:var(--cream)}
+.bullets li::before{content:"/";position:absolute;left:0;top:0;color:var(--fire);font-family:var(--mono);font-weight:700;font-size:1.05em}
+.slide.orange .bullets li{color:var(--ink)}
+.slide.orange .bullets li::before{color:var(--io-40)}
+.bullets li b{font-weight:700;color:var(--cream)}
+.slide.orange .bullets li b{color:var(--ink)}
+
+/* === DIFF STAT (one-color: + in fire, − in cream-muted) === */
+.diff{display:flex;align-items:flex-end;gap:40px;border-top:1px solid var(--border);padding-top:24px}
+.diff .col .n{font-family:var(--display);font-weight:900;font-size:var(--s-stat);line-height:.86;letter-spacing:-.04em}
+.diff .col.add .n{color:var(--fire)}
+.diff .col.rem .n{color:var(--cream-muted)}
+.diff .col .l{font-family:var(--mono);font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--cream-hint);margin-top:12px}
+.slide.orange .diff{border-color:var(--io-20)}
+.slide.orange .diff .col.add .n{color:var(--ink)}
+.slide.orange .diff .col.rem .n{color:var(--io-40)}
+.slide.orange .diff .col .l{color:var(--io-55)}
+
+/* === SPLIT content layout === */
+.split{flex:1;display:grid;grid-template-columns:1.04fr .96fr;gap:72px;align-items:center;padding:8px 0}
+.col-l{display:flex;flex-direction:column;gap:26px}
+.col-r{display:flex;flex-direction:column;gap:40px;justify-content:center}
+
+/* === STATS / OVERVIEW === */
+.stat-grid{flex:1;display:flex;flex-direction:column;justify-content:center;gap:40px}
+.statline{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-top:1px solid var(--border)}
+.statcard{border-right:1px solid var(--border);padding:28px 34px 4px 0;margin-right:34px}
+.statcard:last-child{border-right:none}
+.statcard .n{font-family:var(--display);font-weight:900;font-size:118px;line-height:.9;letter-spacing:-.04em;color:var(--fire)}
+.statcard .n .u{font-size:34px;color:var(--cream-muted);font-weight:700;margin-left:6px}
+.statcard .l{font-family:var(--cn);font-size:22px;color:var(--cream);margin-top:14px;font-weight:400}
+.statcard .s{font-family:var(--mono);font-size:14px;letter-spacing:.1em;text-transform:uppercase;color:var(--cream-hint);margin-top:6px}
+
+/* category ticker on overview */
+.cats{display:flex;flex-wrap:wrap;gap:10px 12px;margin-top:8px}
+.cats span{font-family:var(--mono);font-size:15px;letter-spacing:.06em;color:var(--cream-muted);border:1px solid var(--border);padding:6px 12px}
+.cats span b{color:var(--fire);font-weight:600}
+
+/* === CHAPTER divider (orange) === */
+.bnum{position:absolute;top:var(--pad-y);left:var(--pad-x);font-family:var(--mono);font-size:21px;font-weight:500;letter-spacing:.1em;color:var(--io-40)}
+.chapter-body{margin:auto 0;display:flex;flex-direction:column;gap:30px}
+.rule{width:64px;height:3px;background:var(--ink)}
+/* CJK-safe: line-height must stay >= ~1.05 for multi-line Noto Sans SC display */
+.chapter-body h1{font-size:152px;line-height:1.08}
+
+/* === STATEMENT (declarative) === */
+.center{flex:1;display:flex;flex-direction:column;justify-content:center;gap:38px}
+.statement .display{max-width:1500px}
+.statement .src{font-family:var(--mono);font-size:var(--s-label);letter-spacing:.14em;text-transform:uppercase;color:var(--io-55)}
+
+/* === COMPARE (rise vs fall) === */
+.compare{flex:1;display:grid;grid-template-columns:1fr 1fr;align-items:stretch}
+.cp{display:flex;flex-direction:column;justify-content:center;gap:24px;padding:30px 64px}
+.cp.left{border-right:1px solid var(--border)}
+.cp.right{background:var(--fire);margin:calc(-1 * var(--pad-y)) calc(-1 * var(--pad-x)) calc(-1 * var(--pad-y)) 0;padding:var(--pad-y) var(--pad-x) var(--pad-y) 64px;color:var(--ink)}
+.cp .when{font-family:var(--mono);font-size:16px;letter-spacing:.14em;text-transform:uppercase}
+.cp.left .when{color:var(--fire)} .cp.right .when{color:var(--io-55)}
+.cp .big{font-family:var(--display);font-weight:900;font-size:200px;line-height:.84;letter-spacing:-.04em}
+.cp.left .big{color:var(--cream)} .cp.right .big{color:var(--ink)}
+.cp h3{font-family:var(--display);font-weight:800;font-size:46px;line-height:1.04;letter-spacing:-.01em}
+.cp.left h3{color:var(--cream)} .cp.right h3{color:var(--ink)}
+.cp p{font-family:var(--cn);font-size:21px;line-height:1.55;font-weight:400}
+.cp.left p{color:var(--cream-muted)} .cp.right p{color:var(--io-75)}
+/* code/em inside the orange compare panel must flip to ink (the slide itself is not .orange) */
+.cp.right code{color:var(--ink);background:rgba(17,17,17,.12)}
+.cp.right em{color:var(--ink);font-weight:600}
+.cp.left code{color:var(--fire);background:rgba(232,93,38,.14)}
+
+/* === COVER === */
+.cover .pad{justify-content:space-between}
+.cover .fire-edge{position:absolute;left:0;top:0;bottom:0;width:18px;background:var(--fire)}
+.cover .topline{display:flex;justify-content:space-between;font-family:var(--mono);font-size:var(--s-label);letter-spacing:.14em;text-transform:uppercase;color:var(--cream-muted)}
+.cover .topline b{color:var(--cream);font-weight:600}
+.cover .hero{margin:auto 0;display:flex;flex-direction:column}
+.cover .hero .kick{font-family:var(--mono);font-size:20px;letter-spacing:.12em;text-transform:uppercase;color:var(--fire);margin-bottom:26px;display:flex;align-items:center;gap:16px}
+.cover .hero .kick::before{content:"";width:52px;height:2px;background:var(--fire)}
+.cover h1{font-size:240px;line-height:.86}
+.cover h1 .fire{color:var(--fire)}
+.cover .en{font-family:var(--display);font-weight:800;font-size:50px;line-height:1.05;letter-spacing:-.01em;color:var(--cream);margin-top:30px;text-transform:lowercase;max-width:1300px}
+.cover .botline{display:flex;align-items:flex-end;gap:30px;font-family:var(--mono);font-size:var(--s-label);letter-spacing:.1em;text-transform:uppercase;color:var(--cream-muted)}
+.cover .botline .sp{flex:1}
+.cover .botline b{color:var(--cream)}
+
+/* === END === */
+.end .center{justify-content:center}
+.end h1{font-size:144px;line-height:1.06}
+.end .threads{display:flex;gap:48px;margin-top:18px;flex-wrap:wrap}
+.end .threads div{font-family:var(--cn);font-size:23px;color:var(--io-75);max-width:380px;line-height:1.5;border-top:2px solid var(--ink);padding-top:16px;font-weight:400}
+.end .threads div b{color:var(--ink);font-weight:600;display:block;margin-bottom:6px;font-family:var(--mono);font-size:15px;letter-spacing:.1em;text-transform:uppercase}
+
+/* === REVEAL animation (replays on each activation via .active) === */
+.reveal{opacity:0}
+.slide.active .reveal{animation:rise .72s var(--ease) both;animation-delay:var(--d,0s)}
+@keyframes rise{from{opacity:0;transform:translateY(34px)}to{opacity:1;transform:none}}
+.slide.active .clip{animation:clipUp .9s var(--ease) both;animation-delay:var(--d,0s)}
+@keyframes clipUp{from{opacity:0;transform:translateY(90px)}to{opacity:1;transform:none}}
+
+/* === DECK CONTROLS (outside the stage) === */
+.deck-controls{position:fixed;left:0;right:0;bottom:26px;z-index:1000;display:flex;align-items:center;justify-content:center;gap:12px;pointer-events:none}
+.nav-dots{display:flex;gap:9px;pointer-events:auto}
+.nav-dots button{width:8px;height:8px;border-radius:50%;border:none;background:rgba(240,236,229,.26);cursor:pointer;padding:0;transition:.25s}
+.nav-dots button.on{background:var(--fire);transform:scale(1.35)}
+.counter{position:fixed;right:30px;bottom:24px;z-index:1000;font-family:var(--mono);font-size:14px;letter-spacing:.14em;color:var(--cream-muted)}
+.counter b{color:var(--fire)}
+.hint{position:fixed;left:30px;bottom:24px;z-index:1000;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,236,229,.3)}
+
+/* === INLINE EDIT === */
+.edit-hotzone{position:fixed;top:0;left:0;width:84px;height:84px;z-index:10000;cursor:pointer}
+.edit-toggle{position:fixed;top:18px;left:18px;z-index:10001;width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:#15151a;color:var(--cream);font-size:19px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s;display:flex;align-items:center;justify-content:center}
+.edit-toggle.show,.edit-toggle.active{opacity:1;pointer-events:auto}
+.edit-toggle.active{background:var(--fire);border-color:var(--fire);color:#111}
+body.editing [contenteditable]{outline:1px dashed rgba(232,93,38,.55);outline-offset:5px;cursor:text;border-radius:2px}
+body.editing [contenteditable]:focus{outline:2px solid var(--fire);background:rgba(232,93,38,.06)}
+.edit-bar{position:fixed;top:18px;left:74px;z-index:10001;display:none;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--cream-muted);background:#15151a;border:1px solid var(--border);padding:8px 14px}
+body.editing .edit-bar{display:flex}
+.edit-bar button{font-family:var(--mono);font-size:12px;text-transform:uppercase;letter-spacing:.08em;background:var(--fire);color:#111;border:none;padding:6px 12px;cursor:pointer}
+.edit-bar button.ghost{background:transparent;color:var(--cream-muted);border:1px solid var(--border)}
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+  <main class="deck-stage" id="deckStage">
+
+    <!-- ============ 01 · COVER (dark) ============ -->
+    <section class="slide cover active" data-decl>
+      <span class="fire-edge"></span>
+      <div class="pad">
+        <div class="topline reveal"><span>phistory / <b>codex-cli</b></span><span>system prompt diff · <b>2026</b></span></div>
+        <div class="hero">
+          <div class="kick clip" style="--d:.05s">60 releases · 17 substantive rewrites</div>
+          <h1><span class="clip" style="--d:.12s">系统提示词</span><span class="clip fire" style="--d:.26s">演进史</span></h1>
+          <div class="en reveal" style="--d:.5s">how codex cli's constitution was rewritten, version by version</div>
+        </div>
+        <div class="botline reveal" style="--d:.62s">
+          <span>2026.01.09 → 2026.06.26</span><span class="sp"></span><span>source — <b>phistory.cc</b></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 02 · OVERVIEW / STATS (dark) ============ -->
+    <section class="slide" data-section="导览 · THE SHAPE">
+      <div class="pad">
+        <div class="chrome"><span>导览 · <span class="accent">THE&nbsp;SHAPE</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="stat-grid">
+          <div class="kicker reveal"><span>六个月，一份提示词的体检表</span></div>
+          <div class="statline reveal" style="--d:.1s">
+            <div class="statcard"><div class="n">60</div><div class="l">公开版本</div><div class="s">releases</div></div>
+            <div class="statcard"><div class="n">17</div><div class="l">实质性变更</div><div class="s">substantive</div></div>
+            <div class="statcard"><div class="n">11</div><div class="l">主题分类</div><div class="s">themes</div></div>
+            <div class="statcard"><div class="n">6<span class="u">mo</span></div><div class="l">时间跨度</div><div class="s">jan—jun 2026</div></div>
+          </div>
+          <p class="body reveal" style="--d:.24s">已剔除纯版本号递增——这里只保留<em>真正改写行为</em>的版本。最大一次新增 <span class="fire">+232</span> 行（引入子智能体），最大一次删除 <span class="fire">−190</span> 行（又把它删掉）。</p>
+          <div class="cats reveal" style="--d:.34s">
+            <span><b>·</b> 身份人格</span><span><b>·</b> 工具执行</span><span><b>·</b> 权限安全</span><span><b>·</b> 子智能体</span><span><b>·</b> 结构流程</span><span><b>·</b> 规划任务</span><span><b>·</b> MCP 集成</span><span><b>·</b> 技能插件</span><span><b>·</b> 模型</span>
+          </div>
+        </div>
+        <div class="foot"><span>01 — overview</span><span>数据抓取自 phistory.cc</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 03 · THESIS (orange statement) ============ -->
+    <section class="slide orange statement" data-decl>
+      <div class="pad">
+        <div class="center">
+          <div class="kicker reveal">论点 · THE PREMISE</div>
+          <h2 class="display reveal" style="--d:.12s;font-size:150px;line-height:1.04">一份系统提示词，<br>就是一个 Agent 的<span style="text-decoration:underline;text-decoration-thickness:8px;text-underline-offset:10px">宪法</span></h2>
+          <p class="lead reveal" style="--d:.3s;max-width:1180px;color:var(--io-75)">读它的 diff，就是在读一个产品团队反复修订的世界观——什么该自主、什么要请示、它到底是工具还是同事。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 04 · CHAPTER 01 (orange) ============ -->
+    <section class="slide orange" data-decl>
+      <span class="bnum">01 — foundations</span>
+      <div class="pad"><div class="chapter-body">
+        <span class="rule reveal"></span>
+        <div class="kicker reveal" style="--d:.06s">Chapter 01 · 2026.01 — 02</div>
+        <h1 class="clip" style="--d:.12s">地基：<br>权限与工具</h1>
+        <p class="lead reveal" style="--d:.3s;color:var(--io-75);max-width:900px">先把脚手架说清楚——谁能动文件、怎么问用户、命令怎么跑。</p>
+      </div></div>
+    </section>
+
+    <!-- ============ 05 · 0.81 Developer Prompt (dark) ============ -->
+    <section class="slide" data-section="01 / 地基">
+      <div class="pad">
+        <div class="chrome"><span>01 / 地基 · <span class="accent">FOUNDATIONS</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.81.0</span> · 2026.01.14 · workflow</div>
+            <h2 class="reveal" style="--d:.08s">拆分出独立的<br>Developer Prompt</h2>
+            <p class="lead reveal" style="--d:.16s">把整段沙箱 / 审批说明从主提示词里搬走，权限收敛成一句话加一个精简 <code>&lt;permissions&gt;</code> 块。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li>删掉约 40 行 “harness, sandboxing &amp; approvals” 内联说明</li>
+              <li>权限改由独立的 <b>Developer Prompt</b> 承载</li>
+              <li>从 <code>environment_context</code> 移除 approval / sandbox / network 字段</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+5</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−41</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>开篇即做减法</span><span>2026.01.14</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 06 · 0.93+0.94 学会发问 (dark) ============ -->
+    <section class="slide" data-section="01 / 地基">
+      <div class="pad">
+        <div class="chrome"><span>01 / 地基 · <span class="accent">FOUNDATIONS</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.93 → v0.94</span> · 2026.01–02 · safety · tools</div>
+            <h2 class="reveal" style="--d:.08s">学会发问，<br>也学会少打扰</h2>
+            <p class="lead reveal" style="--d:.16s">两步让人机协作更顺：审批可以按命令前缀复用，遇到歧义则主动向用户提问。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li><b>0.93</b> 新增 <code>prefix_rule</code>：批准一次 <code>["git","pull"]</code> 后同类命令复用</li>
+              <li><b>0.94</b> 新增 <code>request_user_input</code>：1–3 个带选项问题，推荐项置顶</li>
+              <li>justification 从“解释”改写成“面向用户的审批问句”</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+82</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−5</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>更聪明地打断</span><span>2026.01.31 · 02.02</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 07 · 0.96 exec_command PTY (dark) ============ -->
+    <section class="slide" data-section="01 / 地基">
+      <div class="pad">
+        <div class="chrome"><span>01 / 地基 · <span class="accent">FOUNDATIONS</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.96.0</span> · 2026.02.04 · tools</div>
+            <h2 class="reveal" style="--d:.08s">shell_command<br>→ exec_command</h2>
+            <p class="lead reveal" style="--d:.16s">执行模型换代：命令跑在 <em>PTY</em> 里，能返回 session_id 持续交互，长驻会话第一次成为可能。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li>移除 <code>shell_command</code>，引入 PTY 版 <code>exec_command</code></li>
+              <li>新增 <code>write_stdin</code>：向已有会话写字符、取回输出</li>
+              <li>支持 tty / login / yield_time_ms 等精细控制</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+91</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−48</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>执行层换代</span><span>2026.02.04</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 08 · CHAPTER 02 (orange) ============ -->
+    <section class="slide orange" data-decl>
+      <span class="bnum">02 — personhood</span>
+      <div class="pad"><div class="chapter-body">
+        <span class="rule reveal"></span>
+        <div class="kicker reveal" style="--d:.06s">Chapter 02 · 2026.02</div>
+        <h1 class="clip" style="--d:.12s">立人格：<br>从工具到协作者</h1>
+        <p class="lead reveal" style="--d:.3s;color:var(--io-75);max-width:920px">提示词第一次开始回答一个非技术问题——“你是谁”。</p>
+      </div></div>
+    </section>
+
+    <!-- ============ 09 · 0.99 人格框架 (orange statement) ============ -->
+    <section class="slide orange statement" data-decl>
+      <div class="pad">
+        <div class="center">
+          <div class="kicker reveal"><span style="color:var(--ink);opacity:.55">v0.99.0 · 2026.02.11 · identity</span></div>
+          <h2 class="display reveal" style="--d:.12s;font-size:128px;line-height:1.06">“你和用户共享同一个工作区，<br>协作达成他的目标。”</h2>
+          <p class="lead reveal" style="--d:.3s;max-width:1180px;color:var(--io-75)">开场白从“运行在 Codex CLI 中的编码代理”改写成这句话。同时确立四段式人格：<em>Personality / Values / Interaction&nbsp;Style / Escalation</em>——价值观写进了 Clarity、Pragmatism、Rigor。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 10 · 0.106 双通道 + 自主性 (dark) ============ -->
+    <section class="slide" data-section="02 / 立人格">
+      <div class="pad">
+        <div class="chrome"><span>02 / 立人格 · <span class="accent">PERSONHOOD</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.106.0</span> · 2026.02.26 · workflow</div>
+            <h2 class="reveal" style="--d:.08s">双通道沟通 +<br>端到端自主</h2>
+            <p class="lead reveal" style="--d:.16s">拆出 <code>commentary</code> / <code>final</code> 双通道，并要求把任务<em>真正做完</em>——不要停在分析或半成品。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li>新增 “Autonomy and persistence”：端到端完成，不中途交还</li>
+              <li>约每 20s 播报进度，且句式要多变、不灌水</li>
+              <li>基调转向“直接、就事论事”，并鼓励并行调用工具</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+63</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−43</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>插曲 · 0.102 暂时下线 3 个 MCP 资源工具 (−67)，伏笔留到第三幕</span><span>2026.02.26</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 11 · CHAPTER 03 (orange) ============ -->
+    <section class="slide orange" data-decl>
+      <span class="bnum">03 — rise &amp; fall</span>
+      <div class="pad"><div class="chapter-body">
+        <span class="rule reveal"></span>
+        <div class="kicker reveal" style="--d:.06s">Chapter 03 · 2026.03 — 05</div>
+        <h1 class="clip" style="--d:.12s">子智能体的<br>兴衰</h1>
+        <p class="lead reveal" style="--d:.3s;color:var(--io-75);max-width:920px">一套被郑重加上、两个月后又被果断删掉的体系——整部演进史里最戏剧的一段。</p>
+      </div></div>
+    </section>
+
+    <!-- ============ 12 · 0.115 引入子智能体 (dark) ============ -->
+    <section class="slide" data-section="03 / 兴衰">
+      <div class="pad">
+        <div class="chrome"><span>03 / 兴衰 · <span class="accent">THE&nbsp;RISE</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.115.0</span> · 2026.03.16 · subagents</div>
+            <h2 class="reveal" style="--d:.08s">引入整套<br>子智能体体系</h2>
+            <p class="lead reveal" style="--d:.16s">一次性落地全套委派工具与角色规范——<em>单次最大新增</em>，+232 行。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li>生命周期：<code>spawn</code> / <code>close</code> / <code>resume</code> / <code>send_input</code> / <code>wait</code></li>
+              <li>两类角色：explorer（只读探查）与 worker（执行 / 改码）</li>
+              <li>强约束：仅当用户<b>明确要求</b>并行时才允许 spawn</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+232</div><div class="l">added · 最大</div></div>
+              <div class="col rem"><div class="n">−6</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>兴 · the rise</span><span>2026.03.16</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 13 · 0.117 加回 MCP + 新技能 (dark) ============ -->
+    <section class="slide" data-section="03 / 兴衰">
+      <div class="pad">
+        <div class="chrome"><span>03 / 兴衰 · <span class="accent">EXPANSION</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.117.0</span> · 2026.03.26 · mcp · skills</div>
+            <h2 class="reveal" style="--d:.08s">加回 MCP，<br>并长出新技能</h2>
+            <p class="lead reveal" style="--d:.16s">两个月前下线的 MCP 资源工具回归，能力同时向<em>生图与插件</em>扩张。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li>重新加回三个 <code>read_mcp_resource</code> 系列工具（呼应 0.102）</li>
+              <li>新增技能 <code>imagegen</code>（生成 / 编辑位图）与 <code>plugin-creator</code></li>
+              <li>代理标识参数从 <code>id</code> 统一改成 <code>target</code>，close 支持级联</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+80</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−11</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>能力扩张期</span><span>2026.03.26</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 14 · 0.125 叙事口吻 + 前端规范 (dark) ============ -->
+    <section class="slide" data-section="03 / 兴衰">
+      <div class="pad">
+        <div class="chrome"><span>03 / 兴衰 · <span class="accent">VOICE</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.123 → v0.125</span> · 2026.04 · workflow · identity</div>
+            <h2 class="reveal" style="--d:.08s">改写规范，<br>也改写口吻</h2>
+            <p class="lead reveal" style="--d:.16s">编辑一律走 <code>apply_patch</code>、答复力求精简；紧接着全篇转为<em>第二人称叙事</em>，并补上大段前端设计规范（+100）。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li><b>0.123</b> 手动改码一律 <code>apply_patch</code>，最终答复 ≤ 2–3 个分区</li>
+              <li><b>0.125</b> General / Interaction 改写成有“人味”的叙述</li>
+              <li>新增 Frontend guidance：图标、配色禁忌、禁止卡中卡…</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+151</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−108</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>插曲 · 0.119 只是字段顺序整理，无行为变化</span><span>2026.04.23 · 04.24</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 15 · 0.133 兴 vs 衰 COMPARE (dark + orange) ============ -->
+    <section class="slide" data-decl>
+      <div class="pad" style="padding-bottom:0;padding-right:0">
+        <div class="compare">
+          <div class="cp left">
+            <div class="when reveal">2026.03 · v0.115 · 兴</div>
+            <div class="big clip" style="--d:.05s">+232</div>
+            <h3 class="reveal" style="--d:.2s">引入整套<br>子智能体体系</h3>
+            <p class="reveal" style="--d:.3s">spawn / close / resume / wait，explorer 与 worker，并行委派规范——郑重落地。</p>
+          </div>
+          <div class="cp right">
+            <div class="when reveal" style="--d:.1s">2026.05 · v0.133 · 衰</div>
+            <div class="big clip" style="--d:.15s">−190</div>
+            <h3 class="reveal" style="--d:.3s">删掉常驻子代理，<br>转向目标管理</h3>
+            <p class="reveal" style="--d:.4s">改用 <code>create_goal</code> / <code>update_goal</code> + BM25 <code>tool_search</code> 按需暴露工具。<em>单次最大删除</em>。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 16 · CHAPTER 04 (orange) ============ -->
+    <section class="slide orange" data-decl>
+      <span class="bnum">04 — settling</span>
+      <div class="pad"><div class="chapter-body">
+        <span class="rule reveal"></span>
+        <div class="kicker reveal" style="--d:.06s">Chapter 04 · 2026.05 — 06</div>
+        <h1 class="clip" style="--d:.12s">收口：<br>模型 · 权限 · 技能</h1>
+        <p class="lead reveal" style="--d:.3s;color:var(--io-75);max-width:920px">大动作之后，是一连串把边界收紧、把描述磨利的小步。</p>
+      </div></div>
+    </section>
+
+    <!-- ============ 17 · 0.131+0.132 模型 (dark) ============ -->
+    <section class="slide" data-section="04 / 收口">
+      <div class="pad">
+        <div class="chrome"><span>04 / 收口 · <span class="accent">MODELS</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.131 → v0.132</span> · 2026.05 · models</div>
+            <h2 class="reveal" style="--d:.08s">前沿模型上桌，<br>清单随即瘦身</h2>
+            <p class="lead reveal" style="--d:.16s">GPT-5.5 加入可选模型，并引入 <code>service_tier</code> 服务档；两天后又把冗长的清单压成单行。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li>新增 <code>gpt-5.5</code>，spawn_agent 可覆盖 <code>service_tier</code>（priority：1.5x）</li>
+              <li>模型清单压成“名称 + 推理档 + 服务档”单行</li>
+              <li>view image 的 <code>detail</code> 明确 high / original 枚举</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+21</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−13</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>先扩后精</span><span>2026.05.18 · 05.20</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 18 · 0.136+0.140 权限 + 技能 (dark) ============ -->
+    <section class="slide" data-section="04 / 收口">
+      <div class="pad">
+        <div class="chrome"><span>04 / 收口 · <span class="accent">PERMISSIONS&nbsp;·&nbsp;SKILLS</span></span><span>phistory · <b>codex-cli</b></span></div>
+        <div class="split">
+          <div class="col-l">
+            <div class="kicker reveal"><span class="v">v0.136 → v0.140</span> · 2026.06 · safety · skills</div>
+            <h2 class="reveal" style="--d:.08s">把权限画出来，<br>把技能接进来</h2>
+            <p class="lead reveal" style="--d:.16s">环境里注入<em>文件系统权限画像</em>；技能来源从单一文件路径扩展成四类资源定位符。</p>
+          </div>
+          <div class="col-r">
+            <ul class="bullets reveal" style="--d:.24s">
+              <li><b>0.136</b> environment_context 注入 <code>&lt;filesystem&gt;</code>，参数补枚举与默认值</li>
+              <li><b>0.140</b> 技能来源扩展为 file / environment / orchestrator / custom</li>
+              <li><code>request_user_input</code> 新增 autoResolutionMs：60–240s 自动放行</li>
+            </ul>
+            <div class="diff reveal" style="--d:.34s">
+              <div class="col add"><div class="n">+50</div><div class="l">added</div></div>
+              <div class="col rem"><div class="n">−34</div><div class="l">removed</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span>边界收紧 · 接口打开</span><span>2026.06.01 · 06.15</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 19 · CLOSING (orange end) ============ -->
+    <section class="slide orange end" data-decl>
+      <div class="pad">
+        <div class="center">
+          <div class="kicker reveal">回望 · WHAT THE DIFFS SAY</div>
+          <h1 class="clip" style="--d:.12s">六个月的 diff，<br>说了三件事</h1>
+          <div class="threads">
+            <div class="reveal" style="--d:.3s"><b>01 · identity</b>从“运行中的代理”到“共享工作区的协作者”——人格被显式写了出来。</div>
+            <div class="reveal" style="--d:.4s"><b>02 · humility</b>+232 引入、−190 删除：敢加，也敢承认加错并删掉。</div>
+            <div class="reveal" style="--d:.5s"><b>03 · restraint</b>从堆叠工具，转向目标管理 + 按需检索——少即是多。</div>
+          </div>
+          <p class="src reveal" style="--d:.62s;margin-top:14px">数据抓取自 phistory.cc · ↑/↓ 或 ← → 翻页 · 按 E 编辑</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- deck controls outside the stage -->
+<div class="deck-controls"><div class="nav-dots" id="navDots"></div></div>
+<div class="counter" id="counter"><b>01</b> / 19</div>
+<div class="hint">← → / space · esc</div>
+
+<!-- inline edit chrome -->
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle" title="编辑模式 (E)">✎</button>
+<div class="edit-bar" id="editBar"><span>编辑模式 · 点击文字直接改</span><button id="btnExport">导出 HTML</button><button class="ghost" id="btnReset">还原</button><button class="ghost" id="btnDone">完成</button></div>
+
+<script>
+/* =====================================================================
+   DECK CONTROLLER — fixed-stage scaling, navigation, reveals, edit
+   ===================================================================== */
+(function(){
+  const stage=document.getElementById('deckStage');
+  const slides=[...document.querySelectorAll('.slide')];
+  const dotsWrap=document.getElementById('navDots');
+  const counter=document.getElementById('counter');
+  let i=0;
+
+  /* --- scale the 1920×1080 stage to fit the viewport (letterbox) --- */
+  function scale(){
+    const f=Math.min(window.innerWidth/1920,window.innerHeight/1080);
+    const x=(window.innerWidth-1920*f)/2, y=(window.innerHeight-1080*f)/2;
+    stage.style.transform=`translate(${x}px,${y}px) scale(${f})`;
+  }
+  scale(); window.addEventListener('resize',scale);
+
+  /* --- nav dots --- */
+  slides.forEach((s,n)=>{
+    const b=document.createElement('button');
+    b.setAttribute('aria-label','Slide '+(n+1));
+    b.addEventListener('click',()=>go(n));
+    dotsWrap.appendChild(b);
+  });
+  const dots=[...dotsWrap.children];
+  const pad2=n=>String(n).padStart(2,'0');
+
+  function go(n){
+    i=Math.max(0,Math.min(n,slides.length-1));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+    counter.innerHTML=`<b>${pad2(i+1)}</b> / ${slides.length}`;
+    try{history.replaceState(null,'','#s'+(i+1));}catch(_){}
+  }
+  const next=()=>go(i+1), prev=()=>go(i-1);
+
+  /* --- keyboard --- */
+  window.addEventListener('keydown',e=>{
+    if(document.body.classList.contains('editing') && e.target.isContentEditable){
+      if((e.key==='s'||e.key==='S')&&(e.metaKey||e.ctrlKey)){e.preventDefault();exportHTML();}
+      return;
+    }
+    switch(e.key){
+      case'ArrowRight':case'ArrowDown':case'PageDown':case' ':e.preventDefault();next();break;
+      case'ArrowLeft':case'ArrowUp':case'PageUp':e.preventDefault();prev();break;
+      case'Home':go(0);break; case'End':go(slides.length-1);break;
+      case'e':case'E':if(!e.metaKey&&!e.ctrlKey)toggleEdit();break;
+      case'Escape':if(document.body.classList.contains('editing'))toggleEdit();break;
+    }
+  });
+
+  /* --- touch swipe --- */
+  let tx=0,ty=0;
+  window.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+  window.addEventListener('touchend',e=>{
+    const dx=e.changedTouches[0].clientX-tx, dy=e.changedTouches[0].clientY-ty;
+    if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)) dx<0?next():prev();
+  },{passive:true});
+
+  /* --- wheel (debounced) --- */
+  let wlock=false;
+  window.addEventListener('wheel',e=>{
+    if(document.body.classList.contains('editing'))return;
+    if(wlock)return; if(Math.abs(e.deltaY)<24)return;
+    wlock=true; e.deltaY>0?next():prev(); setTimeout(()=>wlock=false,620);
+  },{passive:true});
+
+  /* deep-link: open #s7 directly, and respond to hash changes */
+  const hashIdx=()=>{const m=(location.hash||'').match(/\d+/);return m?Math.max(0,Math.min(+m[0]-1,slides.length-1)):0;};
+  go(hashIdx());
+  window.addEventListener('hashchange',()=>{const n=hashIdx();if(n!==i)go(n);});
+
+  /* =====================================================================
+     INLINE EDITING — toggle with E / hotzone; autosave to localStorage
+     ===================================================================== */
+  const EDIT_SEL='.slide h1,.slide h2,.slide .display,.slide .lead,.slide li,.slide .body,.slide .kicker,.slide .when,.slide .cp h3,.slide .cp p,.slide .statcard .l,.slide .threads div,.slide .en,.slide .src';
+  const editEls=[...document.querySelectorAll(EDIT_SEL)];
+  editEls.forEach((el,k)=>el.dataset.k='e'+k);
+  const STORE='codex-deck-edits-v1';
+
+  function loadEdits(){
+    try{const m=JSON.parse(localStorage.getItem(STORE)||'{}');
+      editEls.forEach(el=>{const v=m[el.dataset.k];if(v!=null)el.innerHTML=v;});}catch(_){}
+  }
+  function saveEdits(){
+    const m={};editEls.forEach(el=>m[el.dataset.k]=el.innerHTML);
+    localStorage.setItem(STORE,JSON.stringify(m));
+  }
+  loadEdits();
+
+  const toggle=document.getElementById('editToggle');
+  const hot=document.getElementById('editHotzone');
+  let hideT=null, editing=false;
+  function toggleEdit(){
+    editing=!editing;
+    document.body.classList.toggle('editing',editing);
+    toggle.classList.toggle('active',editing);
+    editEls.forEach(el=>el.contentEditable=editing);
+    if(!editing)saveEdits();
+  }
+  toggle.addEventListener('click',toggleEdit);
+  hot.addEventListener('click',toggleEdit);
+  hot.addEventListener('mouseenter',()=>{clearTimeout(hideT);toggle.classList.add('show');});
+  hot.addEventListener('mouseleave',()=>{hideT=setTimeout(()=>{if(!editing)toggle.classList.remove('show');},400);});
+  toggle.addEventListener('mouseenter',()=>clearTimeout(hideT));
+  toggle.addEventListener('mouseleave',()=>{hideT=setTimeout(()=>{if(!editing)toggle.classList.remove('show');},400);});
+  document.addEventListener('input',e=>{if(editing&&e.target.dataset&&e.target.dataset.k)saveEdits();});
+
+  /* edit-bar buttons */
+  document.getElementById('btnDone').addEventListener('click',()=>{if(editing)toggleEdit();});
+  document.getElementById('btnReset').addEventListener('click',()=>{
+    localStorage.removeItem(STORE);location.reload();
+  });
+  document.getElementById('btnExport').addEventListener('click',exportHTML);
+
+  function exportHTML(){
+    if(editing){editEls.forEach(el=>el.contentEditable=false);}
+    const clone=document.documentElement.cloneNode(true);
+    clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'));
+    clone.querySelectorAll('.slide').forEach((s,k)=>s.classList.toggle('active',k===0));
+    clone.classList.remove('editing'); const b=clone.querySelector('body'); if(b)b.classList.remove('editing');
+    const html='<!DOCTYPE html>\n'+clone.outerHTML;
+    const blob=new Blob([html],{type:'text/html'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='codex-prompt-evolution.html'; a.click();
+    URL.revokeObjectURL(a.href);
+    if(editing){editEls.forEach(el=>el.contentEditable=true);}
+  }
+})();
+</script>
+</body>
+</html>
