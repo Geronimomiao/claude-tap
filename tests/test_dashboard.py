@@ -488,6 +488,44 @@ def test_dashboard_first_message_uses_first_user_prompt(trace_db, tmp_path: Path
     assert summary["first_user"] == "What is this project?"
 
 
+def test_dashboard_first_message_skips_codex_injected_plugin_context(trace_db, tmp_path: Path) -> None:
+    trace_path = tmp_path / "2026-07-10" / "trace_123725.jsonl"
+    _write_jsonl(
+        trace_path,
+        [
+            {
+                "timestamp": "2026-07-10T12:37:25+00:00",
+                "turn": 1,
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/responses",
+                    "body": {
+                        "model": "gpt-5.6-sol",
+                        "input": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "input_text",
+                                        "text": "<recommended_plugins>\nInjected plugin catalog\n</recommended_plugins>",
+                                    }
+                                ],
+                            },
+                            {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+                        ],
+                    },
+                },
+                "response": {"status": 200, "body": {"model": "gpt-5.6-sol", "usage": {"input_tokens": 1}}},
+            }
+        ],
+    )
+
+    _seed_legacy(tmp_path)
+    summary = list_trace_sessions()[0]
+
+    assert summary["first_user"] == "hi"
+
+
 def test_dashboard_first_message_skips_injected_user_content_blocks(trace_db, tmp_path: Path) -> None:
     trace_path = tmp_path / "2026-05-20" / "trace_101500.jsonl"
     _write_jsonl(
