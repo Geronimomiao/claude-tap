@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import socket
 import tempfile
 from pathlib import Path
 
@@ -14,6 +15,19 @@ from claude_tap.trace_store import get_trace_store, reset_trace_store
 _NOOP_BROWSER = shutil.which("true")
 if _NOOP_BROWSER:
     os.environ["BROWSER"] = _NOOP_BROWSER
+
+
+def _isolated_dashboard_port() -> str:
+    configured = os.environ.get("CLOUDTAP_DASHBOARD_PORT", "").strip()
+    if configured.isdigit() and int(configured) > 0 and int(configured) != 19527:
+        return configured
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return str(sock.getsockname()[1])
+
+
+# Never let a test subprocess replace the user's main dashboard on port 19527.
+os.environ["CLOUDTAP_DASHBOARD_PORT"] = _isolated_dashboard_port()
 
 
 def trace_db_path(trace_dir: str | Path) -> Path:
