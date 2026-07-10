@@ -1810,11 +1810,11 @@ def _compact_contract_records() -> tuple[dict[str, Any], ...]:
     return tuple(records)
 
 
-def _open_viewer_with_error_capture(page: Page, html_path: Path) -> list[str]:
+def _open_viewer_with_error_capture(page: Page, html_path: Path, query: str = "") -> list[str]:
     errors: list[str] = []
     page.on("pageerror", lambda exc: errors.append(f"pageerror: {exc}"))
     page.on("console", lambda msg: errors.append(f"console.error: {msg.text}") if msg.type == "error" else None)
-    page.goto(html_path.resolve().as_uri(), timeout=10000)
+    page.goto(f"{html_path.resolve().as_uri()}{query}", timeout=10000)
     page.wait_for_selector(".sidebar-item", timeout=5000)
     return errors
 
@@ -1883,31 +1883,23 @@ def test_viewer_semantic_contracts_across_supported_trace_shapes(
         assert text in result["detailText"]
 
 
-def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Path, chromium_browser) -> None:
+def test_viewer_detail_tabs_query_can_default_to_trace_and_expose_default_view(
+    tmp_path: Path, chromium_browser
+) -> None:
     html_path = _generate_case_html(tmp_path, "detail_tabs", (_responses_record(),))
 
     page = chromium_browser.new_page()
     try:
-        errors = _open_viewer_with_error_capture(page, html_path)
+        errors = _open_viewer_with_error_capture(page, html_path, "?detail=trace")
         page.locator(".sidebar-item").first.click()
-        page.wait_for_selector('#detail .detail-tab[data-tab="default"].active', timeout=5000)
-
-        default_state = page.evaluate(
+        page.wait_for_selector('#detail .detail-tab[data-tab="trace"].active', timeout=5000)
+        trace_state = page.evaluate(
             """() => ({
               tabs: Array.from(document.querySelectorAll('#detail .detail-tab')).map(el => ({
                 mode: el.dataset.tab,
                 label: el.querySelector('span:not(.tab-count)')?.textContent || '',
                 active: el.classList.contains('active'),
               })),
-              sectionTitles: Array.from(document.querySelectorAll('#detail .section .title')).map(el => el.textContent),
-              text: document.querySelector('#detail')?.innerText || '',
-            })"""
-        )
-
-        page.locator('#detail .detail-tab[data-tab="trace"]').click()
-        page.wait_for_selector('#detail .detail-tab[data-tab="trace"].active', timeout=5000)
-        trace_state = page.evaluate(
-            """() => ({
               sectionCount: document.querySelectorAll('#detail .section').length,
               blockTitles: Array.from(document.querySelectorAll('#detail .trace-block-title .trace-title')).map(el => el.textContent),
               copyButtons: Array.from(document.querySelectorAll('#detail .trace-copy-btn')).map(el => el.textContent),
@@ -1953,6 +1945,20 @@ def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Pa
             })"""
         )
 
+        page.locator('#detail .detail-tab[data-tab="default"]').click()
+        page.wait_for_selector('#detail .detail-tab[data-tab="default"].active', timeout=5000)
+        default_state = page.evaluate(
+            """() => ({
+              tabs: Array.from(document.querySelectorAll('#detail .detail-tab')).map(el => ({
+                mode: el.dataset.tab,
+                label: el.querySelector('span:not(.tab-count)')?.textContent || '',
+                active: el.classList.contains('active'),
+              })),
+              sectionTitles: Array.from(document.querySelectorAll('#detail .section .title')).map(el => el.textContent),
+              text: document.querySelector('#detail')?.innerText || '',
+            })"""
+        )
+
         remaining_tabs = page.evaluate(
             "() => Array.from(document.querySelectorAll('#detail .detail-tab')).map(el => el.dataset.tab)"
         )
@@ -1960,13 +1966,10 @@ def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Pa
         page.close()
 
     assert errors == []
-    assert default_state["tabs"] == [
-        {"mode": "default", "label": "Default", "active": True},
-        {"mode": "trace", "label": "Trace", "active": False},
+    assert trace_state["tabs"] == [
+        {"mode": "default", "label": "Default", "active": False},
+        {"mode": "trace", "label": "Trace", "active": True},
     ]
-    assert default_state["sectionTitles"] == ["Tools", "System Prompt", "Messages", "Response", "Full JSON"]
-    assert "Responses final OK." in default_state["text"]
-    assert "Diff with Prev" in default_state["text"]
     assert trace_state["sectionCount"] == 0
     assert trace_state["blockTitles"] == ["Input", "Output", "Metadata"]
     assert trace_state["copyButtons"] == ["Copy", "Copy", "Copy"]
@@ -1988,6 +1991,13 @@ def test_viewer_detail_tabs_keep_default_view_and_expose_trace_mode(tmp_path: Pa
     assert pretty_state["prettyCount"] == 3
     assert "messages" in pretty_state["text"]
     assert "req_responses_contract" in pretty_state["text"]
+    assert default_state["tabs"] == [
+        {"mode": "default", "label": "Default", "active": True},
+        {"mode": "trace", "label": "Trace", "active": False},
+    ]
+    assert default_state["sectionTitles"] == ["Tools", "System Prompt", "Messages", "Response", "Full JSON"]
+    assert "Responses final OK." in default_state["text"]
+    assert "Diff with Prev" in default_state["text"]
     assert remaining_tabs == ["default", "trace"]
 
 
