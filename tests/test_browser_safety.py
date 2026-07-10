@@ -12,3 +12,7 @@ def test_test_session_disables_external_browser() -> None:
         pytest.skip("the platform does not provide a true command")
 
     assert os.environ["BROWSER"] == noop_browser
+
+
+def test_test_session_uses_isolated_dashboard_port() -> None:
+    assert os.environ["CLOUDTAP_DASHBOARD_PORT"] != "19527"
