@@ -1718,6 +1718,25 @@ async def test_dashboard_server_serves_session_api_and_exports(trace_db, tmp_pat
             async with session.get(f"http://127.0.0.1:{port}/dashboard/cost?session=missing") as resp:
                 assert resp.status == 404
 
+            async with session.get(
+                f"http://127.0.0.1:{port}/dashboard/compaction?sessions={session_id},{second_session_id}"
+            ) as resp:
+                assert resp.status == 200
+                html = await resp.text()
+                assert "compaction-lab" in html
+                assert "compaction-content" in html
+
+            async with session.get(f"http://127.0.0.1:{port}/dashboard/compaction") as resp:
+                assert resp.status == 400
+
+            async with session.get(
+                f"http://127.0.0.1:{port}/dashboard/compaction?sessions={session_id},{session_id}"
+            ) as resp:
+                assert resp.status == 400
+
+            async with session.get(f"http://127.0.0.1:{port}/dashboard/compaction?sessions=missing") as resp:
+                assert resp.status == 404
+
             async with session.get(f"http://127.0.0.1:{port}/api/agents") as resp:
                 assert resp.status == 200
                 payload = await resp.json()
@@ -2468,6 +2487,174 @@ async def test_dashboard_cost_lab_renders_token_analysis(trace_db) -> None:
                 amortize = await page.locator(".cost-amortize").inner_text()
                 assert "1,000" in amortize
                 assert "280" in amortize
+            finally:
+                await browser.close()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_compaction_lab_marks_context_cliff(trace_db) -> None:
+    playwright = pytest.importorskip("playwright.async_api")
+    store = get_trace_store()
+
+    def _capture(turn, usage, messages=None, started=None, request_id=""):
+        record = _anthropic_record(turn=turn)
+        record["request_id"] = request_id or f"req_compaction_{turn}"
+        record["request"]["body"]["model"] = "claude-opus-4-8"
+        if messages is not None:
+            record["request"]["body"]["messages"] = messages
+        record["response"]["body"].update(
+            {
+                "model": "claude-opus-4-8",
+                "content": [{"type": "text", "text": f"Turn {turn}."}],
+                "usage": usage,
+            }
+        )
+        return record
+
+    growth_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    store.append_record(
+        growth_id,
+        _capture(
+            1,
+            {
+                "input_tokens": 2600,
+                "output_tokens": 200,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 30000,
+            },
+            request_id="req_compaction_g1",
+        ),
+    )
+    store.append_record(
+        growth_id,
+        _capture(
+            2,
+            {
+                "input_tokens": 2,
+                "output_tokens": 300,
+                "cache_read_input_tokens": 30000,
+                "cache_creation_input_tokens": 5000,
+            },
+            request_id="req_compaction_g2",
+        ),
+    )
+    store.finalize_session(growth_id, {"api_calls": 2})
+
+    compact_messages = [
+        {"role": "user", "content": "Explain this repository"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Long analysis."}]},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. Summarize the conversation above.",
+                }
+            ],
+        },
+    ]
+    compact_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 12, 20, 0, tzinfo=timezone.utc),
+    )
+    store.append_record(
+        compact_id,
+        _capture(
+            1,
+            {
+                "input_tokens": 4000,
+                "output_tokens": 9000,
+                "cache_read_input_tokens": 35000,
+                "cache_creation_input_tokens": 1000,
+            },
+            messages=compact_messages,
+            request_id="req_compaction_compact",
+        ),
+    )
+    # count_tokens probe: input-only usage must be ignored by the timeline
+    probe_record = _capture(2, {"input_tokens": 3451}, request_id="req_compaction_probe")
+    probe_record["response"]["body"] = {"input_tokens": 3451}
+    store.append_record(compact_id, probe_record)
+    store.finalize_session(compact_id, {"api_calls": 2})
+
+    resume_messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "This session is being continued from a previous conversation that ran out of "
+                        "context. The summary below covers the earlier portion of the conversation."
+                    ),
+                }
+            ],
+        },
+    ]
+    resume_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 12, 40, 0, tzinfo=timezone.utc),
+    )
+    store.append_record(
+        resume_id,
+        _capture(
+            1,
+            {
+                "input_tokens": 3000,
+                "output_tokens": 500,
+                "cache_read_input_tokens": 6000,
+                "cache_creation_input_tokens": 1000,
+            },
+            messages=resume_messages,
+            request_id="req_compaction_resume",
+        ),
+    )
+    store.finalize_session(resume_id, {"api_calls": 1})
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with playwright.async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(viewport={"width": 1440, "height": 1000})
+                await page.goto(f"http://127.0.0.1:{port}/dashboard", wait_until="domcontentloaded")
+                lab = page.locator("#compaction-lab")
+                await lab.wait_for(state="visible", timeout=5000)
+
+                await page.locator("#edit-sessions").click()
+                for session_id in (growth_id, compact_id, resume_id):
+                    await page.locator(f'[data-select-session="{session_id}"]').check()
+                assert not await page.locator("#compaction-lab-open").is_disabled()
+
+                await page.locator("#compaction-lab-open").click()
+                await page.wait_for_selector("#compaction-view:not(.hidden)", timeout=5000)
+                assert f"sessions={growth_id},{compact_id},{resume_id}" in page.url
+                await page.wait_for_selector("#compaction-content .cost-tile", timeout=5000)
+
+                tiles = await page.locator("#compaction-content .cost-tile").all_inner_texts()
+                tile_values = [tile.split("\n")[-1].strip() for tile in tiles]
+                assert "4" in tile_values  # calls
+                assert "40,000" in tile_values  # peak context (compact call prompt)
+                assert "9,000" in tile_values  # summary output
+                assert "10,000" in tile_values  # first context after compact
+                assert "-75.0%" in tile_values  # reduction
+
+                assert await page.locator("#compaction-content .compaction-marker").count() == 2
+                assert await page.locator("#compaction-content .cost-formula-row").count() == 3
+
+                await page.locator("[data-compaction-back]").click()
+                await page.wait_for_selector("#list-view:not(.hidden)", timeout=5000)
+                target = await page.locator("#compaction-lab-target").inner_text()
+                assert "📌" in target
             finally:
                 await browser.close()
     finally:
