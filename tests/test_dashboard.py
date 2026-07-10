@@ -803,7 +803,7 @@ def test_dashboard_detail_navigation_uses_lazy_shell_route() -> None:
     assert "detailRecordTotal: 0" in template
     assert 'detailFingerprint: ""' in template
     assert "detailSession: null" in template
-    assert 'activeTab: "raw"' in template
+    assert 'activeTab: "conversation"' in template
     assert "function detailRecordFetchLimit(sessionId, preserveLoaded)" in template
     assert "function sessionDetailFingerprint(session)" in template
     assert "function updateDetailSessionSummary(session)" in template
@@ -1812,19 +1812,16 @@ async def test_dashboard_session_route_serves_standalone_viewer(trace_db, tmp_pa
                     f"http://127.0.0.1:{port}/dashboard/session/{session_id}",
                     wait_until="domcontentloaded",
                 )
-                await page.wait_for_selector("#raw-tab .section", timeout=5000)
+                await page.wait_for_selector("#conversation-tab:not(.hidden) .viewer-frame", timeout=5000)
                 assert await page.locator(".header").count() == 1
-                assert await page.locator(".viewer-frame").count() == 0
+                assert await page.locator(".viewer-frame").count() == 1
                 assert await page.locator("#back-to-list").count() == 0
                 assert await page.locator("#list-view.hidden").count() == 1
                 assert await page.locator("#raw-tab .section").count() == 10
                 assert await page.locator("[data-load-more]").count() == 1
                 tab_toggle = page.locator("[data-tab-toggle]")
-                assert await tab_toggle.inner_text() == "Full viewer"
+                assert await tab_toggle.inner_text() == "Trace"
 
-                await tab_toggle.click()
-                await page.wait_for_selector("#conversation-tab:not(.hidden) .viewer-frame", timeout=5000)
-                assert await page.locator(".viewer-frame").count() == 1
                 frame = page.frame_locator(".viewer-frame")
                 await frame.locator(".sidebar-item").first.wait_for(timeout=5000)
                 trace_tab = frame.locator('#detail .detail-tab[data-tab="trace"].active')
@@ -2058,6 +2055,7 @@ async def test_dashboard_trace_records_use_stable_order_and_support_collapse(tra
                     f"http://127.0.0.1:{port}/dashboard/session/{session_id}",
                     wait_until="domcontentloaded",
                 )
+                await page.locator("[data-tab-toggle]").click()
                 cards = page.locator("#raw-tab [data-record-card]")
                 await page.wait_for_selector("#raw-tab [data-record-card]", timeout=5000)
                 assert await cards.count() == 4
