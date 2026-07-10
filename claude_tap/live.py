@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import json
+import os
 import re
 import secrets
 import tempfile
@@ -43,6 +44,22 @@ DEFAULT_SESSION_PAGE_LIMIT = 100
 MAX_SESSION_PAGE_LIMIT = 500
 
 _DASHBOARD_QUIT_TOKEN_HEADER = "X-Claude-Tap-Dashboard-Token"
+
+ANALYZE_LAB_INDEX = "index.html"
+
+
+def resolve_analyze_lab_dir() -> Path | None:
+    """Return the trace-analysis lab directory, or None when unavailable.
+
+    The lab (`.agents/lab/`) only exists when claude-tap runs from a source
+    checkout; installed packages have no lab and the /analyze routes stay off.
+    """
+    override = os.environ.get("CLOUDTAP_LAB_DIR", "").strip()
+    if override:
+        path = Path(override).expanduser()
+        return path if path.is_dir() else None
+    path = Path(__file__).resolve().parent.parent / ".agents" / "lab"
+    return path if path.is_dir() else None
 
 
 def _split_host_port(value: str) -> tuple[str, int | None]:
@@ -214,6 +231,11 @@ class LiveViewerServer:
         app.router.add_get("/dashboard/health", self._handle_dashboard_health)
         app.router.add_get("/dashboard/events", self._handle_dashboard_sse)
         app.router.add_post("/dashboard/quit", self._handle_dashboard_quit)
+        analyze_lab_dir = resolve_analyze_lab_dir()
+        if analyze_lab_dir is not None:
+            app.router.add_get("/analyze", self._handle_analyze_index)
+            app.router.add_get("/analyze/", self._handle_analyze_index)
+            app.router.add_static("/analyze", analyze_lab_dir, show_index=False)
         app.router.add_get("/events", self._handle_sse)
         app.router.add_get("/records", self._handle_records)
         app.router.add_get("/api/dates", self._handle_dates)
@@ -356,6 +378,9 @@ class LiveViewerServer:
         if any(store.load_session_row(session_id) is None for session_id in session_ids):
             return web.Response(status=404, text="Session not found")
         return await self._handle_dashboard_index(request)
+
+    async def _handle_analyze_index(self, request: web.Request) -> web.Response:
+        raise web.HTTPFound(f"/analyze/{ANALYZE_LAB_INDEX}")
 
     async def _handle_dashboard_health(self, request: web.Request) -> web.Response:
         payload = {

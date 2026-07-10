@@ -133,6 +133,12 @@ button { cursor: pointer; }
   transition: all .15s; font-size: 14px; line-height: 1;
 }
 .theme-toggle:hover { border-color: var(--blue); color: var(--blue); }
+.analyze-link {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 4px 10px; color: var(--text-secondary); transition: all .15s;
+  font-size: 12px; line-height: 1; text-decoration: none; flex-shrink: 0;
+}
+.analyze-link:hover { border-color: var(--blue); color: var(--blue); }
 .lang-select {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm);
   padding: 4px 8px; color: var(--text-secondary); transition: all .15s;
@@ -1396,6 +1402,7 @@ pre {
     <div class="stat-group"><span data-i18n="stats_records">Records</span> <span class="stat-val" id="stat-records">0</span></div>
     <div class="live-status"><span id="live-label">Watching</span></div>
   </div>
+  <a class="analyze-link" id="analyze-link" href="/analyze/" target="_blank" rel="noopener" title="Open the trace analysis lab" data-i18n="nav_analyze" data-i18n-title="nav_analyze_title" hidden>Analyze</a>
   <button class="theme-toggle" id="theme-toggle" title="Toggle dark mode" data-i18n-title="theme_toggle">&#9790;</button>
   <select class="lang-select" id="lang-select" title="Language" data-i18n-title="language">
     <option value="en">English</option>
@@ -1671,6 +1678,8 @@ const DASHBOARD_I18N = {
     dashboard_stopped: "Service stopped",
     theme_toggle: "Toggle dark mode",
     language: "Language",
+    nav_analyze: "Analyze",
+    nav_analyze_title: "Open the trace analysis lab",
     quit_dashboard: "Stop dashboard service",
     quit_dashboard_confirm: "Stop the claude-tap dashboard service?",
     quitting_dashboard: "Stopping",
@@ -1816,6 +1825,8 @@ const DASHBOARD_I18N = {
     dashboard_stopped: "服务已停止",
     theme_toggle: "切换深色模式",
     language: "语言",
+    nav_analyze: "分析",
+    nav_analyze_title: "打开抓包分析实验台",
     quit_dashboard: "停止面板服务",
     quit_dashboard_confirm: "停止 claude-tap dashboard 服务？",
     quitting_dashboard: "正在停止",
@@ -3480,6 +3491,15 @@ function closeDashboardEvents() {
   dashboardEvents = null;
 }
 
+async function initAnalyzeLink() {
+  try {
+    const response = await fetch("/analyze/index.html", {method: "HEAD"});
+    if (response.ok) $("#analyze-link").hidden = false;
+  } catch {
+    /* lab not served — keep the entry hidden */
+  }
+}
+
 function initTheme() {
   const saved = localStorage.getItem("claude-tap-theme");
   const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -3553,6 +3573,7 @@ $("#compare-swap")?.addEventListener("click", swapComparisonSides);
 	applyI18n();
 	applyVersionBadge();
 	initTheme();
+	initAnalyzeLink().catch(console.error);
 	updateClock();
 	setInterval(updateClock, 1000);
 	const hasDashboardEvents = connectEvents();

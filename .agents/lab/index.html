@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>抓包分析实验台 · claude-tap lab</title>
+<style>
+:root {
+  --bg: #faf9f5; --card: #ffffff; --text: #1f1e1c; --secondary: #6b6a66;
+  --border: #e4e2dc; --accent: #b4552d; --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #171614; --card: #201f1c; --text: #ece9e2; --secondary: #a4a19a; --border: #35332e; --accent: #d97d51; }
+}
+* { box-sizing: border-box; margin: 0; }
+body {
+  background: var(--bg); color: var(--text); padding: 40px 24px 64px;
+  font: 15px/1.65 -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+}
+.wrap { max-width: 860px; margin: 0 auto; }
+h1 { font-size: 24px; letter-spacing: -0.3px; }
+.sub { color: var(--secondary); margin: 6px 0 32px; font-size: 13px; }
+h2 {
+  font-size: 13px; color: var(--secondary); text-transform: uppercase; letter-spacing: 1.2px;
+  margin: 32px 0 12px; font-weight: 600;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+a.card {
+  display: block; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px 16px; text-decoration: none; color: var(--text); transition: border-color .15s, transform .15s;
+}
+a.card:hover { border-color: var(--accent); transform: translateY(-1px); }
+a.card .name { font-weight: 600; font-size: 14px; }
+a.card .desc { color: var(--secondary); font-size: 12.5px; margin-top: 4px; }
+.note { color: var(--secondary); font-size: 13px; margin-top: 8px; }
+code { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>抓包分析实验台</h1>
+  <p class="sub">claude-tap 捕获的 Codex CLI / Claude Code 真实 API 流量，以及基于这些抓包的分析与图解 · 数据与页面同目录（<code>.agents/lab/</code>）</p>
+
+  <h2>实验台 · Interactive Labs</h2>
+  <div class="grid">
+    <a class="card" href="trace_viewer.html"><span class="name">抓包实验台</span><div class="desc">按实验 × 变体浏览全部抓包 · Codex vs Claude Code</div></a>
+    <a class="card" href="tooluse-lab.html"><span class="name">Tool Use 实验台</span><div class="desc">一次提问的七次调用</div></a>
+    <a class="card" href="workflow-anatomy.html"><span class="name">Workflow 解剖报告</span><div class="desc">一次动态 workflow 运行的黑匣子判读</div></a>
+    <a class="card" href="workflow-patterns.html"><span class="name">Workflow 形态图谱</span><div class="desc">图解 · workflow 的常见编排形态</div></a>
+    <a class="card" href="explainers.html"><span class="name">图解 · 上下文/注意力/压缩</span><div class="desc">5 张原理图</div></a>
+    <a class="card" href="llm-explainer.html"><span class="name">大模型如何读懂你</span><div class="desc">可交互示意</div></a>
+  </div>
+
+  <h2>提示词演进 · Prompt History</h2>
+  <div class="grid">
+    <a class="card" href="agent-prompt-history.html"><span class="name">AI Agent 系统提示词演进史</span><div class="desc">跨 agent 对比（数据：scratch_data.json）</div></a>
+    <a class="card" href="codex-prompt-evolution.html"><span class="name">Codex 提示词演进史</span><div class="desc">标准版</div></a>
+    <a class="card" href="codex-prompt-evolution-cobalt.html"><span class="name">Codex 提示词演进史 · Cobalt</span><div class="desc">网格切屏版</div></a>
+    <a class="card" href="codex-prompt-timeline.html"><span class="name">Codex 提示词时间线</span><div class="desc">时间线版</div></a>
+  </div>
+
+  <h2>网页复刻实验 · Webpage Replication</h2>
+  <div class="grid">
+    <a class="card" href="compare.html"><span class="name">复刻对比判定</span><div class="desc">第一性原理页 · Codex vs Claude Code</div></a>
+    <a class="card" href="altai-page/index.html"><span class="name">原始参照页</span><div class="desc">altai-page（含驱动实验的 PROMPTS.md）</div></a>
+    <a class="card" href="cmp_claude/index.html"><span class="name">Claude Code 复刻成果</span><div class="desc">trace_webpage_claude.json 对应产物</div></a>
+    <a class="card" href="cmp_codex/index.html"><span class="name">Codex 复刻成果</span><div class="desc">trace_webpage_codex.json 对应产物</div></a>
+  </div>
+
+  <h2>数据与说明</h2>
+  <p class="note">18 个 <code>trace_*.json</code> 抓包与页面同目录存放，实验清单见 <a href="README.md" style="color: var(--accent)">README.md</a>；<code>mini-agent/</code> 是配套的百行手搓 agent 教学 demo（自打印每轮报文到 traces/）。</p>
+</div>
+</body>
+</html>
