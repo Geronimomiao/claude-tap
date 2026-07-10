@@ -34,7 +34,7 @@ CLIENT_LABELS = {
     "pi": "Pi",
     "qoder": "Qoder",
 }
-DASHBOARD_SUMMARY_VERSION = 3
+DASHBOARD_SUMMARY_VERSION = 4
 VALID_SESSION_STATUSES = {"active", "complete", "error", "empty"}
 _REDACTED_VALUE = "REDACTED"
 _SENSITIVE_KEY_NAMES = {
@@ -1036,13 +1036,40 @@ def _is_successful_primary_record(record: dict[str, Any]) -> bool:
 
 
 def _first_user_preview(records: list[dict[str, Any]]) -> str:
+    title_request_fallback = ""
     for record in records:
         request = record.get("request")
         body = request.get("body") if isinstance(request, dict) else None
         text = _request_user_text(body)
-        if text:
-            return _preview(text, 220)
-    return ""
+        if not text:
+            continue
+        if _is_claude_title_generation_request(body):
+            if not title_request_fallback:
+                title_request_fallback = text
+            continue
+        return _preview(text, 220)
+    return _preview(title_request_fallback, 220) if title_request_fallback else ""
+
+
+def _is_claude_title_generation_request(body: Any) -> bool:
+    if not isinstance(body, dict):
+        return False
+    system_text = _content_text(body.get("system"))
+    if "Generate a concise, sentence-case title (3-7 words)" not in system_text:
+        return False
+    output_config = body.get("output_config")
+    if not isinstance(output_config, dict):
+        return False
+    output_format = output_config.get("format")
+    if not isinstance(output_format, dict) or output_format.get("type") != "json_schema":
+        return False
+    schema = output_format.get("schema")
+    return (
+        isinstance(schema, dict)
+        and schema.get("type") == "object"
+        and schema.get("required") == ["title"]
+        and set(schema.get("properties") or {}) == {"title"}
+    )
 
 
 def _last_response_preview(records: list[dict[str, Any]]) -> str:

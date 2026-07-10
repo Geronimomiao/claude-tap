@@ -526,6 +526,78 @@ def test_dashboard_first_message_skips_codex_injected_plugin_context(trace_db, t
     assert summary["first_user"] == "hi"
 
 
+def test_dashboard_first_message_skips_claude_title_generation_request(trace_db, tmp_path: Path) -> None:
+    trace_path = tmp_path / "2026-07-10" / "trace_213223.jsonl"
+    title_schema = {
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"],
+        "additionalProperties": False,
+    }
+    _write_jsonl(
+        trace_path,
+        [
+            {
+                "timestamp": "2026-07-10T13:32:34+00:00",
+                "turn": 1,
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/messages?beta=true",
+                    "body": {
+                        "model": "claude-fable-5",
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "text",
+                                        "text": (
+                                            "<session>\nHi\n</session>\n\n"
+                                            "Write the title in the predominant language of the session."
+                                        ),
+                                    }
+                                ],
+                            }
+                        ],
+                        "system": [
+                            {
+                                "type": "text",
+                                "text": "Generate a concise, sentence-case title (3-7 words).",
+                            }
+                        ],
+                        "output_config": {"format": {"type": "json_schema", "schema": title_schema}},
+                    },
+                },
+                "response": {
+                    "status": 200,
+                    "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "Hi"}]},
+                },
+            },
+            {
+                "timestamp": "2026-07-10T13:32:37+00:00",
+                "turn": 2,
+                "request": {
+                    "method": "POST",
+                    "path": "/v1/messages?beta=true",
+                    "body": {
+                        "model": "claude-fable-5",
+                        "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+                    },
+                },
+                "response": {
+                    "status": 200,
+                    "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "Hi!"}]},
+                },
+            },
+        ],
+    )
+
+    _seed_legacy(tmp_path)
+    summary = list_trace_sessions()[0]
+
+    assert summary["first_user"] == "Hi"
+
+
 def test_dashboard_first_message_skips_injected_user_content_blocks(trace_db, tmp_path: Path) -> None:
     trace_path = tmp_path / "2026-05-20" / "trace_101500.jsonl"
     _write_jsonl(
