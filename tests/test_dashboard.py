@@ -611,6 +611,152 @@ def test_dashboard_first_message_skips_claude_title_generation_request(trace_db,
     assert summary["first_user"] == "Hi"
 
 
+def _web_fetch_digest_record(turn: int) -> dict:
+    return {
+        "timestamp": "2026-07-10T17:20:00+00:00",
+        "turn": turn,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages?beta=true",
+            "body": {
+                "model": "claude-fable-5",
+                "system": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "\nWeb page content:\n---\nNode.js — Download Node.js\n---\n\nSummarize the releases.",
+                            }
+                        ],
+                    }
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "Latest is v24."}]},
+        },
+    }
+
+
+def _agent_state_probe_record(turn: int) -> dict:
+    return {
+        "timestamp": "2026-07-10T17:21:00+00:00",
+        "turn": turn,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages?beta=true",
+            "body": {
+                "model": "claude-fable-5",
+                "max_tokens": 3072,
+                "system": (
+                    "A user kicked off a Claude Code agent to do a coding task and walked away. "
+                    "Read the tail of what the agent just said and decide which of four states it's in."
+                ),
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": (
+                            "Current state: working (for 0m)\n"
+                            "Tool calls so far: WebFetch×2, Bash\n"
+                            'User\'s most recent ask: "Check the latest Node.js version."'
+                        ),
+                    }
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "working"}]},
+        },
+    }
+
+
+def test_dashboard_first_message_skips_agent_side_requests(trace_db, tmp_path: Path) -> None:
+    trace_path = tmp_path / "2026-07-10" / "trace_172000.jsonl"
+    real_record = {
+        "timestamp": "2026-07-10T17:22:00+00:00",
+        "turn": 3,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages?beta=true",
+            "body": {
+                "model": "claude-fable-5",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [{"type": "text", "text": "Check the latest Node.js version."}],
+                    }
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "Checking."}]},
+        },
+    }
+    _write_jsonl(trace_path, [_web_fetch_digest_record(1), _agent_state_probe_record(2), real_record])
+
+    _seed_legacy(tmp_path)
+    summary = list_trace_sessions()[0]
+
+    assert summary["first_user"] == "Check the latest Node.js version."
+
+
+def test_dashboard_first_message_falls_back_to_title_session_content(trace_db, tmp_path: Path) -> None:
+    trace_path = tmp_path / "2026-07-10" / "trace_172100.jsonl"
+    title_schema = {
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"],
+        "additionalProperties": False,
+    }
+    title_record = {
+        "timestamp": "2026-07-10T17:18:02+00:00",
+        "turn": 1,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages?beta=true",
+            "body": {
+                "model": "claude-fable-5",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "<session>\nCheck the latest Node.js version.\n</session>\n\n"
+                                    "Write the title in the predominant language of the session."
+                                ),
+                            }
+                        ],
+                    }
+                ],
+                "system": [
+                    {
+                        "type": "text",
+                        "text": "Generate a concise, sentence-case title (3-7 words).",
+                    }
+                ],
+                "output_config": {"format": {"type": "json_schema", "schema": title_schema}},
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {"model": "claude-fable-5", "content": [{"type": "text", "text": "Node version check"}]},
+        },
+    }
+    _write_jsonl(trace_path, [title_record, _agent_state_probe_record(2)])
+
+    _seed_legacy(tmp_path)
+    summary = list_trace_sessions()[0]
+
+    assert summary["first_user"] == "Check the latest Node.js version."
+
+
 def test_dashboard_first_message_skips_injected_user_content_blocks(trace_db, tmp_path: Path) -> None:
     trace_path = tmp_path / "2026-05-20" / "trace_101500.jsonl"
     _write_jsonl(
