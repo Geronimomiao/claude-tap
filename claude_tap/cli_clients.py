@@ -690,13 +690,22 @@ def _codex_home() -> Path:
     return Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 
 
-def _read_codex_config() -> dict[str, object]:
-    config_path = _codex_home() / "config.toml"
+def _read_codex_config_file(config_path: Path) -> dict[str, object]:
     try:
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _read_codex_config() -> dict[str, object]:
+    return _read_codex_config_file(_codex_home() / "config.toml")
+
+
+def _read_codex_profile_config(profile: str | None) -> dict[str, object]:
+    if not profile:
+        return {}
+    return _read_codex_config_file(_codex_home() / f"{profile}.config.toml")
 
 
 def _selected_codex_provider_base_url(args: list[str] | None = None) -> tuple[str, str] | None:
@@ -711,6 +720,10 @@ def _selected_codex_provider_base_url(args: list[str] | None = None) -> tuple[st
         if isinstance(configured_profile, str) and configured_profile.strip():
             profile = configured_profile.strip()
 
+    profile_data = _read_codex_profile_config(profile)
+    if not isinstance(provider, str):
+        provider = profile_data.get("model_provider")
+
     profiles = data.get("profiles")
     if profile and isinstance(profiles, dict):
         profile_config = profiles.get(profile)
@@ -722,13 +735,17 @@ def _selected_codex_provider_base_url(args: list[str] | None = None) -> tuple[st
     if not isinstance(provider, str) or not provider.strip():
         return None
 
-    providers = data.get("model_providers")
-    if not isinstance(providers, dict):
-        return None
-    provider_config = providers.get(provider)
-    if not isinstance(provider_config, dict):
-        return None
-    base_url = provider_config.get("base_url")
+    base_url: object | None = None
+    for config in (profile_data, data):
+        providers = config.get("model_providers")
+        if not isinstance(providers, dict):
+            continue
+        provider_config = providers.get(provider)
+        if not isinstance(provider_config, dict):
+            continue
+        base_url = provider_config.get("base_url")
+        if isinstance(base_url, str) and base_url.strip():
+            break
     if not isinstance(base_url, str) or not base_url.strip():
         return None
     return provider.strip(), base_url.strip()
