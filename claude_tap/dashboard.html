@@ -1768,8 +1768,9 @@ const DASHBOARD_QUIT_TOKEN = "";
 const DASHBOARD_CAN_STOP = false;
 
 const PINNED_SESSIONS_KEY = "claude-tap-pinned-sessions";
+const PINNED_SESSIONS_ENDPOINT = "/api/dashboard/prefs/pinned-sessions";
 
-function loadPinnedSessionIds() {
+function legacyPinnedSessionIds() {
   try {
     const stored = JSON.parse(localStorage.getItem(PINNED_SESSIONS_KEY) || "[]");
     return Array.isArray(stored) ? stored.filter(id => typeof id === "string") : [];
@@ -1778,8 +1779,36 @@ function loadPinnedSessionIds() {
   }
 }
 
+async function fetchPinnedSessionIds() {
+  const payload = await fetchJSON(PINNED_SESSIONS_ENDPOINT);
+  const ids = payload?.session_ids;
+  return Array.isArray(ids) ? ids.filter(id => typeof id === "string") : [];
+}
+
 function savePinnedSessionIds(ids) {
-  localStorage.setItem(PINNED_SESSIONS_KEY, JSON.stringify(ids));
+  fetchJSON(PINNED_SESSIONS_ENDPOINT, {
+    method: "PUT",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({session_ids: ids}),
+  }).catch(console.error);
+}
+
+async function initPinnedSessions() {
+  let ids;
+  try {
+    ids = await fetchPinnedSessionIds();
+  } catch (error) {
+    console.error("Unable to load pinned sessions:", error);
+    return;
+  }
+  const legacy = legacyPinnedSessionIds();
+  if (!ids.length && legacy.length) {
+    ids = legacy;
+    savePinnedSessionIds(ids);
+  }
+  if (legacy.length) localStorage.removeItem(PINNED_SESSIONS_KEY);
+  state.pinnedSessionIds = ids;
+  renderSessions();
 }
 
 function partitionSessions(sessions, pinnedIds) {
@@ -1801,7 +1830,7 @@ function movePinnedSessionId(ids, sessionId, targetIndex) {
 
 const state = {
   sessions: [],
-  pinnedSessionIds: loadPinnedSessionIds(),
+  pinnedSessionIds: [],
   agents: [],
   selectedAgent: "cli",
   selectedSessionId: null,
@@ -4269,6 +4298,7 @@ $("#compare-swap")?.addEventListener("click", swapComparisonSides);
 	initTheme();
 	initAnalyzeLink().catch(console.error);
 	initSessionDragAndDrop();
+	initPinnedSessions().catch(console.error);
 	updateClock();
 	setInterval(updateClock, 1000);
 	const hasDashboardEvents = connectEvents();

@@ -24,7 +24,7 @@ def test_pinned_session_helpers_partition_and_reorder() -> None:
     dashboard_html = (REPO_ROOT / "claude_tap" / "dashboard.html").read_text(encoding="utf-8")
     functions = "\n".join(
         _extract_function(dashboard_html, name)
-        for name in ("loadPinnedSessionIds", "partitionSessions", "movePinnedSessionId")
+        for name in ("legacyPinnedSessionIds", "partitionSessions", "movePinnedSessionId")
     )
 
     script = (
@@ -55,13 +55,13 @@ def test_pinned_session_helpers_partition_and_reorder() -> None:
         assert.deepEqual(movePinnedSessionId(['a', 'b'], 'x', 99), ['a', 'b', 'x']);
         assert.deepEqual(movePinnedSessionId([], 'x', -5), ['x']);
 
-        // loadPinnedSessionIds tolerates garbage storage.
+        // legacyPinnedSessionIds tolerates garbage storage.
         global.localStorage = {getItem: () => '{"not":"an array"}'};
-        assert.deepEqual(loadPinnedSessionIds(), []);
+        assert.deepEqual(legacyPinnedSessionIds(), []);
         global.localStorage = {getItem: () => 'not json'};
-        assert.deepEqual(loadPinnedSessionIds(), []);
+        assert.deepEqual(legacyPinnedSessionIds(), []);
         global.localStorage = {getItem: () => '["a", 42, "b"]'};
-        assert.deepEqual(loadPinnedSessionIds(), ['a', 'b']);
+        assert.deepEqual(legacyPinnedSessionIds(), ['a', 'b']);
 
         console.log('ok');
         """
@@ -85,3 +85,43 @@ def test_pinned_table_omits_time_column() -> None:
     assert "table_start_time" not in pinned_panel
     inbox_table = dashboard_html.split('id="pinned-panel"')[1].split("</table>")[1]
     assert "table_start_time" in inbox_table
+
+
+def test_dashboard_pref_roundtrip(trace_db) -> None:
+    from claude_tap.trace_store import get_trace_store
+
+    store = get_trace_store()
+    assert store.get_dashboard_pref("pinned_sessions") is None
+    store.set_dashboard_pref("pinned_sessions", '["a", "b"]')
+    assert store.get_dashboard_pref("pinned_sessions") == '["a", "b"]'
+    store.set_dashboard_pref("pinned_sessions", '["b"]')
+    assert store.get_dashboard_pref("pinned_sessions") == '["b"]'
+
+
+@pytest.mark.asyncio
+async def test_pinned_sessions_api_roundtrip(trace_db) -> None:
+    import aiohttp
+
+    from claude_tap.live import LiveViewerServer
+
+    server = LiveViewerServer(port=0)
+    port = await server.start()
+    url = f"http://127.0.0.1:{port}/api/dashboard/prefs/pinned-sessions"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                assert resp.status == 200
+                assert (await resp.json()) == {"session_ids": []}
+            async with session.put(url, json={"session_ids": ["s2", "s1", "s2"]}) as resp:
+                assert resp.status == 200
+                assert (await resp.json()) == {"session_ids": ["s2", "s1"]}
+            async with session.get(url) as resp:
+                assert (await resp.json()) == {"session_ids": ["s2", "s1"]}
+            async with session.put(url, json={"session_ids": "nope"}) as resp:
+                assert resp.status == 400
+            async with session.put(url, data="not json") as resp:
+                assert resp.status == 400
+            async with session.get(url) as resp:
+                assert (await resp.json()) == {"session_ids": ["s2", "s1"]}
+    finally:
+        await server.stop()
