@@ -642,6 +642,20 @@ def collect_viewer_js_coverage() -> tuple[float, set[str], int, int]:
                   visualNavigate(-1);
                   vsRenderVisible();
                   if (entries.length > 1) compareSidebarModelOrder(entries[0], entries[1]);
+                  const heavyIdx = filtered.findIndex(e => getMessages(e.request?.body || {}).length > DETAIL_DEFER_MSG_THRESHOLD);
+                  if (heavyIdx >= 0) {
+                    detailViewMode = 'default';
+                    selectEntry(heavyIdx);
+                    document.querySelectorAll('#detail .copy-btn[data-copy-deferred]').forEach(btn => {
+                      deferredSectionCopyText(btn.dataset.copyDeferred);
+                    });
+                    const deferredBody = document.querySelector('#detail .section-body[data-deferred-section]');
+                    if (deferredBody) materializeDeferredSection(deferredBody);
+                    const deferredMsg = document.querySelector('#detail [data-deferred-msg]');
+                    if (deferredMsg) handleDeferredMessageIntersections([{ isIntersecting: true, target: deferredMsg }]);
+                    materializeAllDeferredDetail(document.querySelector('#detail'));
+                    selectEntry(0);
+                  }
                 }"""
             )
             page.evaluate(
@@ -686,6 +700,10 @@ def collect_viewer_js_coverage() -> tuple[float, set[str], int, int]:
                       getUsage(entry);
                       getResponseEvents(entry);
                       getResponseOutput(entry);
+                      document.querySelectorAll('#detail .copy-btn[data-copy-deferred]').forEach(btn => {
+                        deferredSectionCopyText(btn.dataset.copyDeferred);
+                      });
+                      materializeAllDeferredDetail(document.querySelector('#detail'));
                       const jsonSection = Array.from(document.querySelectorAll('#detail .section'))
                         .find(el => el.querySelector('.title')?.textContent === t('section_json'));
                       const jsonToggle = jsonSection?.querySelector('.jt-toggle');
