@@ -85,11 +85,11 @@ These rules apply to every local dashboard restart, UI check, trace validation, 
 The dashboard's bottom lab strip hosts experiment cards (diff lab, token
 cost lab, and future experiments). Every lab card must follow these rules:
 
-1. **Static targets.** An experiment analyzes one pinned capture (or pinned
-   pair). Cards must never silently retarget to newly streamed sessions:
-   opening an experiment pins its target, and only an explicit user action
-   (selecting sessions, pin/unpin) changes it. A "latest session" fallback is
-   allowed only while nothing is pinned or selected.
+1. **Explicit or latest target.** An experiment analyzes an explicitly
+   selected capture (or pair) when the user has a selection; otherwise it
+   falls back to the latest comparable capture. The opened analysis page is
+   static because its target session id is baked into the URL, so it does not
+   retarget even as newer sessions stream in.
 2. **Real data only.** Charts and metrics derive from the pinned capture's
    stored usage records; no synthetic or cross-session aggregate numbers
    inside an experiment view.

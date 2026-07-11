@@ -1146,24 +1146,6 @@ pre {
 .lab-card-open:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 5px 14px rgba(59, 130, 246, .22); }
 .lab-card-open:disabled { cursor: not-allowed; opacity: .42; }
 .lab-card-actions { display: inline-flex; align-items: center; gap: 8px; }
-.lab-card-secondary {
-  min-height: 30px;
-  padding: 5px 9px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 650;
-  transition: color .12s, border-color .12s, background .12s;
-}
-.lab-card-secondary:hover { color: var(--blue); border-color: var(--blue); }
-.lab-card-secondary.active {
-  color: var(--blue);
-  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
-  background: var(--blue-bg);
-}
-
 .compare-view {
   width: 100%;
   max-width: 1680px;
@@ -1727,7 +1709,6 @@ pre {
               <span class="diff-legend-item added"><span class="diff-legend-sign">+</span><span data-i18n="compare_added">Added in compared</span></span>
             </div>
             <div class="lab-card-actions">
-              <button id="compare-lab-pin" class="lab-card-secondary" type="button" hidden></button>
               <button id="compare-lab-open" class="lab-card-open" type="button" data-i18n="compare_lab_open" disabled>Open Diff</button>
             </div>
           </section>
@@ -1767,7 +1748,6 @@ pre {
               <div id="cost-lab-target" class="lab-card-pair"></div>
             </div>
             <div class="lab-card-actions">
-              <button id="cost-lab-pin" class="lab-card-secondary" type="button" hidden></button>
               <button id="cost-lab-open" class="lab-card-open" type="button" data-i18n="cost_lab_open" disabled>Open Analysis</button>
             </div>
           </section>
@@ -1781,7 +1761,6 @@ pre {
               <div id="compaction-lab-target" class="lab-card-pair"></div>
             </div>
             <div class="lab-card-actions">
-              <button id="compaction-lab-pin" class="lab-card-secondary" type="button" hidden></button>
               <button id="compaction-lab-open" class="lab-card-open" type="button" data-i18n="compaction_lab_open" disabled>Open Timeline</button>
             </div>
           </section>
@@ -2121,8 +2100,6 @@ const DASHBOARD_I18N = {
 	    compare_lab_title: "Diff lab",
 	    compare_lab_hint: "same agent, different models: send “Hi” and diff their system prompts",
 	    compare_lab_open: "Open Diff",
-	    compare_lab_pin: "Pin this pair",
-	    compare_lab_unpin: "Unpin pair",
 	    compare_lab_empty: "At least two sessions are required",
 	    hi_model_lab_title: "Cross-agent model experiment",
 	    hi_model_lab_hint: "same “Hi”, Claude Code/F5 vs Codex CLI/5.6 SOL",
@@ -2137,8 +2114,6 @@ const DASHBOARD_I18N = {
 	    cost_lab_title: "Token lab",
 	    cost_lab_hint: "pick a capture, then break down where its tokens went",
 	    cost_lab_open: "Open Analysis",
-	    cost_lab_pin: "Pin this capture",
-	    cost_lab_unpin: "Unpin capture",
 	    cost_lab_empty: "A session with records is required",
 	    cost_title: "Token cost analysis",
 	    cost_loading: "Loading cost analysis...",
@@ -2170,8 +2145,6 @@ const DASHBOARD_I18N = {
 	    compaction_lab_title: "Compaction lab",
 	    compaction_lab_hint: "pick 1–8 captures, watch the context cliff of /compact",
 	    compaction_lab_open: "Open Timeline",
-	    compaction_lab_pin: "Pin these captures",
-	    compaction_lab_unpin: "Unpin captures",
 	    compaction_lab_empty: "Select one to eight sessions with records",
 	    chain_badge_title: "Continued conversation · part {index} of {count} · click to open the merged timeline",
 	    compaction_title: "Context compaction timeline",
@@ -2359,8 +2332,6 @@ const DASHBOARD_I18N = {
 	    compare_lab_title: "Diff 实验台",
 	    compare_lab_hint: "同一 Agent、不同模型：用 “Hi” 对比 system prompt",
 	    compare_lab_open: "打开 Diff",
-	    compare_lab_pin: "固定此对",
-	    compare_lab_unpin: "取消固定",
 	    compare_lab_empty: "至少需要两个会话",
 	    hi_model_lab_title: "跨 Agent 模型实验",
 	    hi_model_lab_hint: "同一句 “Hi”：Claude Code/F5 与 Codex CLI/5.6 SOL",
@@ -2373,8 +2344,6 @@ const DASHBOARD_I18N = {
 	    cost_lab_title: "Token 实验台",
 	    cost_lab_hint: "选中一条抓包，拆解它的 token 都花在哪了",
 	    cost_lab_open: "打开分析",
-	    cost_lab_pin: "钉住这条抓包",
-	    cost_lab_unpin: "取消钉住",
 	    cost_lab_empty: "需要一条有记录的会话",
 	    cost_title: "Token 成本分析",
 	    cost_loading: "正在加载成本分析...",
@@ -2406,8 +2375,6 @@ const DASHBOARD_I18N = {
 	    compaction_lab_title: "压缩实验台",
 	    compaction_lab_hint: "选 1–8 条抓包，看 /compact 的上下文断崖",
 	    compaction_lab_open: "打开时间线",
-	    compaction_lab_pin: "钉住这组抓包",
-	    compaction_lab_unpin: "取消钉住",
 	    compaction_lab_empty: "需要选择一到八条有记录的会话",
 	    chain_badge_title: "续接会话 · 第 {index}/{count} 段 · 点击打开合并时间线",
 	    compaction_title: "上下文压缩时间线",
@@ -3020,7 +2987,6 @@ function renderAgents() {
 	function openMergedTimeline(sessionIds) {
 	  const ids = sessionIds.slice(0, MAX_COMPACTION_SESSIONS);
 	  if (!ids.length) return;
-	  setPinnedCompactionIds(ids);
 	  window.location.assign(sessionCompactionUrl(ids));
 	}
 
@@ -3284,22 +3250,6 @@ function renderOverview() {
 	  return partner ? [latest, partner] : candidates.slice(0, 2);
 	}
 
-	const COMPARE_PIN_KEY = "claude-tap-compare-pin";
-
-	function pinnedCompareIds() {
-	  try {
-	    const ids = JSON.parse(localStorage.getItem(COMPARE_PIN_KEY) || "null");
-	    return Array.isArray(ids) && ids.length === 2 ? ids : null;
-	  } catch (err) {
-	    return null;
-	  }
-	}
-
-	function setPinnedCompareIds(ids) {
-	  if (ids) localStorage.setItem(COMPARE_PIN_KEY, JSON.stringify(ids));
-	  else localStorage.removeItem(COMPARE_PIN_KEY);
-	}
-
 	// The diff lab is purpose-built for "Hi" probe sessions: minimal one-shot
 	// captures whose only user input is "Hi", used to diff system prompts.
 	function isHiProbeSession(session) {
@@ -3311,60 +3261,32 @@ function renderOverview() {
 	  const selected = Array.from(state.selectedSessionIds)
 	    .map(id => byId.get(id))
 	    .filter(canCompareSession);
-	  const pinned = (pinnedCompareIds() || []).map(id => byId.get(id)).filter(canCompareSession);
 	  let pair;
-	  let source;
 	  if (state.selectedSessionIds.size > 0) {
 	    pair = selected;
-	    source = "selected";
-	  } else if (pinned.length === 2) {
-	    pair = pinned;
-	    source = "pinned";
 	  } else {
 	    const candidates = sessions.filter(canCompareSession);
 	    const probes = candidates.filter(isHiProbeSession);
 	    pair = defaultCompareLabPair(probes.length >= 2 ? probes : candidates);
-	    source = "default";
 	  }
-	  if (pair.length !== 2) return {pair, source};
+	  if (pair.length !== 2) return pair;
 	  const startTime = session => new Date(session.started_at || session.updated_at || 0).getTime() || 0;
-	  return {pair: [...pair].sort((a, b) => startTime(a) - startTime(b)), source};
+	  return [...pair].sort((a, b) => startTime(a) - startTime(b));
 	}
 
 	function renderCompareLab(sessions) {
-	  const {pair, source} = compareLabSessions(sessions);
+	  const pair = compareLabSessions(sessions);
 	  const pairLabel = $("#compare-lab-pair");
 	  const button = $("#compare-lab-open");
-	  const pinButton = $("#compare-lab-pin");
 	  if (!pairLabel || !button) return;
 	  const ready = pair.length === 2;
-	  const pinMark = source === "pinned" ? "📌 " : "";
 	  pairLabel.textContent = ready
-	    ? `${pinMark}${pair[0].model || pair[0].agent || t("unknown")} ↔ ${pair[1].model || pair[1].agent || t("unknown")}`
+	    ? `${pair[0].model || pair[0].agent || t("unknown")} ↔ ${pair[1].model || pair[1].agent || t("unknown")}`
 	    : t("compare_lab_empty");
 	  button.disabled = !ready;
 	  button.dataset.left = ready ? pair[0].id : "";
 	  button.dataset.right = ready ? pair[1].id : "";
 	  button.title = ready ? t("compare_lab_open") : t("compare_lab_empty");
-	  if (pinButton) {
-	    const hasPin = Boolean(pinnedCompareIds());
-	    pinButton.hidden = !hasPin && !(source === "selected" && ready);
-	    pinButton.textContent = t(hasPin ? "compare_lab_unpin" : "compare_lab_pin");
-	    pinButton.title = pinButton.textContent;
-	    pinButton.classList.toggle("active", hasPin);
-	  }
-	}
-
-	function toggleCompareLabPin() {
-	  if (pinnedCompareIds()) {
-	    setPinnedCompareIds(null);
-	  } else {
-	    const button = $("#compare-lab-open");
-	    const ids = [button?.dataset.left, button?.dataset.right].filter(Boolean);
-	    if (ids.length !== 2) return;
-	    setPinnedCompareIds(ids);
-	  }
-	  renderSessions();
 	}
 
 	function pruneSelectedSessions() {
@@ -3648,76 +3570,35 @@ const COST_SERIES = [
 ];
 const COST_WEIGHTS = {input: 1, cacheRead: 0.1, cacheWrite: 1.25};
 
-// Lab experiments target a static capture: an explicit selection or the
-// pinned capture wins, and opening an analysis pins its target so newly
-// streamed sessions never steal the card (see AGENTS.md, Dashboard Lab
-// Experiments).
-const COST_PIN_KEY = "claude-tap-cost-pin";
-
-function pinnedCostId() {
-  try {
-    const id = JSON.parse(localStorage.getItem(COST_PIN_KEY) || "null");
-    return typeof id === "string" && id ? id : null;
-  } catch (err) {
-    return null;
-  }
-}
-
-function setPinnedCostId(id) {
-  if (id) localStorage.setItem(COST_PIN_KEY, JSON.stringify(id));
-  else localStorage.removeItem(COST_PIN_KEY);
-}
-
+// Lab experiments target a static capture: an explicit selection wins,
+// otherwise the latest comparable capture is the fallback.
 function costLabSession(sessions) {
   const byId = new Map(state.sessions.map(session => [session.id, session]));
   const selected = Array.from(state.selectedSessionIds)
     .map(id => byId.get(id))
     .filter(canCompareSession);
-  if (selected.length) return {session: selected[0], source: "selected"};
-  const pinned = byId.get(pinnedCostId());
-  if (canCompareSession(pinned)) return {session: pinned, source: "pinned"};
-  return {session: sessions.filter(canCompareSession)[0] || null, source: "default"};
+  if (selected.length) return selected[0];
+  return sessions.filter(canCompareSession)[0] || null;
 }
 
 function renderCostLab(sessions) {
   const target = $("#cost-lab-target");
   const button = $("#cost-lab-open");
-  const pinButton = $("#cost-lab-pin");
   if (!target || !button) return;
-  const {session, source} = costLabSession(sessions);
+  const session = costLabSession(sessions);
   const ready = Boolean(session);
-  const pinMark = source === "pinned" ? "📌 " : "";
   target.textContent = ready
-    ? `${pinMark}${session.model || session.agent || t("unknown")} · ${fmtTableTime(session.started_at || session.updated_at)}`
+    ? `${session.model || session.agent || t("unknown")} · ${fmtTableTime(session.started_at || session.updated_at)}`
     : t("cost_lab_empty");
   button.disabled = !ready;
   button.dataset.session = ready ? session.id : "";
   button.title = ready ? t("cost_lab_open") : t("cost_lab_empty");
-  if (pinButton) {
-    const hasPin = Boolean(pinnedCostId());
-    pinButton.hidden = !hasPin && !(source === "selected" && ready);
-    pinButton.textContent = t(hasPin ? "cost_lab_unpin" : "cost_lab_pin");
-    pinButton.title = pinButton.textContent;
-    pinButton.classList.toggle("active", hasPin);
-  }
-}
-
-function toggleCostLabPin() {
-  if (pinnedCostId()) {
-    setPinnedCostId(null);
-  } else {
-    const sessionId = $("#cost-lab-open")?.dataset.session;
-    if (!sessionId) return;
-    setPinnedCostId(sessionId);
-  }
-  renderSessions();
 }
 
 function openCostLab() {
   const button = $("#cost-lab-open");
   const sessionId = button?.dataset.session;
   if (!sessionId) return;
-  setPinnedCostId(sessionId);
   window.location.assign(sessionCostUrl(sessionId));
 }
 
@@ -4010,33 +3891,16 @@ async function loadCostAnalysis(sessionId) {
 // Compaction lab: stitch 1-3 captures into one context timeline and mark
 // where /compact rewrote the history. Detection relies on harness-injected
 // marker strings observed in real traces.
-const COMPACTION_PIN_KEY = "claude-tap-compaction-pin";
 const COMPACT_INSTRUCTION_MARKER = "Respond with TEXT ONLY";
 const COMPACT_RESUME_MARKER = "This session is being continued from a previous conversation";
-
-function pinnedCompactionIds() {
-  try {
-    const ids = JSON.parse(localStorage.getItem(COMPACTION_PIN_KEY) || "null");
-    return Array.isArray(ids) && ids.length >= 1 && ids.length <= MAX_COMPACTION_SESSIONS ? ids : null;
-  } catch (err) {
-    return null;
-  }
-}
-
-function setPinnedCompactionIds(ids) {
-  if (ids && ids.length) localStorage.setItem(COMPACTION_PIN_KEY, JSON.stringify(ids));
-  else localStorage.removeItem(COMPACTION_PIN_KEY);
-}
 
 function compactionLabSessions(sessions) {
   const byId = new Map(state.sessions.map(session => [session.id, session]));
   const selected = Array.from(state.selectedSessionIds)
     .map(id => byId.get(id))
     .filter(canCompareSession);
-  if (selected.length >= 1 && selected.length <= MAX_COMPACTION_SESSIONS) return {targets: selected, source: "selected"};
-  const pinned = (pinnedCompactionIds() || []).map(id => byId.get(id)).filter(canCompareSession);
-  if (pinned.length) return {targets: pinned, source: "pinned"};
-  return {targets: sessions.filter(canCompareSession).slice(0, 1), source: "default"};
+  if (selected.length >= 1 && selected.length <= MAX_COMPACTION_SESSIONS) return selected;
+  return sessions.filter(canCompareSession).slice(0, 1);
 }
 
 function sortSessionsByStart(sessions) {
@@ -4047,37 +3911,15 @@ function sortSessionsByStart(sessions) {
 function renderCompactionLab(sessions) {
   const target = $("#compaction-lab-target");
   const button = $("#compaction-lab-open");
-  const pinButton = $("#compaction-lab-pin");
   if (!target || !button) return;
-  const {targets, source} = compactionLabSessions(sessions);
-  const ordered = sortSessionsByStart(targets);
+  const ordered = sortSessionsByStart(compactionLabSessions(sessions));
   const ready = ordered.length >= 1 && ordered.length <= MAX_COMPACTION_SESSIONS;
-  const pinMark = source === "pinned" ? "📌 " : "";
   target.textContent = ready
-    ? `${pinMark}${ordered.map(session => session.model || session.agent || t("unknown")).join(" → ")}`
+    ? `${ordered.map(session => session.model || session.agent || t("unknown")).join(" → ")}`
     : t("compaction_lab_empty");
   button.disabled = !ready;
   button.dataset.sessions = ready ? ordered.map(session => session.id).join(",") : "";
   button.title = ready ? t("compaction_lab_open") : t("compaction_lab_empty");
-  if (pinButton) {
-    const hasPin = Boolean(pinnedCompactionIds());
-    pinButton.hidden = !hasPin && !(source === "selected" && ready);
-    pinButton.textContent = t(hasPin ? "compaction_lab_unpin" : "compaction_lab_pin");
-    pinButton.title = pinButton.textContent;
-    pinButton.classList.toggle("active", hasPin);
-  }
-}
-
-function toggleCompactionLabPin() {
-  if (pinnedCompactionIds()) {
-    setPinnedCompactionIds(null);
-  } else {
-    const raw = $("#compaction-lab-open")?.dataset.sessions || "";
-    const ids = raw.split(",").filter(Boolean);
-    if (!ids.length) return;
-    setPinnedCompactionIds(ids);
-  }
-  renderSessions();
 }
 
 function openCompactionLab() {
@@ -4088,7 +3930,6 @@ function openCompactionLab() {
   const raw = $("#compaction-lab-open")?.dataset.sessions || "";
   const ids = raw.split(",").filter(Boolean);
   if (!ids.length) return;
-  setPinnedCompactionIds(ids);
   window.location.assign(sessionCompactionUrl(ids));
 }
 
@@ -5233,10 +5074,7 @@ $("#status-filter").addEventListener("change", event => {
 	$("#hi-model-lab-open").addEventListener("click", openHiModelLab);
 	$("#node-model-lab-open").addEventListener("click", openNodeModelLab);
 	$("#cost-lab-open").addEventListener("click", openCostLab);
-	$("#cost-lab-pin").addEventListener("click", toggleCostLabPin);
 	$("#compaction-lab-open").addEventListener("click", openCompactionLab);
-	$("#compaction-lab-pin").addEventListener("click", toggleCompactionLabPin);
-	$("#compare-lab-pin").addEventListener("click", toggleCompareLabPin);
 	$("#delete-selected-sessions").addEventListener("click", () => {
 	  showDeleteSessionDialog(selectedDeletableSessions().map(session => session.id));
 	});
