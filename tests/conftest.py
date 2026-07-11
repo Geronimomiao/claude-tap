@@ -2,8 +2,10 @@
 
 import os
 import shutil
+import signal
 import socket
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -28,6 +30,61 @@ def _isolated_dashboard_port() -> str:
 
 # Never let a test subprocess replace the user's main dashboard on port 19527.
 os.environ["CLOUDTAP_DASHBOARD_PORT"] = _isolated_dashboard_port()
+
+
+def dashboard_listener_pids(port: int) -> list[int]:
+    """Return pids of claude-tap dashboard processes listening on ``port``."""
+    from claude_tap.shared_dashboard import (
+        _dashboard_listening_pids_for_port,
+        _dashboard_process_command,
+        _looks_like_legacy_dashboard_command,
+    )
+
+    return [
+        pid
+        for pid in _dashboard_listening_pids_for_port(port)
+        if pid != os.getpid() and _looks_like_legacy_dashboard_command(_dashboard_process_command(pid), port)
+    ]
+
+
+def terminate_dashboard_listeners(port: int, *, timeout_seconds: float = 10.0) -> list[int]:
+    """Terminate claude-tap dashboards listening on ``port``; return surviving pids.
+
+    E2E tests run the real CLI, which spawns the shared dashboard as a detached
+    process (``start_new_session=True``), so no test owns a handle to it and it
+    survives pytest exit. The only reliable teardown is to locate the listener
+    on the isolated test port, verify its command line is a claude-tap
+    dashboard, and signal it, escalating to SIGKILL when SIGTERM is ignored.
+    """
+    pids = dashboard_listener_pids(port)
+    if not pids:
+        return []
+    sigkill = getattr(signal, "SIGKILL", signal.SIGTERM)
+    for sig in (signal.SIGTERM, sigkill):
+        for pid in pids:
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                continue
+        deadline = time.monotonic() + timeout_seconds / 2
+        while time.monotonic() < deadline:
+            pids = dashboard_listener_pids(port)
+            if not pids:
+                return []
+            time.sleep(0.1)
+    return pids
+
+
+@pytest.fixture(scope="session", autouse=True)
+def no_leaked_test_dashboard():
+    """Stop the detached test dashboard after the suite; fail if one survives."""
+    port = int(os.environ["CLOUDTAP_DASHBOARD_PORT"])
+    yield
+    leftover = terminate_dashboard_listeners(port)
+    if leftover:
+        raise RuntimeError(
+            f"claude-tap dashboard still listening on test port {port} after suite teardown (pids: {leftover})"
+        )
 
 
 def trace_db_path(trace_dir: str | Path) -> Path:
