@@ -11,6 +11,55 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+MODEL_EXPERIMENT = [
+    {"model": "claude-fable-5", "agent_key": "claude-code"},
+    {"model": "gpt-5.6-sol", "agent_key": "codex"},
+]
+NODE_VERSION_PROMPT = (
+    "查一下 Node.js 当前最新的版本是多少？包括最新的 Current 版本和最新的 LTS 版本，并注明你的信息来源。"
+)
+
+
+def _fixed_model_experiment_sessions(sessions: list[dict], prompt: str) -> list[dict]:
+    candidates = [
+        session
+        for session in sessions
+        if session.get("record_count", 0) > 0 and str(session.get("first_user", "")).strip() == prompt
+    ]
+    pair = []
+    for target in MODEL_EXPERIMENT:
+        matches = [
+            session
+            for session in candidates
+            if str(session.get("model", "")).lower() == target["model"]
+            and str(session.get("agent_key", "")).lower() == target["agent_key"]
+        ]
+        if matches:
+            pair.append(max(matches, key=lambda session: session.get("started_at", "")))
+    return pair
+
+
+def _hi_model_lab_sessions(sessions: list[dict]) -> list[dict]:
+    normalized = [{**session, "first_user": str(session.get("first_user", "")).strip().lower()} for session in sessions]
+    return _fixed_model_experiment_sessions(normalized, "hi")
+
+
+def _node_model_lab_sessions(sessions: list[dict]) -> list[dict]:
+    return _fixed_model_experiment_sessions(sessions, NODE_VERSION_PROMPT)
+
+
+def _default_compare_lab_pair(sessions: list[dict]) -> list[dict]:
+    groups: dict[str, list[dict]] = {}
+    for session in sessions:
+        groups.setdefault(session.get("agent_key", "unknown"), []).append(session)
+    for group in groups.values():
+        latest = group[0]
+        partner = next((item for item in group[1:] if item.get("model") != latest.get("model")), None)
+        if partner:
+            return [latest, partner]
+    latest = sessions[0]
+    partner = next((item for item in sessions[1:] if item.get("model") != latest.get("model")), None)
+    return [latest, partner] if partner else sessions[:2]
 
 
 def _line_diff_rows(left_text: str, right_text: str) -> list[tuple[str, str, str]]:
@@ -85,6 +134,92 @@ def test_line_diff_rows_handles_content_present_on_only_one_side() -> None:
     assert _line_diff_rows("", "tool: Research") == [
         ("", "tool: Research", "added"),
     ]
+
+
+def test_hi_model_lab_pairs_latest_fable_with_codex_cli_sol_probe() -> None:
+    sessions = [
+        {
+            "id": "fable-old",
+            "model": "claude-fable-5",
+            "agent_key": "claude-code",
+            "first_user": "Hi",
+            "record_count": 1,
+            "started_at": "2026-07-10T10:00:00Z",
+        },
+        {
+            "id": "fable-new",
+            "model": "claude-fable-5",
+            "agent_key": "claude-code",
+            "first_user": "hi",
+            "record_count": 1,
+            "started_at": "2026-07-10T11:00:00Z",
+        },
+        {
+            "id": "sol-app",
+            "model": "gpt-5.6-sol",
+            "agent_key": "codex-app",
+            "first_user": "Hi",
+            "record_count": 1,
+            "started_at": "2026-07-10T13:00:00Z",
+        },
+        {
+            "id": "sol-cli",
+            "model": "gpt-5.6-sol",
+            "agent_key": "codex",
+            "first_user": "Hi",
+            "record_count": 4,
+            "started_at": "2026-07-10T12:00:00Z",
+        },
+    ]
+
+    pair = _hi_model_lab_sessions(sessions)
+
+    assert [session["id"] for session in pair] == ["fable-new", "sol-cli"]
+
+
+def test_default_diff_lab_keeps_comparison_within_one_agent() -> None:
+    sessions = [
+        {"id": "sol", "model": "gpt-5.6-sol", "agent_key": "codex"},
+        {"id": "opus", "model": "claude-opus-4-8", "agent_key": "claude-code"},
+        {"id": "fable", "model": "claude-fable-5", "agent_key": "claude-code"},
+    ]
+
+    pair = _default_compare_lab_pair(sessions)
+
+    assert [session["id"] for session in pair] == ["opus", "fable"]
+
+
+def test_node_model_lab_requires_the_exact_shared_prompt() -> None:
+    sessions = [
+        {
+            "id": "fable-node",
+            "model": "claude-fable-5",
+            "agent_key": "claude-code",
+            "first_user": NODE_VERSION_PROMPT,
+            "record_count": 8,
+            "started_at": "2026-07-10T10:00:00Z",
+        },
+        {
+            "id": "sol-node",
+            "model": "gpt-5.6-sol",
+            "agent_key": "codex",
+            "first_user": NODE_VERSION_PROMPT,
+            "record_count": 12,
+            "started_at": "2026-07-10T11:00:00Z",
+        },
+        {
+            "id": "sol-near-match",
+            "model": "gpt-5.6-sol",
+            "agent_key": "codex",
+            "first_user": NODE_VERSION_PROMPT + " 请简短回答。",
+            "record_count": 2,
+            "started_at": "2026-07-10T12:00:00Z",
+        },
+    ]
+
+    pair = _node_model_lab_sessions(sessions)
+
+    assert [session["id"] for session in pair] == ["fable-node", "sol-node"]
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is required for dashboard JS unit tests")

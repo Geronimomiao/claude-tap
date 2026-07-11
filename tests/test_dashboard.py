@@ -1318,6 +1318,17 @@ def test_dashboard_template_exposes_quit_control() -> None:
     assert "if (state.quittingDashboard) return;" in template
 
 
+def test_dashboard_lab_cards_do_not_expose_persistent_pin_controls() -> None:
+    template = read_dashboard_template()
+
+    assert 'id="compare-lab-pin"' not in template
+    assert 'id="cost-lab-pin"' not in template
+    assert 'id="compaction-lab-pin"' not in template
+    assert "claude-tap-compare-pin" not in template
+    assert "claude-tap-cost-pin" not in template
+    assert "claude-tap-compaction-pin" not in template
+
+
 def test_dashboard_summarize_session_and_migration(trace_db, tmp_path: Path) -> None:
     assert dashboard_trace_snapshot() == {}
 
@@ -2435,7 +2446,7 @@ async def test_dashboard_cost_lab_renders_token_analysis(trace_db) -> None:
                 await page.locator(f'[data-select-session="{session_id}"]').check()
                 assert "claude-fable-5" in await page.locator("#cost-lab-target").inner_text()
 
-                # opening the analysis pins its target
+                # opening the analysis fixes its target in the route
                 await page.locator("#cost-lab-open").click()
                 await page.wait_for_selector("#cost-view:not(.hidden)", timeout=5000)
                 assert f"session={session_id}" in page.url
@@ -2465,14 +2476,10 @@ async def test_dashboard_cost_lab_renders_token_analysis(trace_db) -> None:
                 await page.wait_for_selector("#list-view:not(.hidden)", timeout=5000)
                 assert page.url == f"http://127.0.0.1:{port}/dashboard"
 
-                # the pinned capture holds even though a newer session exists
+                # route navigation clears the transient selection, so the card returns to the latest capture
                 target = await page.locator("#cost-lab-target").inner_text()
-                assert "📌" in target
-                assert "claude-fable-5" in target
-                pin_button = page.locator("#cost-lab-pin")
-                assert await pin_button.inner_text() == "Unpin capture"
-                await pin_button.click()
-                assert "gpt-5.4-mini" in await page.locator("#cost-lab-target").inner_text()
+                assert "gpt-5.4-mini" in target
+                assert await page.locator("#cost-lab-pin").count() == 0
 
                 # OpenAI-shaped usage: cached tokens are split out of prompt_tokens
                 await page.locator("#cost-lab-open").click()
@@ -2654,7 +2661,8 @@ async def test_dashboard_compaction_lab_marks_context_cliff(trace_db) -> None:
                 await page.locator("[data-compaction-back]").click()
                 await page.wait_for_selector("#list-view:not(.hidden)", timeout=5000)
                 target = await page.locator("#compaction-lab-target").inner_text()
-                assert "📌" in target
+                assert "📌" not in target
+                assert await page.locator("#compaction-lab-pin").count() == 0
             finally:
                 await browser.close()
     finally:
@@ -2737,6 +2745,68 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
     store.append_record(duplicate_model_session_id, duplicate_model_record)
     store.finalize_session(duplicate_model_session_id, {"api_calls": 1})
 
+    sol_record = {
+        "timestamp": "2026-05-19T11:00:00+00:00",
+        "request_id": "req_compare_sol_cli",
+        "turn": 1,
+        "request": {
+            "method": "POST",
+            "path": "/v1/responses",
+            "body": {
+                "model": "gpt-5.6-sol",
+                "tools": [{"type": "function", "name": "shell", "description": "Run a shell command"}],
+                "input": [
+                    {
+                        "role": "developer",
+                        "content": [
+                            {"type": "input_text", "text": "You are Codex."},
+                            {"type": "input_text", "text": "Use the shell tool when needed."},
+                        ],
+                    },
+                    {"role": "user", "content": [{"type": "input_text", "text": "Hi"}]},
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {
+                "model": "gpt-5.6-sol",
+                "output": [{"role": "assistant", "content": [{"type": "output_text", "text": "Hi!"}]}],
+                "usage": {"input_tokens": 3000, "output_tokens": 14, "input_tokens_details": {"cached_tokens": 800}},
+            },
+        },
+    }
+    sol_session_id = store.create_session(
+        client="codex",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 11, 0, 0, tzinfo=timezone.utc),
+    )
+    store.append_record(
+        sol_session_id,
+        {
+            "timestamp": "2026-05-19T10:59:59+00:00",
+            "request_id": "req_compare_sol_handshake",
+            "turn": 1,
+            "request": {
+                "method": "WEBSOCKET",
+                "path": "/v1/responses",
+                "body": {
+                    "type": "response.create",
+                    "generate": False,
+                    "input": [
+                        {
+                            "role": "developer",
+                            "content": [{"type": "input_text", "text": "Handshake setup only."}],
+                        }
+                    ],
+                },
+            },
+            "response": {"status": 101, "body": {"status": "completed", "generate": False}},
+        },
+    )
+    store.append_record(sol_session_id, sol_record)
+    store.finalize_session(sol_session_id, {"api_calls": 2})
+
     server = LiveViewerServer(port=0, dashboard_mode=True)
     port = await server.start()
     try:
@@ -2747,9 +2817,13 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 await page.goto(f"http://127.0.0.1:{port}/dashboard", wait_until="domcontentloaded")
                 await page.wait_for_selector('[data-agent="cli"].active', timeout=5000)
                 assert await page.locator(f'[data-session="{codex_app_session_id}"]').count() == 0
-                assert await page.locator("#session-list .session-row").count() == 3
+                assert await page.locator("#session-list .session-row").count() == 4
                 lab = page.locator("#compare-lab")
                 await lab.wait_for(state="visible", timeout=5000)
+                assert await lab.evaluate("element => element.getBoundingClientRect().width") < 500
+                assert await page.locator(".lab-strip").evaluate(
+                    "element => element.scrollWidth <= element.clientWidth"
+                )
                 assert await page.locator("#compare-lab-pair").inner_text() == ("claude-fable-5 ↔ claude-opus-4-8")
                 assert " ".join((await lab.locator(".diff-legend-item.removed").inner_text()).split()) == (
                     "− Only in baseline"
@@ -2758,6 +2832,14 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                     "+ Only in compared"
                 )
                 assert not await page.locator("#compare-lab-open").is_disabled()
+                model_lab = page.locator("#hi-model-lab")
+                await model_lab.wait_for(state="visible", timeout=5000)
+                assert await page.locator("#hi-model-lab-pair").inner_text() == ("claude-fable-5 ↔ gpt-5.6-sol")
+                model_lab_button = page.locator("#hi-model-lab-open")
+                assert not await model_lab_button.is_disabled()
+                model_lab_fable_id = await model_lab_button.get_attribute("data-left")
+                assert model_lab_fable_id
+                assert await model_lab_button.get_attribute("data-right") == sol_session_id
                 await page.locator("#edit-sessions").click()
                 compare_button = page.locator("#compare-selected-sessions")
                 assert await compare_button.is_disabled()
@@ -2765,17 +2847,10 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                     await page.locator(f'[data-select-session="{session_id}"]').check()
                 assert not await compare_button.is_disabled()
 
-                pin_button = page.locator("#compare-lab-pin")
-                assert await pin_button.inner_text() == "Pin this pair"
-                await pin_button.click()
-                assert await pin_button.inner_text() == "Unpin pair"
-                assert await page.locator("#compare-lab-pair").inner_text() == ("claude-fable-5 ↔ claude-opus-4-8")
+                assert await page.locator("#compare-lab-pin").count() == 0
                 for session_id in session_ids:
                     await page.locator(f'[data-select-session="{session_id}"]').uncheck()
-                assert await page.locator("#compare-lab-pair").inner_text() == ("📌 claude-fable-5 ↔ claude-opus-4-8")
-                await pin_button.click()
                 assert await page.locator("#compare-lab-pair").inner_text() == ("claude-fable-5 ↔ claude-opus-4-8")
-                assert await pin_button.is_hidden()
                 for session_id in session_ids:
                     await page.locator(f'[data-select-session="{session_id}"]').check()
                 assert not await compare_button.is_disabled()
@@ -2861,6 +2936,232 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 assert f"left={session_ids[1]}" in page.url
                 assert f"right={session_ids[0]}" in page.url
                 assert page.url.endswith("#diff-system")
+
+                await page.locator("[data-compare-back]").click()
+                await page.wait_for_selector("#list-view:not(.hidden)", timeout=5000)
+                await page.locator("#hi-model-lab-open").click()
+                modal = page.locator("#agent-visual-modal")
+                await modal.wait_for(state="visible", timeout=5000)
+                image = modal.locator(".agent-visual-image")
+                assert await image.evaluate("element => element.complete && element.naturalWidth === 1536")
+                assert await page.locator("#agent-visual-title").inner_text() == "Cross-agent capture overview"
+                assert page.url == f"http://127.0.0.1:{port}/dashboard"
+                await page.keyboard.press("Escape")
+                assert await modal.is_hidden()
+
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/compare?"
+                    f"left={model_lab_fable_id}&right={sol_session_id}&mode=analysis#compare-insights",
+                    wait_until="domcontentloaded",
+                )
+                await page.wait_for_selector("#compare-view:not(.hidden) #compare-insights:not(.hidden)", timeout=5000)
+                assert await page.locator(".compare-model").all_text_contents() == [
+                    "claude-fable-5",
+                    "gpt-5.6-sol",
+                ]
+                insights = await page.locator("#compare-insights").inner_text()
+                assert "different API structures" in insights
+                assert "capabilities and orchestration" in insights
+                assert "discovery, generation, and transport" in insights
+                assert "output size and source-link behavior" in insights
+                assert await page.locator("#diff-system").get_attribute("open") is None
+                await page.locator("#diff-system summary").click()
+                system_diff = await page.locator("#diff-system").inner_text()
+                assert "You are Codex." in system_diff
+                assert "Use the shell tool when needed." in system_diff
+                assert "Handshake setup only." not in system_diff
+                assert f"left={model_lab_fable_id}" in page.url
+                assert f"right={sol_session_id}" in page.url
+                assert "mode=analysis" in page.url
+                assert page.url.endswith("#compare-insights")
+            finally:
+                await browser.close()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_lab_views_flag_truncated_record_windows(trace_db) -> None:
+    playwright = pytest.importorskip("playwright.async_api")
+    store = get_trace_store()
+
+    truncated_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 12, 0, 0, tzinfo=timezone.utc),
+    )
+    for index in range(3):
+        record = _anthropic_record(turn=index + 1)
+        record["request_id"] = f"req_truncated_{index}"
+        store.append_record(truncated_id, record)
+    store.finalize_session(truncated_id, {"api_calls": 3})
+
+    complete_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 12, 10, 0, tzinfo=timezone.utc),
+    )
+    complete_record = _anthropic_record(turn=1)
+    complete_record["request_id"] = "req_complete_0"
+    store.append_record(complete_id, complete_record)
+    store.finalize_session(complete_id, {"api_calls": 1})
+
+    # simulate a capture larger than the lab fetch window (offset=0&limit=2000)
+    conn = store._connect()
+    conn.execute("UPDATE sessions SET record_count = 2500 WHERE id = ?", (truncated_id,))
+    conn.commit()
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with playwright.async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(viewport={"width": 1440, "height": 1000})
+
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/cost?session={truncated_id}",
+                    wait_until="domcontentloaded",
+                )
+                await page.wait_for_selector("#cost-content .cost-tile", timeout=5000)
+                cost_notes = page.locator("#cost-content .detail-fallback-note")
+                assert await cost_notes.count() == 1
+                cost_note_text = await cost_notes.inner_text()
+                assert "Showing 3 of 2500 records." in cost_note_text
+                assert truncated_id in cost_note_text
+
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/compaction?sessions={truncated_id},{complete_id}",
+                    wait_until="domcontentloaded",
+                )
+                await page.wait_for_selector("#compaction-content .cost-tile", timeout=5000)
+                compaction_notes = page.locator("#compaction-content .detail-fallback-note")
+                assert await compaction_notes.count() == 1
+                compaction_note_text = await compaction_notes.inner_text()
+                assert "Showing 3 of 2500 records." in compaction_note_text
+                assert truncated_id in compaction_note_text
+
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/compare?left={truncated_id}&right={complete_id}",
+                    wait_until="domcontentloaded",
+                )
+                await page.wait_for_selector("#compare-view:not(.hidden) .compare-identities", timeout=5000)
+                compare_notes = page.locator("#compare-content .detail-fallback-note")
+                assert await compare_notes.count() == 1
+                assert truncated_id in await compare_notes.inner_text()
+
+                # a fully fetched capture renders without the truncation notice
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/cost?session={complete_id}",
+                    wait_until="domcontentloaded",
+                )
+                await page.wait_for_selector("#cost-content .cost-tile", timeout=5000)
+                assert await page.locator("#cost-content .detail-fallback-note").count() == 0
+            finally:
+                await browser.close()
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
+async def test_dashboard_node_model_lab_compares_matching_answers(trace_db) -> None:
+    playwright = pytest.importorskip("playwright.async_api")
+    store = get_trace_store()
+    prompt = "查一下 Node.js 当前最新的版本是多少？包括最新的 Current 版本和最新的 LTS 版本，并注明你的信息来源。"
+
+    fable_record = _anthropic_record(turn=1)
+    fable_record["request_id"] = "req_node_fable"
+    fable_record["request"]["body"].update(
+        {
+            "model": "claude-fable-5",
+            "system": [{"type": "text", "text": "You are a Claude agent."}],
+            "messages": [{"role": "user", "content": prompt}],
+        }
+    )
+    fable_record["response"]["body"].update(
+        {
+            "model": "claude-fable-5",
+            "content": [{"type": "text", "text": "Fable: Current is v26 and LTS is v24."}],
+        }
+    )
+    fable_session_id = store.create_session(
+        client="claude",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 10, 0, 0, tzinfo=timezone.utc),
+    )
+    store.append_record(fable_session_id, fable_record)
+    store.finalize_session(fable_session_id, {"api_calls": 1})
+
+    sol_record = {
+        "timestamp": "2026-05-20T09:00:00+00:00",
+        "request_id": "req_node_sol",
+        "turn": 1,
+        "request": {
+            "method": "POST",
+            "path": "/v1/responses",
+            "body": {
+                "model": "gpt-5.6-sol",
+                "input": [
+                    {"role": "developer", "content": [{"type": "input_text", "text": "You are Codex."}]},
+                    {"role": "user", "content": [{"type": "input_text", "text": prompt}]},
+                ],
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {
+                "model": "gpt-5.6-sol",
+                "output": [
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": "Sol: Current is v26 and LTS is v24."}],
+                    }
+                ],
+                "usage": {"input_tokens": 3000, "output_tokens": 80},
+            },
+        },
+    }
+    sol_session_id = store.create_session(
+        client="codex",
+        proxy_mode="reverse",
+        started_at=datetime(2026, 7, 10, 11, 0, 0, tzinfo=timezone.utc),
+    )
+    store.append_record(sol_session_id, sol_record)
+    store.finalize_session(sol_session_id, {"api_calls": 1})
+
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with playwright.async_playwright() as pw:
+            browser = await pw.chromium.launch(headless=True)
+            try:
+                page = await browser.new_page(viewport={"width": 1440, "height": 1000})
+                await page.goto(f"http://127.0.0.1:{port}/dashboard", wait_until="domcontentloaded")
+                lab = page.locator("#node-model-lab")
+                await lab.wait_for(state="visible", timeout=5000)
+                assert await page.locator("#node-model-lab-pair").inner_text() == ("claude-fable-5 ↔ gpt-5.6-sol")
+                button = page.locator("#node-model-lab-open")
+                assert not await button.is_disabled()
+                assert await button.get_attribute("data-left") == fable_session_id
+                assert await button.get_attribute("data-right") == sol_session_id
+
+                await button.click()
+                await page.wait_for_selector("#compare-view:not(.hidden) #compare-insights:not(.hidden)", timeout=5000)
+                assert await page.locator(".compare-model").all_text_contents() == [
+                    "claude-fable-5",
+                    "gpt-5.6-sol",
+                ]
+                insights = await page.locator("#compare-insights").inner_text()
+                assert "output size and source-link behavior" in insights
+                assert "44 chars; 0 source links" in insights
+                assert "35 chars; 0 source links" in insights
+                assert await page.locator("#diff-response").get_attribute("open") is None
+                await page.locator("#diff-response summary").click()
+                response_diff = await page.locator("#diff-response").inner_text()
+                assert "Fable: Current is v26 and LTS is v24." in response_diff
+                assert "Sol: Current is v26 and LTS is v24." in response_diff
+                assert "mode=analysis" in page.url
+                assert page.url.endswith("#compare-insights")
             finally:
                 await browser.close()
     finally:
