@@ -16,6 +16,7 @@ from claude_tap.usage import normalize_usage
 from claude_tap.viewer import _decode_bedrock_eventstream_events
 
 DASHBOARD_TEMPLATE_PATH = Path(__file__).parent / "dashboard.html"
+DASHBOARD_ASSET_DIR = Path(__file__).parent / "dashboard_assets"
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 CLIENT_LABELS = {

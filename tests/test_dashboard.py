@@ -1318,6 +1318,17 @@ def test_dashboard_template_exposes_quit_control() -> None:
     assert "if (state.quittingDashboard) return;" in template
 
 
+def test_dashboard_lab_cards_do_not_expose_persistent_pin_controls() -> None:
+    template = read_dashboard_template()
+
+    assert 'id="compare-lab-pin"' not in template
+    assert 'id="cost-lab-pin"' not in template
+    assert 'id="compaction-lab-pin"' not in template
+    assert "claude-tap-compare-pin" not in template
+    assert "claude-tap-cost-pin" not in template
+    assert "claude-tap-compaction-pin" not in template
+
+
 def test_dashboard_summarize_session_and_migration(trace_db, tmp_path: Path) -> None:
     assert dashboard_trace_snapshot() == {}
 
@@ -2435,7 +2446,7 @@ async def test_dashboard_cost_lab_renders_token_analysis(trace_db) -> None:
                 await page.locator(f'[data-select-session="{session_id}"]').check()
                 assert "claude-fable-5" in await page.locator("#cost-lab-target").inner_text()
 
-                # opening the analysis pins its target
+                # opening the analysis fixes its target in the route
                 await page.locator("#cost-lab-open").click()
                 await page.wait_for_selector("#cost-view:not(.hidden)", timeout=5000)
                 assert f"session={session_id}" in page.url
@@ -2465,14 +2476,10 @@ async def test_dashboard_cost_lab_renders_token_analysis(trace_db) -> None:
                 await page.wait_for_selector("#list-view:not(.hidden)", timeout=5000)
                 assert page.url == f"http://127.0.0.1:{port}/dashboard"
 
-                # the pinned capture holds even though a newer session exists
+                # route navigation clears the transient selection, so the card returns to the latest capture
                 target = await page.locator("#cost-lab-target").inner_text()
-                assert "📌" in target
-                assert "claude-fable-5" in target
-                pin_button = page.locator("#cost-lab-pin")
-                assert await pin_button.inner_text() == "Unpin capture"
-                await pin_button.click()
-                assert "gpt-5.4-mini" in await page.locator("#cost-lab-target").inner_text()
+                assert "gpt-5.4-mini" in target
+                assert await page.locator("#cost-lab-pin").count() == 0
 
                 # OpenAI-shaped usage: cached tokens are split out of prompt_tokens
                 await page.locator("#cost-lab-open").click()
@@ -2654,7 +2661,8 @@ async def test_dashboard_compaction_lab_marks_context_cliff(trace_db) -> None:
                 await page.locator("[data-compaction-back]").click()
                 await page.wait_for_selector("#list-view:not(.hidden)", timeout=5000)
                 target = await page.locator("#compaction-lab-target").inner_text()
-                assert "📌" in target
+                assert "📌" not in target
+                assert await page.locator("#compaction-lab-pin").count() == 0
             finally:
                 await browser.close()
     finally:
@@ -2839,17 +2847,10 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                     await page.locator(f'[data-select-session="{session_id}"]').check()
                 assert not await compare_button.is_disabled()
 
-                pin_button = page.locator("#compare-lab-pin")
-                assert await pin_button.inner_text() == "Pin this pair"
-                await pin_button.click()
-                assert await pin_button.inner_text() == "Unpin pair"
-                assert await page.locator("#compare-lab-pair").inner_text() == ("claude-fable-5 ↔ claude-opus-4-8")
+                assert await page.locator("#compare-lab-pin").count() == 0
                 for session_id in session_ids:
                     await page.locator(f'[data-select-session="{session_id}"]').uncheck()
-                assert await page.locator("#compare-lab-pair").inner_text() == ("📌 claude-fable-5 ↔ claude-opus-4-8")
-                await pin_button.click()
                 assert await page.locator("#compare-lab-pair").inner_text() == ("claude-fable-5 ↔ claude-opus-4-8")
-                assert await pin_button.is_hidden()
                 for session_id in session_ids:
                     await page.locator(f'[data-select-session="{session_id}"]').check()
                 assert not await compare_button.is_disabled()
@@ -2939,6 +2940,20 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 await page.locator("[data-compare-back]").click()
                 await page.wait_for_selector("#list-view:not(.hidden)", timeout=5000)
                 await page.locator("#hi-model-lab-open").click()
+                modal = page.locator("#agent-visual-modal")
+                await modal.wait_for(state="visible", timeout=5000)
+                image = modal.locator(".agent-visual-image")
+                assert await image.evaluate("element => element.complete && element.naturalWidth === 1536")
+                assert await page.locator("#agent-visual-title").inner_text() == "Cross-agent capture overview"
+                assert page.url == f"http://127.0.0.1:{port}/dashboard"
+                await page.keyboard.press("Escape")
+                assert await modal.is_hidden()
+
+                await page.goto(
+                    f"http://127.0.0.1:{port}/dashboard/compare?"
+                    f"left={model_lab_fable_id}&right={sol_session_id}&mode=analysis#compare-insights",
+                    wait_until="domcontentloaded",
+                )
                 await page.wait_for_selector("#compare-view:not(.hidden) #compare-insights:not(.hidden)", timeout=5000)
                 assert await page.locator(".compare-model").all_text_contents() == [
                     "claude-fable-5",

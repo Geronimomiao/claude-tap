@@ -18,6 +18,7 @@ from aiohttp import web
 from claude_tap.compact_trace import build_compact_trace_bundle
 from claude_tap.continuation import find_continuation_chains
 from claude_tap.dashboard import (
+    DASHBOARD_ASSET_DIR,
     build_session_query,
     dashboard_trace_snapshot,
     ensure_trace_store,
@@ -236,6 +237,7 @@ class LiveViewerServer:
             app.router.add_get("/", self._handle_index)
         app.router.add_get("/viewer", self._handle_index)
         app.router.add_get("/dashboard", self._handle_dashboard_index)
+        app.router.add_static("/dashboard/assets", DASHBOARD_ASSET_DIR, show_index=False)
         app.router.add_get("/dashboard/compare", self._handle_dashboard_compare)
         app.router.add_get("/dashboard/cost", self._handle_dashboard_cost)
         app.router.add_get("/dashboard/compaction", self._handle_dashboard_compaction)
