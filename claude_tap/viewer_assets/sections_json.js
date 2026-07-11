@@ -16,11 +16,15 @@ function bindSections(container) {
   container.querySelectorAll('.section-header').forEach(h => {
     h.addEventListener('click', ev => {
       if (ev.target.classList.contains('copy-btn')) {
-        const text = decodeURIComponent(escape(atob(ev.target.dataset.copy)));
+        const text = ev.target.dataset.copyDeferred
+          ? deferredSectionCopyText(ev.target.dataset.copyDeferred)
+          : decodeURIComponent(escape(atob(ev.target.dataset.copy)));
         copyToClipboard(text, ev.target);
         return;
       }
-      h.nextElementSibling.classList.toggle('open');
+      const body = h.nextElementSibling;
+      if (!body.classList.contains('open')) materializeDeferredSection(body);
+      body.classList.toggle('open');
       h.querySelector('.chevron').classList.toggle('open');
     });
   });

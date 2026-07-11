@@ -707,15 +707,32 @@ function renderResponsesContinuationNotice(info) {
   return `<div class="continuation-banner"><div class="cb-icon">&#9888;</div><div class="cb-content"><div class="cb-title">${esc(t('continuation_title'))}</div><div class="cb-message">${esc(t('continuation_message'))}</div>${meta}</div></div>`;
 }
 
-function renderMessages(msgs) {
-  return msgs.map(m => {
-    const role = m.role || 'unknown';
-    const cls = role === 'user' ? 'user' : role === 'assistant' ? 'assistant' : role === 'tool' ? 'tool_result' : (role === 'developer' || role === 'system') ? 'system' : 'system';
-    const blockCount = normalizeDisplayContentBlocks(m.content).length;
-    const rendered = renderContent(m.content, role, { frameBlocks: blockCount > 1 });
-    if (!rendered.trim()) return '';
-    return `<div class="msg ${cls}"><div class="msg-role">${esc(role)}</div>${rendered}</div>`;
-  }).filter(Boolean).join('');
+function messageRoleClass(role) {
+  return role === 'user' ? 'user' : role === 'assistant' ? 'assistant' : role === 'tool' ? 'tool_result' : 'system';
+}
+
+/* Skips layout work for offscreen message bodies; the browser lays them out
+   lazily as they scroll into view. Only applied to heavy turns. */
+const MSG_DEFER_LAYOUT_STYLE = 'content-visibility:auto;contain-intrinsic-size:auto 120px';
+
+function renderMessageHtml(m, opts = {}) {
+  const role = m.role || 'unknown';
+  const blockCount = normalizeDisplayContentBlocks(m.content).length;
+  const rendered = renderContent(m.content, role, { frameBlocks: blockCount > 1 });
+  if (!rendered.trim()) return '';
+  const style = opts.deferLayout ? ` style="${MSG_DEFER_LAYOUT_STYLE}"` : '';
+  return `<div class="msg ${messageRoleClass(role)}"${style}><div class="msg-role">${esc(role)}</div>${rendered}</div>`;
+}
+
+function renderDeferredMessagePlaceholder(m, idx) {
+  const role = m.role || 'unknown';
+  return `<div class="msg ${messageRoleClass(role)}" data-deferred-msg="${idx}"><div class="msg-role">${esc(role)}</div><div class="content-block" style="min-height:32px;color:var(--text-tertiary)">…</div></div>`;
+}
+
+function renderMessages(msgs, eagerCount, deferLayout) {
+  const eager = Number.isInteger(eagerCount) ? Math.max(0, eagerCount) : msgs.length;
+  const layoutDeferred = deferLayout !== undefined ? !!deferLayout : eager < msgs.length;
+  return msgs.map((m, i) => (i < eager ? renderMessageHtml(m, { deferLayout: layoutDeferred }) : renderDeferredMessagePlaceholder(m, i))).join('');
 }
 
 function contentHasImagePlaceholder(content) {

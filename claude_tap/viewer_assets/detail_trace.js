@@ -31,6 +31,7 @@ function restoreSectionStates() {
     if (key in sectionCollapseState) {
       const shouldBeOpen = sectionCollapseState[key];
       if (shouldBeOpen && !bodyEl.classList.contains('open')) {
+        materializeDeferredSection(bodyEl);
         bodyEl.classList.add('open');
         chevron.classList.add('open');
       } else if (!shouldBeOpen && bodyEl.classList.contains('open')) {
@@ -90,6 +91,7 @@ async function renderDetailForEntry(entry) {
 
 function renderDetail(e) {
   saveSectionStates();
+  resetDeferredDetail();
   currentDetailRequestId = e.request_id;
   currentDetailEntryKey = entryStableKey(e);
   const d = $('#detail');
@@ -116,25 +118,33 @@ function renderDetail(e) {
   const streamEvents = getResponseEvents(e);
 
   if (detailViewMode === 'default') {
+    const plan = detailRenderPlan(msgs ? msgs.length : 0, estimateEntryJsonBytes(e));
+    if (plan.deferMessages) deferredDetail.messages = msgs;
     const actionBarHtml = `<div class="action-bar">
       <button class="act-btn" onclick="copyRequestBody(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>${t('btn_request_json')}</button>
       <button class="act-btn" onclick="copyCurl(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>${t('btn_curl')}</button>
       <button class="act-btn" onclick="showDiff(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M3 12h18"/><path d="M3 6h18M3 18h18" opacity=".4"/></svg>${t('btn_diff')}</button>
     </div>`;
     const toolsSection = tools && tools.length
-      ? section(t('section_tools'), renderTools(tools), false, null, tools.length + ' ' + t('badge_tools'))
+      ? (plan.deferSections
+        ? deferredSection(t('section_tools'), () => renderTools(tools), { badge: tools.length + ' ' + t('badge_tools') })
+        : section(t('section_tools'), renderTools(tools), false, null, tools.length + ' ' + t('badge_tools')))
       : '';
     const systemSection = sysPrompt ? section(t('section_system'), renderSystemPrompt(sysBlocks, sysPrompt), true, sysPrompt) : '';
     const messagesSection = msgs && msgs.length
-      ? section(contextOnly ? t('section_context') : t('section_messages'), renderMessages(msgs), true, null, msgs.length + ' ' + t('badge_messages'))
+      ? section(contextOnly ? t('section_context') : t('section_messages'), renderMessages(msgs, plan.eagerMsgHead, plan.deferSections), true, null, msgs.length + ' ' + t('badge_messages'))
       : '';
     const responseSection = respOutput?.content || contextOnly
       ? section(t('section_response'), renderResponseContent(respOutput, contextOnly), true)
       : '';
     const streamSection = streamEvents.length
-      ? section(t('section_sse'), renderSSEEvents(streamEvents), false, null, streamEvents.length + ' ' + t('badge_events'))
+      ? (plan.deferSections
+        ? deferredSection(t('section_sse'), () => renderSSEEvents(streamEvents), { badge: streamEvents.length + ' ' + t('badge_events') })
+        : section(t('section_sse'), renderSSEEvents(streamEvents), false, null, streamEvents.length + ' ' + t('badge_events')))
       : '';
-    const jsonSection = section(t('section_json'), `<div class="json-view">${renderJSONTree(e)}</div>`, false, JSON.stringify(e, null, 2));
+    const jsonSection = plan.deferSections
+      ? deferredSection(t('section_json'), () => `<div class="json-view">${renderJSONTree(e)}</div>`, { copyText: () => JSON.stringify(e, null, 2) })
+      : section(t('section_json'), `<div class="json-view">${renderJSONTree(e)}</div>`, false, JSON.stringify(e, null, 2));
     html += actionBarHtml;
     if (usage) html += renderTokenUsage(usage);
     html += toolsSection + systemSection + messagesSection + responseSection;
@@ -147,6 +157,7 @@ function renderDetail(e) {
   d.innerHTML = html;
   bindSections(d);
   restoreSectionStates();
+  observeDeferredMessages(d);
   if (globalSearchState.open && globalSearchState.query) {
     const target = getTargetForGlobalMatch(globalSearchState.currentMatch);
     const localIndex = target && target.entryKey === entryStableKey(e) ? target.localIndex : 0;

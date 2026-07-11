@@ -181,6 +181,129 @@ async function resolveEntryForDetailAsync(entry) {
   return withDisplayFields(await fetchRemoteEntry(entry), entry);
 }
 
+/* ─── Incremental detail rendering ───
+   Heavy turns (e.g. merged Codex chains where every call re-serializes the
+   full history) can produce megabytes of detail DOM whose style/layout pass
+   blocks the main thread for seconds. Render only the head of long message
+   lists eagerly, materialize the rest from an IntersectionObserver as they
+   scroll near the viewport, and build collapsed sections (Tools / SSE /
+   Full JSON) only when they are first opened. Turns below the thresholds
+   render exactly as before. */
+const DETAIL_DEFER_MSG_THRESHOLD = 40;
+const DETAIL_EAGER_MSG_HEAD = 20;
+const DETAIL_DEFER_JSON_BYTES = 256 * 1024;
+
+const deferredDetail = {
+  sections: new Map(), // id -> { render: () => html, copyText: null | () => string }
+  messages: null, // msgs array backing [data-deferred-msg] placeholders
+  observer: null,
+  seq: 0,
+};
+
+function detailRenderPlan(msgCount, jsonBytes) {
+  const deferMessages = msgCount > DETAIL_DEFER_MSG_THRESHOLD;
+  const deferSections = deferMessages || jsonBytes > DETAIL_DEFER_JSON_BYTES;
+  return {
+    deferMessages,
+    eagerMsgHead: deferMessages ? DETAIL_EAGER_MSG_HEAD : msgCount,
+    deferSections,
+  };
+}
+
+function estimateEntryJsonBytes(entry) {
+  try {
+    return JSON.stringify(entry).length;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function resetDeferredDetail() {
+  deferredDetail.sections.clear();
+  deferredDetail.messages = null;
+  if (deferredDetail.observer) {
+    deferredDetail.observer.disconnect();
+    deferredDetail.observer = null;
+  }
+}
+
+function deferredSection(title, renderBody, opts = {}) {
+  const id = 'ds' + (deferredDetail.seq++);
+  deferredDetail.sections.set(id, { render: renderBody, copyText: opts.copyText || null });
+  let extra = '';
+  if (opts.badge) extra += `<span class="badge">${esc(opts.badge)}</span>`;
+  if (opts.copyText) extra += `<button class="copy-btn" data-copy-deferred="${id}">${t('copy')}</button>`;
+  const placeholder = `<div class="content-block" style="color:var(--text-tertiary)">…</div>`;
+  return `<div class="section"><div class="section-header"><span class="chevron">&#9654;</span><span class="title">${title}</span>${extra}</div><div class="section-body" data-deferred-section="${id}">${placeholder}</div></div>`;
+}
+
+function materializeDeferredSection(bodyEl) {
+  const id = bodyEl && bodyEl.dataset ? bodyEl.dataset.deferredSection : '';
+  if (!id || bodyEl.dataset.deferredRendered) return false;
+  const spec = deferredDetail.sections.get(id);
+  if (!spec) return false;
+  bodyEl.innerHTML = spec.render();
+  bodyEl.dataset.deferredRendered = 'true';
+  return true;
+}
+
+function deferredSectionCopyText(id) {
+  const spec = deferredDetail.sections.get(id);
+  if (!spec || typeof spec.copyText !== 'function') return '';
+  return spec.copyText();
+}
+
+function materializeDeferredMessage(el) {
+  const msgs = deferredDetail.messages;
+  const idx = el && el.dataset ? Number(el.dataset.deferredMsg) : NaN;
+  if (!msgs || !Number.isInteger(idx) || idx < 0 || idx >= msgs.length) return false;
+  if (deferredDetail.observer) deferredDetail.observer.unobserve(el);
+  const html = renderMessageHtml(msgs[idx], { deferLayout: true });
+  if (!html) {
+    el.remove();
+    return true;
+  }
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  el.replaceWith(tpl.content);
+  return true;
+}
+
+function materializeAllDeferredDetail(container) {
+  const root = container || $('#detail');
+  if (!root) return 0;
+  let count = 0;
+  root.querySelectorAll('[data-deferred-section]').forEach(el => {
+    if (materializeDeferredSection(el)) count++;
+  });
+  root.querySelectorAll('[data-deferred-msg]').forEach(el => {
+    if (materializeDeferredMessage(el)) count++;
+  });
+  return count;
+}
+
+function handleDeferredMessageIntersections(items) {
+  for (const item of items) {
+    if (item.isIntersecting) materializeDeferredMessage(item.target);
+  }
+}
+
+function observeDeferredMessages(container) {
+  const targets = container.querySelectorAll('[data-deferred-msg]');
+  if (!targets.length) return;
+  if (typeof IntersectionObserver === 'undefined') {
+    targets.forEach(el => materializeDeferredMessage(el));
+    return;
+  }
+  /* root: null works for both layouts: desktop clips placeholders via the
+     .detail inner scroller, mobile scrolls the document itself. */
+  deferredDetail.observer = new IntersectionObserver(handleDeferredMessageIntersections, {
+    root: null,
+    rootMargin: '600px 0px',
+  });
+  targets.forEach(el => deferredDetail.observer.observe(el));
+}
+
 /* ─── Virtual scroll state ─── */
 let virtualMode = false;
 const VS_ITEM_HEIGHT = 68;

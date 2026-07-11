@@ -627,6 +627,9 @@ function applyGlobalSearchHighlights(targetLocalIndex) {
   clearGlobalSearchHighlights(detail);
   const queries = buildGlobalHighlightQueries(globalSearchState.query);
   if (!queries.length) return;
+  // Deferred bodies must exist in the DOM before highlight marks are indexed,
+  // otherwise match positions from the full entry text would not line up.
+  materializeAllDeferredDetail(detail);
   const marks = highlightSearchInContainer(detail, queries);
   autoExpandSearchMatches(marks);
   if (!marks.length) return;

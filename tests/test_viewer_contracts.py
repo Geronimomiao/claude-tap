@@ -1176,7 +1176,56 @@ def _contract_cases() -> tuple[ViewerContractCase, ...]:
                 "Content block response OK.",
             ),
         ),
+        ViewerContractCase(
+            name="deferred_heavy_turn",
+            records=(_deferred_heavy_turn_record(),),
+            expected_sections=("System Prompt", "Messages", "Response"),
+            expected_system="Deferred rendering contract system prompt.",
+            expected_roles=tuple("user" if i % 2 == 0 else "assistant" for i in range(45)),
+            expected_tools=(),
+            expected_output_types=("text",),
+            expected_usage={"input_tokens": 900, "output_tokens": 12},
+            # Eager message bodies use content-visibility:auto, which drops
+            # offscreen text from innerText; per-message DOM contracts live in
+            # tests/test_detail_defer_browser.py.
+            required_detail_text=("Deferred heavy response OK.",),
+        ),
     )
+
+
+def _deferred_heavy_turn_record() -> dict[str, Any]:
+    """A turn above DETAIL_DEFER_MSG_THRESHOLD so incremental rendering kicks in."""
+    messages = [
+        {
+            "role": "user" if i % 2 == 0 else "assistant",
+            "content": [{"type": "text", "text": f"Deferred contract head message {i}."}],
+        }
+        for i in range(45)
+    ]
+    return {
+        "timestamp": "2026-07-11T09:00:00+00:00",
+        "request_id": "req_deferred_heavy",
+        "turn": 1,
+        "duration_ms": 100,
+        "request": {
+            "method": "POST",
+            "path": "/v1/messages",
+            "headers": {},
+            "body": {
+                "model": "claude-opus-4-6",
+                "system": "Deferred rendering contract system prompt.",
+                "messages": messages,
+            },
+        },
+        "response": {
+            "status": 200,
+            "body": {
+                "content": [{"type": "text", "text": "Deferred heavy response OK."}],
+                "model": "claude-opus-4-6",
+                "usage": {"input_tokens": 900, "output_tokens": 12},
+            },
+        },
+    }
 
 
 def _runtime_smoke_records() -> tuple[dict[str, Any], ...]:
