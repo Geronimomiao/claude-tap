@@ -366,6 +366,13 @@ class LiveViewerServer:
             f"const CLAUDE_TAP_VERSION = {json.dumps(CLAUDE_TAP_VERSION)};",
             1,
         )
+        compaction_lab_url = os.environ.get("CLOUDTAP_COMPACTION_LAB_URL", "").strip()
+        if compaction_lab_url:
+            html = html.replace(
+                'const COMPACTION_LAB_URL = "";',
+                f"const COMPACTION_LAB_URL = {json.dumps(compaction_lab_url)};",
+                1,
+            )
         if self.dashboard_mode and _is_trusted_dashboard_token_request(request):
             html = html.replace(
                 'const DASHBOARD_QUIT_TOKEN = "";',

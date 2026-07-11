@@ -1886,6 +1886,9 @@ const MAX_COMPACTION_SESSIONS = 8;
 const CLAUDE_TAP_VERSION = "";
 const DASHBOARD_QUIT_TOKEN = "";
 const DASHBOARD_CAN_STOP = false;
+// Optional external analysis page for the compaction lab card, injected from
+// CLOUDTAP_COMPACTION_LAB_URL; empty keeps the built-in timeline route.
+const COMPACTION_LAB_URL = "";
 
 const PINNED_SESSIONS_KEY = "claude-tap-pinned-sessions";
 const PINNED_SESSIONS_ENDPOINT = "/api/dashboard/prefs/pinned-sessions";
@@ -4078,6 +4081,10 @@ function toggleCompactionLabPin() {
 }
 
 function openCompactionLab() {
+  if (COMPACTION_LAB_URL) {
+    window.location.assign(COMPACTION_LAB_URL);
+    return;
+  }
   const raw = $("#compaction-lab-open")?.dataset.sessions || "";
   const ids = raw.split(",").filter(Boolean);
   if (!ids.length) return;
