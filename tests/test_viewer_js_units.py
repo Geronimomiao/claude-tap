@@ -56,9 +56,11 @@ def test_viewer_split_js_core_units_run_without_playwright() -> None:
           requestAnimationFrame(callback) { if (typeof callback === 'function') callback(); return 1; },
           cancelAnimationFrame() {},
           window: {
-            location: { search: '?embed=1&hideHeader=1&density=compact&theme=dark' },
+            location: { search: '?embed=1&hideHeader=1&density=compact&theme=dark', hash: '' },
             localStorage: { getItem() { return null; }, setItem() {} },
             matchMedia() { return { matches: false }; },
+            addEventListener() {},
+            removeEventListener() {},
           },
           navigator: { language: 'en', clipboard: null },
           document: {

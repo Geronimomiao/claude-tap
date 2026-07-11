@@ -569,6 +569,13 @@ def collect_viewer_js_coverage() -> tuple[float, set[str], int, int]:
                     window.prompt = () => '1';
                     promptJumpToTurn();
                     window.prompt = originalPrompt;
+                    turnHashLabel('#turn-1');
+                    turnHashLabel('not-a-turn-hash');
+                    findEntryIdxByTurnLabel(filtered, 'missing-turn-label');
+                    applyTurnHashSelection(String(displayTurnLabel(filtered[0])));
+                    applyInitialTurnHash();
+                    updateTurnHash(filtered[0]);
+                    window.location.hash = '#turn-' + encodeURIComponent(String(displayTurnLabel(filtered[0])));
                     _buildDiffTargetOptions(Math.min(1, filtered.length - 1));
                     if (filtered.length > 1) showDiffForIdx(1, null, 0);
                   }

@@ -4807,6 +4807,12 @@ function setDetailTab(tab, session) {
   updateDetailTabToggle();
 }
 
+const TURN_HASH_PATTERN = /^#turn-[A-Za-z0-9_.%-]+$/;
+
+function currentTurnHash() {
+  return TURN_HASH_PATTERN.test(window.location.hash) ? window.location.hash : "";
+}
+
 function ensureViewerFrame(session) {
   const container = $("#conversation-tab");
   if (!container || container.querySelector("[data-viewer-frame]")) return;
@@ -4816,7 +4822,7 @@ function ensureViewerFrame(session) {
       <iframe
         class="viewer-frame"
         data-viewer-frame
-        src="/api/sessions/${encodeURIComponent(session.id)}/html"
+        src="/api/sessions/${encodeURIComponent(session.id)}/html${currentTurnHash()}"
         title="${esc(t("session_details", {agent: session.agent || t("session_detail")}))}"
       ></iframe>
     </div>
@@ -5122,6 +5128,32 @@ document.querySelector("[data-compare-back]")?.addEventListener("click", showLis
 document.querySelector("[data-cost-back]")?.addEventListener("click", showListView);
 document.querySelector("[data-compaction-back]")?.addEventListener("click", showListView);
 $("#compare-swap")?.addEventListener("click", swapComparisonSides);
+
+// Keep the address bar in sync with the turn selected inside the embedded
+// viewer so the current URL is always a copyable deep link (#turn-<label>).
+window.addEventListener("message", event => {
+  const frame = document.querySelector("[data-viewer-frame]");
+  if (!frame || event.source !== frame.contentWindow) return;
+  if (event.origin !== window.location.origin) return;
+  const hash = event.data && event.data.type === "claude-tap:turn-hash" ? event.data.hash : null;
+  if (typeof hash !== "string" || !TURN_HASH_PATTERN.test(hash)) return;
+  if (!window.location.pathname.match(SESSION_DETAIL_ROUTE)) return;
+  history.replaceState(null, "", window.location.pathname + window.location.search + hash);
+});
+window.addEventListener("hashchange", () => {
+  const hash = currentTurnHash();
+  if (!hash) return;
+  const frame = document.querySelector("[data-viewer-frame]");
+  if (!frame?.contentWindow) return;
+  try {
+    // Relative URLs passed to Location.replace resolve against the caller's
+    // document, so build the target from the frame's own location.
+    const inner = frame.contentWindow.location;
+    frame.contentWindow.location.replace(inner.pathname + inner.search + hash);
+  } catch (error) {
+    /* frame not ready yet — it picks the hash up from its src on load */
+  }
+});
 
 	applyI18n();
 	applyVersionBadge();

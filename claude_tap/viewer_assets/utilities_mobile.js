@@ -61,6 +61,78 @@ function promptJumpToTurn() {
   }
 }
 
+/* ─── Turn deep links (#turn-<label>) ───
+   The viewer URL fragment addresses a turn by its sidebar label so a link
+   like /dashboard/session/<id>#turn-15 (or #turn-2.2 for websocket
+   sub-responses) opens directly on that turn. Selection changes are written
+   back with replaceState, and a framed viewer forwards the hash to the
+   embedding dashboard so the address bar stays copyable. */
+const TURN_HASH_MESSAGE_TYPE = 'claude-tap:turn-hash';
+let pendingTurnHashLabel = turnHashLabel(window.location.hash) || null;
+
+function turnHashLabel(hash) {
+  const match = /^#turn-(.+)$/.exec(String(hash || ''));
+  if (!match) return '';
+  try {
+    return decodeURIComponent(match[1]);
+  } catch (e) {
+    return match[1];
+  }
+}
+
+function findEntryIdxByTurnLabel(list, label) {
+  if (!label || !Array.isArray(list)) return -1;
+  return list.findIndex(e => String(displayTurnLabel(e)) === String(label));
+}
+
+function applyTurnHashSelection(label) {
+  if (!label) return false;
+  let idx = findEntryIdxByTurnLabel(filtered, label);
+  if (idx < 0) {
+    const entryIdx = findEntryIdxByTurnLabel(entries, label);
+    if (entryIdx < 0) return false;
+    // The target is hidden by the default path filter (e.g. an auxiliary
+    // capture) — widen the filter the same way global search does.
+    activePaths.add(getPath(entries[entryIdx]));
+    applyFilter(true);
+    idx = findEntryIdxByTurnLabel(filtered, label);
+    if (idx < 0) return false;
+  }
+  selectEntry(idx);
+  return true;
+}
+
+function applyInitialTurnHash() {
+  const label = pendingTurnHashLabel;
+  pendingTurnHashLabel = null;
+  if (label) applyTurnHashSelection(label);
+}
+
+function updateTurnHash(entry) {
+  if (pendingTurnHashLabel) return; // an incoming deep link is not applied yet
+  const label = displayTurnLabel(entry);
+  if (label === '?') return;
+  const hash = '#turn-' + encodeURIComponent(String(label));
+  if (window.location.hash === hash) return;
+  try {
+    history.replaceState(null, '', window.location.pathname + window.location.search + hash);
+  } catch (e) {
+    return;
+  }
+  if (window.parent !== window && /^https?:$/.test(window.location.protocol)) {
+    try {
+      window.parent.postMessage({ type: TURN_HASH_MESSAGE_TYPE, hash }, window.location.origin);
+    } catch (e) {
+      /* embedding page may be unreachable; the local hash is already set */
+    }
+  }
+}
+
+window.addEventListener('hashchange', () => {
+  const label = turnHashLabel(window.location.hash);
+  if (label) applyTurnHashSelection(label);
+});
+
 /* ─── Mobile sidebar toggle (R1) ─── */
 function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
 

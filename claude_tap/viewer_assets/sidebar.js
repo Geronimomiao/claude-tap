@@ -878,6 +878,7 @@ function selectEntry(idx, opts) {
     if (active) active.scrollIntoView({ block: 'nearest' });
   }
   updatePositionIndicator();
+  updateTurnHash(entry);
   mobileShowDetail();
   updateMobileNav();
 }
