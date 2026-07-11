@@ -315,8 +315,10 @@ if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE) {
     initCommonUi();
     initLiveMode();
     fetchDates();
-    if (entries.length) renderApp();
-    else {
+    if (entries.length) {
+      renderApp();
+      applyInitialTurnHash();
+    } else {
       renderLiveWaitingState();
     }
   });
@@ -324,8 +326,10 @@ if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE) {
   entries = normalizeDisplayTurns(expandWebSocketResponseEntries(materializeCompactTraceBundle(EMBEDDED_TRACE_COMPACT_DATA) || []), true);
   document.addEventListener('DOMContentLoaded', () => {
     initCommonUi();
-    if (entries.length) renderApp();
-    else renderEmptyTraceState();
+    if (entries.length) {
+      renderApp();
+      applyInitialTurnHash();
+    } else renderEmptyTraceState();
   });
 } else if (typeof EMBEDDED_TRACE_META !== 'undefined') {
   // Lazy mode: build stub entries from metadata
@@ -333,15 +337,19 @@ if (typeof LIVE_MODE !== 'undefined' && LIVE_MODE) {
   entries = normalizeDisplayTurns(EMBEDDED_TRACE_META.map((meta, i) => buildStubEntry(meta, i)), true);
   document.addEventListener('DOMContentLoaded', () => {
     initCommonUi();
-    if (entries.length) renderApp();
-    else renderEmptyTraceState();
+    if (entries.length) {
+      renderApp();
+      applyInitialTurnHash();
+    } else renderEmptyTraceState();
   });
 } else if (typeof EMBEDDED_TRACE_DATA !== 'undefined') {
   entries = normalizeDisplayTurns(expandWebSocketResponseEntries(EMBEDDED_TRACE_DATA), true);
   document.addEventListener('DOMContentLoaded', () => {
     initCommonUi();
-    if (entries.length) renderApp();
-    else renderEmptyTraceState();
+    if (entries.length) {
+      renderApp();
+      applyInitialTurnHash();
+    } else renderEmptyTraceState();
   });
 } else {
   document.addEventListener('DOMContentLoaded', () => {
