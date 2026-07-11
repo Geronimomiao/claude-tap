@@ -1644,6 +1644,27 @@ def test_dashboard_preview_skips_auxiliary_auth_records(trace_db, tmp_path: Path
 
 
 @pytest.mark.asyncio
+async def test_dashboard_injects_compaction_lab_url_from_env(trace_db, monkeypatch) -> None:
+    server = LiveViewerServer(port=0, dashboard_mode=True)
+    port = await server.start()
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"http://127.0.0.1:{port}/dashboard") as resp:
+                assert resp.status == 200
+                html = await resp.text()
+                assert 'const COMPACTION_LAB_URL = "";' in html
+
+            monkeypatch.setenv("CLOUDTAP_COMPACTION_LAB_URL", "http://localhost:8090/compaction-lab.html")
+            async with session.get(f"http://127.0.0.1:{port}/dashboard") as resp:
+                assert resp.status == 200
+                html = await resp.text()
+                assert 'const COMPACTION_LAB_URL = "http://localhost:8090/compaction-lab.html";' in html
+                assert 'const COMPACTION_LAB_URL = "";' not in html
+    finally:
+        await server.stop()
+
+
+@pytest.mark.asyncio
 async def test_dashboard_server_serves_session_api_and_exports(trace_db, tmp_path: Path) -> None:
     trace_path = tmp_path / "2026-05-20" / "trace_080000.jsonl"
     second_trace_path = tmp_path / "2026-05-20" / "trace_081500.jsonl"
