@@ -373,6 +373,13 @@ class LiveViewerServer:
                 f"const COMPACTION_LAB_URL = {json.dumps(compaction_lab_url)};",
                 1,
             )
+        goal_lab_url = os.environ.get("CLOUDTAP_GOAL_LAB_URL", "").strip()
+        if goal_lab_url:
+            html = html.replace(
+                'const GOAL_LAB_URL = "";',
+                f"const GOAL_LAB_URL = {json.dumps(goal_lab_url)};",
+                1,
+            )
         if self.dashboard_mode and _is_trusted_dashboard_token_request(request):
             html = html.replace(
                 'const DASHBOARD_QUIT_TOKEN = "";',

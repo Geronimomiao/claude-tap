@@ -1764,6 +1764,18 @@ pre {
               <button id="compaction-lab-open" class="lab-card-open" type="button" data-i18n="compaction_lab_open" disabled>Open Timeline</button>
             </div>
           </section>
+          <section id="goal-lab" class="lab-card" role="listitem" aria-label="Goal lab">
+            <div class="lab-card-mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V4h11l-2.2 3.5L17 11H6"/></svg></div>
+            <div class="lab-card-copy">
+              <div class="lab-card-title">
+                <span data-i18n="goal_lab_title">Goal lab</span>
+                <span class="lab-card-hint" data-i18n="goal_lab_hint">how Codex /goal drives one long task autonomously</span>
+              </div>
+            </div>
+            <div class="lab-card-actions">
+              <button id="goal-lab-open" class="lab-card-open" type="button" data-i18n="goal_lab_open">Open Timeline</button>
+            </div>
+          </section>
         </div>
       </div>
   </section>
@@ -1868,6 +1880,8 @@ const DASHBOARD_CAN_STOP = false;
 // Optional external analysis page for the compaction lab card, injected from
 // CLOUDTAP_COMPACTION_LAB_URL; empty keeps the built-in timeline route.
 const COMPACTION_LAB_URL = "";
+// CLOUDTAP_GOAL_LAB_URL; opens the external goal research page when set.
+const GOAL_LAB_URL = "";
 
 const PINNED_SESSIONS_KEY = "claude-tap-pinned-sessions";
 const PINNED_SESSIONS_ENDPOINT = "/api/dashboard/prefs/pinned-sessions";
@@ -2145,6 +2159,9 @@ const DASHBOARD_I18N = {
 	    compaction_lab_title: "Compaction lab",
 	    compaction_lab_hint: "pick 1–8 captures, watch the context cliff of /compact",
 	    compaction_lab_open: "Open Timeline",
+	    goal_lab_title: "Goal lab",
+	    goal_lab_hint: "how Codex /goal drives one long task autonomously",
+	    goal_lab_open: "Open Timeline",
 	    compaction_lab_empty: "Select one to eight sessions with records",
 	    chain_badge_title: "Continued conversation · part {index} of {count} · click to open the merged timeline",
 	    compaction_title: "Context compaction timeline",
@@ -2376,6 +2393,9 @@ const DASHBOARD_I18N = {
 	    compaction_lab_title: "压缩实验台",
 	    compaction_lab_hint: "选 1–8 条抓包，看 /compact 的上下文断崖",
 	    compaction_lab_open: "打开时间线",
+	    goal_lab_title: "目标实验台",
+	    goal_lab_hint: "看 Codex /goal 如何自主推进一个长任务",
+	    goal_lab_open: "打开时间线",
 	    compaction_lab_empty: "需要选择一到八条有记录的会话",
 	    chain_badge_title: "续接会话 · 第 {index}/{count} 段 · 点击打开合并时间线",
 	    compaction_title: "上下文压缩时间线",
@@ -3951,6 +3971,10 @@ function renderCompactionLab(sessions) {
   button.title = ready ? t("compaction_lab_open") : t("compaction_lab_empty");
 }
 
+function openGoalLab() {
+  if (GOAL_LAB_URL) window.location.assign(GOAL_LAB_URL);
+}
+
 function openCompactionLab() {
   if (COMPACTION_LAB_URL) {
     window.location.assign(COMPACTION_LAB_URL);
@@ -5163,6 +5187,7 @@ $("#status-filter").addEventListener("change", event => {
 	$("#node-model-lab-open").addEventListener("click", openNodeModelLab);
 	$("#cost-lab-open").addEventListener("click", openCostLab);
 	$("#compaction-lab-open").addEventListener("click", openCompactionLab);
+	$("#goal-lab-open").addEventListener("click", openGoalLab);
 	$("#delete-selected-sessions").addEventListener("click", () => {
 	  showDeleteSessionDialog(selectedDeletableSessions().map(session => session.id));
 	});
