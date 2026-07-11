@@ -2897,6 +2897,33 @@ function updateTracePathBar(session = null) {
 	  }
 	}
 
+async function refreshSessionChrome() {
+  const [payload, agentsPayload] = await Promise.all([
+    fetchJSON(sessionsPageUrl(0, state.sessionPageSize)),
+    fetchJSON("/api/agents"),
+  ]);
+  applySessionsPayload(payload, 0);
+  applyAgentsPayload(agentsPayload);
+  pruneSelectedSessions();
+  renderFilters();
+  renderAgents();
+  renderSessions();
+  loadContinuationChains();
+}
+
+async function initializeDashboardView() {
+  if (state.pendingComparisonIds.length === 2) {
+    state.compareSessionIds = state.pendingComparisonIds;
+    state.pendingComparisonIds = [];
+    state.view = "compare";
+    showCompareView();
+    await loadComparison(state.compareSessionIds);
+    setTimeout(() => refreshSessionChrome().catch(console.error), 0);
+    return;
+  }
+  await refreshSessions({preserveSelection: false});
+}
+
 	async function loadMoreSessions() {
 	  if (state.loadingMoreSessions || !state.sessionsHasMore) return;
 	  state.loadingMoreSessions = true;
@@ -4285,13 +4312,34 @@ function renderComparisonDiff(leftText, rightText) {
   `).join("")}</div>`;
 }
 
-function renderComparisonSection(title, changed, body, {open = true, id = ""} = {}) {
+function renderComparisonSection(title, changed, body, {open = true, id = "", lazy = false} = {}) {
   return `
-    <details class="compare-section" ${id ? `id="${esc(id)}"` : ""} ${open ? "open" : ""}>
+    <details class="compare-section" ${id ? `id="${esc(id)}"` : ""} ${lazy ? "data-compare-lazy" : ""} ${open ? "open" : ""}>
       <summary>${esc(title)}<span class="compare-change-badge ${changed ? "" : "same"}">${esc(t(changed ? "compare_changed" : "compare_same"))}</span></summary>
       <div class="compare-section-body">${body}</div>
     </details>
   `;
+}
+
+function comparisonSectionOpen(id, defaultOpen) {
+  const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  if (hash.startsWith("diff-")) return hash === id;
+  return defaultOpen;
+}
+
+function installLazyComparisonSections(renderers) {
+  for (const [id, renderBody] of renderers) {
+    const section = document.getElementById(id);
+    if (!section) continue;
+    const hydrate = (opening = false) => {
+      if ((!section.open && !opening) || !section.hasAttribute("data-compare-lazy")) return;
+      section.querySelector(".compare-section-body").innerHTML = renderBody();
+      section.removeAttribute("data-compare-lazy");
+    };
+    section.addEventListener("toggle", hydrate);
+    section.querySelector("summary")?.addEventListener("click", () => hydrate(!section.open));
+    hydrate();
+  }
 }
 
 function renderComparisonMetrics(left, right) {
@@ -4466,6 +4514,16 @@ function renderComparison(payloads) {
     [right.session.total_tokens, comparisonUsage(right.record), right.system.length, right.tools.length],
   );
   state.comparePayloads = payloads;
+  const lazySections = new Map();
+  const section = (title, changed, renderBody, {open = true, id = ""} = {}) => {
+    const shouldOpen = comparisonSectionOpen(id, open);
+    if (!shouldOpen) lazySections.set(id, renderBody);
+    return renderComparisonSection(title, changed, shouldOpen ? renderBody() : "", {
+      open: shouldOpen,
+      id,
+      lazy: !shouldOpen,
+    });
+  };
   const insights = $("#compare-insights");
   insights.classList.toggle("hidden", state.compareMode !== "analysis");
   insights.innerHTML = state.compareMode === "analysis" ? renderComparisonInsights(left, right) : "";
@@ -4477,13 +4535,13 @@ function renderComparison(payloads) {
       ${renderComparisonIdentity(right.session, "right", t("compare_target"))}
     </div>
     ${state.compareMode === "analysis" ? `<div class="compare-evidence-label">${esc(t("compare_analysis_evidence"))}</div>` : ""}
-    ${renderComparisonSection(t("compare_summary"), summaryChanged, renderComparisonMetrics(left, right), {open: state.compareMode !== "analysis", id: "diff-summary"})}
-    ${renderComparisonSection(t("compare_request_parameters"), paramsChanged, renderComparisonParams(left.params, right.params), {open: false, id: "diff-params"})}
-    ${renderComparisonSection(`${t("compare_system_prompt")} · ${t("compare_chars", {count: `${fmtNumber(left.system.length)} ↔ ${fmtNumber(right.system.length)}`})}`, systemChanged, renderComparisonDiff(left.system, right.system), {open: state.compareMode !== "analysis", id: "diff-system"})}
-    ${renderComparisonSection(`${t("compare_tools")} · ${t("compare_shared_tools", {count: sharedTools})}`, toolsChanged, renderComparisonTools(left.tools, right.tools), {open: state.compareMode !== "analysis", id: "diff-tools"})}
-    ${renderComparisonSection(t("compare_messages"), messagesChanged, renderComparisonDiff(left.messages, right.messages), {open: state.compareMode !== "analysis", id: "diff-messages"})}
-    ${renderComparisonSection(t("compare_response"), responseChanged, renderComparisonDiff(left.response, right.response), {open: state.compareMode !== "analysis", id: "diff-response"})}
-    ${renderComparisonSection(t("compare_raw_json"), comparisonChanged(left.body, right.body), `
+    ${section(t("compare_summary"), summaryChanged, () => renderComparisonMetrics(left, right), {open: state.compareMode !== "analysis", id: "diff-summary"})}
+    ${section(t("compare_request_parameters"), paramsChanged, () => renderComparisonParams(left.params, right.params), {open: false, id: "diff-params"})}
+    ${section(`${t("compare_system_prompt")} · ${t("compare_chars", {count: `${fmtNumber(left.system.length)} ↔ ${fmtNumber(right.system.length)}`})}`, systemChanged, () => renderComparisonDiff(left.system, right.system), {open: state.compareMode !== "analysis", id: "diff-system"})}
+    ${section(`${t("compare_tools")} · ${t("compare_shared_tools", {count: sharedTools})}`, toolsChanged, () => renderComparisonTools(left.tools, right.tools), {open: state.compareMode !== "analysis", id: "diff-tools"})}
+    ${section(t("compare_messages"), messagesChanged, () => renderComparisonDiff(left.messages, right.messages), {open: state.compareMode !== "analysis", id: "diff-messages"})}
+    ${section(t("compare_response"), responseChanged, () => renderComparisonDiff(left.response, right.response), {open: state.compareMode !== "analysis", id: "diff-response"})}
+    ${section(t("compare_raw_json"), comparisonChanged(left.body, right.body), () => `
       <div class="compare-raw-grid">
         <div class="compare-raw-label">JSON</div>
         <pre class="compare-raw">${esc(JSON.stringify(left.body, null, 2))}</pre>
@@ -4491,6 +4549,7 @@ function renderComparison(payloads) {
       </div>
     `, {open: false, id: "diff-raw"})}
   `;
+  installLazyComparisonSections(lazySections);
   requestAnimationFrame(scrollToComparisonHash);
 }
 
@@ -5164,7 +5223,7 @@ window.addEventListener("hashchange", () => {
 	updateClock();
 	setInterval(updateClock, 1000);
 	const hasDashboardEvents = connectEvents();
-	refreshSessions({preserveSelection: false}).catch(error => {
+	initializeDashboardView().catch(error => {
 	  $("#detail").innerHTML = `<div class="empty">${esc(t("unable_load_dashboard", {error: error.message}))}</div>`;
 	});
 	if (!hasDashboardEvents) {
