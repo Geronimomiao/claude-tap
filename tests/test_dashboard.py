@@ -2946,6 +2946,14 @@ async def test_dashboard_compares_two_selected_sessions(trace_db) -> None:
                 await page.wait_for_selector("#compare-view:not(.hidden) #diff-system", timeout=5000)
                 assert page.url.endswith("#diff-system")
                 assert await page.evaluate("window.location.hash") == "#diff-system"
+                assert await page.locator("#diff-system").get_attribute("open") is not None
+                assert await page.locator("#diff-tools").get_attribute("open") is None
+                assert await page.locator("#diff-tools").get_attribute("data-compare-lazy") is not None
+                assert await page.locator("#diff-tools .compare-tool-row").count() == 0
+                assert await page.locator("#diff-raw .compare-raw").count() == 0
+                await page.locator("#diff-tools summary").click()
+                assert await page.locator("#diff-tools").get_attribute("data-compare-lazy") is None
+                assert await page.locator("#diff-tools .compare-tool-row").count() > 0
                 assert f"left={session_ids[0]}" in page.url
                 assert f"right={session_ids[1]}" in page.url
                 await page.locator("#compare-swap").click()
